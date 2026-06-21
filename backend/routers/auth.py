@@ -1,7 +1,9 @@
 from fastapi import Header, HTTPException, Depends
 from db import supabase
 
-async def get_current_user(authorization: str = Header(...)):
+async def get_current_user(authorization: str = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     token = authorization.removeprefix("Bearer ").strip()
@@ -10,6 +12,8 @@ async def get_current_user(authorization: str = Header(...)):
         if not response or not response.user:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
         return response.user
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 

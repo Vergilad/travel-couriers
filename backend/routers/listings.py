@@ -13,45 +13,66 @@ async def browse_listings(
     status: str = "open",
     order_by: str = "created_at"
 ):
-    query = supabase.table("listings").select("*").eq("status", status)
-    if kind:
-        query = query.eq("kind", kind)
-    if origin_city:
-        query = query.ilike("origin_city", f"%{origin_city}%")
-    if dest_city:
-        query = query.ilike("dest_city", f"%{dest_city}%")
-    result = query.order(order_by, desc=True).execute()
-    return result.data
+    try:
+        query = supabase.table("listings").select("*").eq("status", status)
+        if kind:
+            query = query.eq("kind", kind)
+        if origin_city:
+            query = query.ilike("origin_city", f"%{origin_city}%")
+        if dest_city:
+            query = query.ilike("dest_city", f"%{dest_city}%")
+        result = query.order(order_by, desc=True).execute()
+        return result.data
+    except Exception as e:
+        raise HTTPException(400, f"Failed to browse listings: {str(e)}")
 
 @router.get("/{listing_id}")
 async def get_listing(listing_id: str):
-    result = supabase.table("listings").select("*").eq("id", listing_id).single().execute()
-    if not result.data:
+    try:
+        result = supabase.table("listings").select("*").eq("id", listing_id).single().execute()
+        if not result.data:
+            raise HTTPException(404, "Listing not found")
+        return result.data
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(404, "Listing not found")
-    return result.data
 
 @router.post("")
 async def create_listing(body: ListingCreate, user=Depends(get_current_user)):
-    data = body.model_dump()
-    data["owner_id"] = user.id
-    data["status"] = "open"
-    data["depart_date"] = str(data["depart_date"])
-    data["arrive_date"] = str(data["arrive_date"])
-    result = supabase.table("listings").insert(data).execute()
-    return result.data[0]
+    try:
+        data = body.model_dump()
+        data["owner_id"] = user.id
+        data["status"] = "open"
+        data["depart_date"] = data["depart_date"].isoformat()
+        data["arrive_date"] = data["arrive_date"].isoformat()
+        result = supabase.table("listings").insert(data).execute()
+        return result.data[0]
+    except Exception as e:
+        raise HTTPException(400, f"Failed to create listing: {str(e)}")
 
 @router.patch("/{listing_id}")
 async def update_listing(listing_id: str, body: dict, user=Depends(get_current_user)):
-    existing = supabase.table("listings").select("owner_id").eq("id", listing_id).single().execute()
-    if not existing.data or existing.data["owner_id"] != user.id:
-        raise HTTPException(403, "Not your listing")
-    result = supabase.table("listings").update(body).eq("id", listing_id).execute()
-    return result.data[0]
+    try:
+        existing = supabase.table("listings").select("owner_id").eq("id", listing_id).single().execute()
+        if not existing.data or existing.data["owner_id"] != user.id:
+            raise HTTPException(403, "Not your listing")
+        result = supabase.table("listings").update(body).eq("id", listing_id).execute()
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Failed to update listing: {str(e)}")
 
 @router.delete("/{listing_id}")
 async def cancel_listing(listing_id: str, user=Depends(get_current_user)):
-    existing = supabase.table("listings").select("owner_id").eq("id", listing_id).single().execute()
-    if not existing.data or existing.data["owner_id"] != user.id:
-        raise HTTPException(403, "Not your listing")
-    result = supabase.table("listings").update({"status": "cancelled"}).eq("id", listing_id).execute()
-    return result.data[0]
+    try:
+        existing = supabase.table("listings").select("owner_id").eq("id", listing_id).single().execute()
+        if not existing.data or existing.data["owner_id"] != user.id:
+            raise HTTPException(403, "Not your listing")
+        result = supabase.table("listings").update({"status": "cancelled"}).eq("id", listing_id).execute()
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Failed to cancel listing: {str(e)}")
