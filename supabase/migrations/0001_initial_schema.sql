@@ -28,11 +28,11 @@ ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 -- Function to check if a user has a specific role
 CREATE FUNCTION has_role(user_id UUID, role TEXT) RETURNS BOOLEAN AS $$
     SELECT EXISTS(SELECT 1 FROM user_roles WHERE user_id = has_role.user_id AND role = has_role.role);
-$$ LANGUAGE SQL SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Create listings table
 CREATE TABLE listings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id UUID REFERENCES auth.users(id),
     kind TEXT CHECK (kind IN (
         'trip',
@@ -66,7 +66,7 @@ CREATE POLICY "Users can delete their own listings." ON listings FOR DELETE USIN
 
 -- Create threads table
 CREATE TABLE threads (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     listing_id UUID REFERENCES listings(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -85,7 +85,7 @@ CREATE POLICY "Participants can insert into their own threads." ON thread_partic
 
 -- Create messages table
 CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     thread_id UUID REFERENCES threads(id),
     sender_id UUID REFERENCES auth.users(id),
     body TEXT,
@@ -133,7 +133,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER on_match_confirmation_insert
 AFTER INSERT ON match_confirmations
@@ -141,7 +141,7 @@ FOR EACH ROW EXECUTE FUNCTION handle_match_confirmation();
 
 -- Create payments table
 CREATE TABLE payments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     thread_id UUID REFERENCES threads(id),
     listing_id UUID REFERENCES listings(id),
     payer_id UUID REFERENCES auth.users(id),
@@ -165,7 +165,7 @@ CREATE POLICY "Payer and payee can view their payments." ON payments FOR SELECT 
 
 -- Create reviews table
 CREATE TABLE reviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     listing_id UUID REFERENCES listings(id),
     reviewer_id UUID REFERENCES auth.users(id),
     reviewee_id UUID REFERENCES auth.users(id),
@@ -180,7 +180,7 @@ CREATE POLICY "Users can write reviews after payment completion." ON reviews FOR
 
 -- Create reports table
 CREATE TABLE reports (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id UUID REFERENCES auth.users(id),
     target_user_id UUID REFERENCES auth.users(id),
     target_listing_id UUID REFERENCES listings(id),
@@ -199,7 +199,7 @@ CREATE POLICY "Any authenticated user can submit a report." ON reports FOR INSER
 
 -- Create notification_log table
 CREATE TABLE notification_log (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id),
     kind TEXT,
     payload JSONB,
@@ -216,9 +216,7 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated, service_ro
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
 -- Set up PostgreSQL functions for uuid generation
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Optional: Add a function to get user's display name for notifications
+-- Optional: Add a function to get user\\'s display name for notifications
 CREATE OR REPLACE FUNCTION get_user_display_name(p_user_id UUID) RETURNS TEXT AS $$
     SELECT display_name FROM profiles WHERE id = p_user_id;
-$$ LANGUAGE SQL SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
