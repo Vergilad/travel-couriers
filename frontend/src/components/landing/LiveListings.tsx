@@ -1,20 +1,23 @@
-import * as React from "react"
 import { Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 
+import { staggerContainer, scrollReveal } from "@/components/landing/motion"
 import { ListingRow } from "@/components/ui/listing-row"
 import { fetchOpenListings } from "@/lib/api"
 
 function ListingSkeleton() {
   return (
-    <div className="grid grid-cols-[minmax(0,1.4fr)_88px_72px_64px_48px] gap-4 border-b border-border py-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div
+    <div className="space-y-3 border-b border-border py-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <motion.div
           key={index}
-          className="h-4 animate-pulse rounded-[4px] bg-surface-raised"
-          style={{ opacity: 0.4 + (index % 2) * 0.2 }}
-        />
+          animate={{ opacity: [0.25, 0.55, 0.25] }}
+          transition={{ duration: 1.4, repeat: Infinity, delay: index * 0.15 }}
+          className="font-data text-[12px] text-text-faint"
+        >
+          Loading route · · · · · ·
+        </motion.div>
       ))}
     </div>
   )
@@ -31,23 +34,36 @@ export function LiveListings() {
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-10 flex items-end justify-between gap-4">
           <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            variants={scrollReveal}
+            initial="hidden"
+            whileInView="show"
             viewport={{ once: true }}
-            transition={{ duration: 0.25 }}
             className="font-heading text-[clamp(2rem,4vw,2.5rem)] text-text"
           >
             Live listings
           </motion.h2>
-          <Link
-            to="/browse"
-            className="text-[14px] text-text-muted transition-opacity hover:opacity-85"
+          <motion.div
+            initial={{ opacity: 0, x: 12 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.15 }}
           >
-            View all →
-          </Link>
+            <Link
+              to="/browse"
+              className="text-[14px] text-text-muted transition-opacity hover:opacity-85"
+            >
+              View all →
+            </Link>
+          </motion.div>
         </div>
 
-        <div className="border-t border-border">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-40px" }}
+          className="border-t border-border"
+        >
           <div className="hidden grid-cols-[minmax(0,1.4fr)_88px_72px_64px_48px] gap-4 border-b border-border py-3 font-label text-[12px] text-text-muted md:grid">
             <span>Route</span>
             <span>Kind</span>
@@ -56,13 +72,7 @@ export function LiveListings() {
             <span />
           </div>
 
-          {isLoading && (
-            <div>
-              {Array.from({ length: 3 }).map((_, index) => (
-                <ListingSkeleton key={index} />
-              ))}
-            </div>
-          )}
+          {isLoading && <ListingSkeleton />}
 
           {isError && (
             <p className="py-8 text-text-muted">
@@ -73,15 +83,24 @@ export function LiveListings() {
           {data?.map((listing, index) => (
             <motion.div
               key={listing.id}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.25, delay: index * 0.04 }}
+              variants={{
+                hidden: { opacity: 0, y: 24 },
+                show: {
+                  opacity: 1,
+                  y: 0,
+                  transition: {
+                    type: "spring",
+                    stiffness: 100,
+                    damping: 22,
+                    delay: index * 0.04,
+                  },
+                },
+              }}
             >
               <ListingRow listing={listing} />
             </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
     </section>
   )

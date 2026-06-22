@@ -1,6 +1,8 @@
 import * as React from "react"
 import { motion, useInView } from "framer-motion"
 
+import { fadeUpBlur, staggerContainer } from "@/components/landing/motion"
+
 const stats = [
   { value: 1200, suffix: "+", label: "Active couriers" },
   { value: 48, suffix: "", label: "Countries covered" },
@@ -53,32 +55,30 @@ function StatItem({
   const count = useCountUp(value, inView, 1400, decimals)
 
   return (
-    <div ref={ref} className="text-center md:text-left">
+    <motion.div ref={ref} variants={fadeUpBlur} className="text-center md:text-left">
       <div className="font-heading text-[3rem] leading-none text-text">
         {decimals > 0 ? count.toFixed(decimals) : count.toLocaleString()}
-        {suffix}
+        <span className="text-accent">{suffix}</span>
       </div>
       <p className="mt-2 font-label text-[13px] text-text-muted">{label}</p>
-    </div>
+    </motion.div>
   )
 }
 
 export function Stats() {
   return (
     <section className="px-6 py-24 md:py-32">
-      <div className="mx-auto max-w-[1200px]">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.25 }}
-          className="grid gap-12 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {stats.map((stat) => (
-            <StatItem key={stat.label} {...stat} />
-          ))}
-        </motion.div>
-      </div>
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="show"
+        viewport={{ once: true, margin: "-80px" }}
+        className="mx-auto grid max-w-[1200px] gap-12 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {stats.map((stat) => (
+          <StatItem key={stat.label} {...stat} />
+        ))}
+      </motion.div>
     </section>
   )
 }
