@@ -1,11 +1,16 @@
 import * as React from "react"
 import { Link, useLocation } from "@tanstack/react-router"
 import { Menu, X } from "lucide-react"
-import { useScroll, useMotionValueEvent } from "framer-motion"
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useScroll,
+  useMotionValueEvent,
+} from "framer-motion"
 
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
-import { cn } from "@/lib/utils"
 
 export function Nav() {
   const { user, unreadCount } = useAuth()
@@ -14,6 +19,7 @@ export function Nav() {
   const [scrolled, setScrolled] = React.useState(false)
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const { scrollY } = useScroll()
+  const navBg = useMotionValue("rgba(14, 11, 8, 0)")
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setScrolled(latest > 80)
@@ -22,16 +28,25 @@ export function Nav() {
   const solid = !isLanding || scrolled
 
   React.useEffect(() => {
+    animate(navBg, solid ? "rgba(14, 11, 8, 0.7)" : "rgba(14, 11, 8, 0)", {
+      duration: 0.3,
+    })
+  }, [solid, navBg])
+
+  React.useEffect(() => {
     setMobileOpen(false)
   }, [location.pathname])
 
   return (
     <>
-      <header
-        className={cn(
-          "fixed inset-x-0 top-0 z-50 h-16 transition-[background-color,backdrop-filter] duration-200",
-          solid ? "bg-surface/95 backdrop-blur-[12px]" : "bg-transparent"
-        )}
+      <motion.header
+        style={{
+          backgroundColor: navBg,
+          backdropFilter: solid ? "blur(16px)" : "none",
+          WebkitBackdropFilter: solid ? "blur(16px)" : "none",
+          borderBottom: solid ? "1px solid rgba(46, 36, 24, 0.6)" : "1px solid transparent",
+        }}
+        className="fixed inset-x-0 top-0 z-50 h-16"
       >
         <nav className="mx-auto flex h-full max-w-[1200px] items-center justify-between px-6">
           <Link to="/" className="font-heading text-[18px] leading-none text-text">
@@ -55,18 +70,16 @@ export function Nav() {
 
           <div className="hidden items-center gap-3 md:flex">
             {user ? (
-              <>
-                <Link to="/messages" className="relative">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text">
-                    {user.displayName.charAt(0).toUpperCase()}
+              <Link to="/messages" className="relative">
+                <span className="flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text">
+                  {user.displayName.charAt(0).toUpperCase()}
+                </span>
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] text-bg">
+                    {unreadCount}
                   </span>
-                  {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] text-bg">
-                      {unreadCount}
-                    </span>
-                  )}
-                </Link>
-              </>
+                )}
+              </Link>
             ) : (
               <>
                 <Link to="/auth">
@@ -88,7 +101,7 @@ export function Nav() {
             {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </nav>
-      </header>
+      </motion.header>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-bg/95 backdrop-blur-sm md:hidden">

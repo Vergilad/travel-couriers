@@ -1,4 +1,3 @@
-import * as React from "react"
 import { Link } from "@tanstack/react-router"
 import { motion } from "framer-motion"
 
@@ -19,12 +18,15 @@ interface ListingRowProps {
 
 export function ListingRow({ listing, className }: ListingRowProps) {
   return (
-    <motion.div whileHover={{ x: 4 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}>
+    <motion.div
+      whileHover={{ x: 4, backgroundColor: "var(--surface-raised)" }}
+      transition={{ duration: 0.15 }}
+    >
       <Link
         to="/listings/$id"
         params={{ id: listing.id }}
         className={cn(
-          "group relative block border-b border-border py-4 transition-colors hover:bg-surface-raised/40 md:grid md:grid-cols-[minmax(0,1.4fr)_88px_72px_64px_48px] md:items-center md:gap-4",
+          "group relative block cursor-pointer border-b border-border py-4 md:grid md:grid-cols-[minmax(0,1.4fr)_88px_72px_64px_48px] md:items-center md:gap-4",
           className
         )}
       >
@@ -40,8 +42,8 @@ export function ListingRow({ listing, className }: ListingRowProps) {
         <div className="flex items-center justify-between gap-3 md:contents">
           <span className="font-data text-[12px]">{formatListingDate(listing.depart_date)}</span>
           <span className="font-data text-[12px]">{formatPrice(listing.price, listing.currency)}</span>
-          <span className="font-data text-[12px] opacity-100 transition-opacity md:text-right md:opacity-0 md:group-hover:opacity-100">
-            View →
+          <span className="font-data text-[12px] text-accent md:text-right md:opacity-0 md:transition-all md:duration-150 md:group-hover:translate-x-0 md:group-hover:opacity-100 md:[transform:translateX(-8px)]">
+            →
           </span>
         </div>
       </Link>

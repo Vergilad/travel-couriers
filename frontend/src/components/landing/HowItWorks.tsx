@@ -22,7 +22,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="relative px-6 py-24 md:py-32">
+    <div id="how-it-works" className="relative px-6 py-24 md:py-32">
       <div className="mx-auto max-w-[1200px]">
         <motion.h2
           variants={scrollReveal}
@@ -84,6 +84,6 @@ export function HowItWorks() {
           </div>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

@@ -92,3 +92,20 @@ Travel Couriers should feel like **Railway's dark infrastructure** meets **Monog
 ## What we explicitly avoid
 
 Parallax, infinite marquees, 3D card hovers, splash loaders, shimmer skeleton boxes.
+
+---
+
+## Step 5.5 — Originality pass
+
+See `STEP5-5_ORIGINALITY_BRIEF.md`. Round 1 Playwright sites: vercel.com, framer.com, craftz.dog (+ luma revisited).
+
+| Site | Expensive motion detail | Applied |
+|---|---|---|
+| linear.app | Blur-to-sharp word reveal | Hero headline cubic-bezier + blur(8px) |
+| vercel.com | Breathing gradient | Accent glow + hero scale-in |
+| framer.com | Clip-path left reveal | Subtitle curtain |
+| luma.events | Slight rotate on rise | Listing rows rotate 0.6° → 0 |
+| craftz.dog | Magnetic hover | Row x:4 slide + arrow |
+
+Surgical fixes: 105deg gradient, bottom fade, glass CTA, nav rgba blur, stat borders, route ticker, warm hero photo.
+

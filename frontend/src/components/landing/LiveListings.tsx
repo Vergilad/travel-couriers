@@ -30,7 +30,7 @@ export function LiveListings() {
   })
 
   return (
-    <section className="border-t border-border bg-surface px-6 py-24 md:py-32">
+    <div className="border-t border-border bg-surface px-6 py-24 md:py-32">
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-10 flex items-end justify-between gap-4">
           <motion.h2
@@ -84,10 +84,11 @@ export function LiveListings() {
             <motion.div
               key={listing.id}
               variants={{
-                hidden: { opacity: 0, y: 24 },
+                hidden: { opacity: 0, y: 24, rotate: 0.6 },
                 show: {
                   opacity: 1,
                   y: 0,
+                  rotate: 0,
                   transition: {
                     type: "spring",
                     stiffness: 100,
@@ -102,6 +103,6 @@ export function LiveListings() {
           ))}
         </motion.div>
       </div>
-    </section>
+    </div>
   )
 }
