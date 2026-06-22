@@ -51,17 +51,33 @@ function StatItem({
   const ref = React.useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { once: true, margin: "-80px" })
   const count = useCountUp(value, inView, 1400, decimals)
+  const [done, setDone] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!inView) return
+    const timer = window.setTimeout(() => setDone(true), 1500)
+    return () => window.clearTimeout(timer)
+  }, [inView])
 
   return (
-    <div ref={ref} className="border-t border-border pt-6 text-center md:text-left">
-      <div className="font-heading text-[4rem] leading-none text-text">
+    <motion.div
+      ref={ref}
+      className="border-t border-border pt-6 text-center md:text-left"
+      whileHover={{ y: -4 }}
+      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+    >
+      <motion.div
+        className="font-heading text-[4rem] leading-none text-text"
+        animate={done ? { scale: [1, 1.03, 1] } : undefined}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      >
         {decimals > 0 ? count.toFixed(decimals) : count.toLocaleString()}
         <span className="text-accent">{suffix}</span>
-      </div>
+      </motion.div>
       <p className="mt-2 font-label text-[11px] tracking-[0.1em] text-text-faint">
         {label}
       </p>
-    </div>
+    </motion.div>
   )
 }
 

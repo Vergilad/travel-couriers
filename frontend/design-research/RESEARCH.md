@@ -109,3 +109,26 @@ See `STEP5-5_ORIGINALITY_BRIEF.md`. Round 1 Playwright sites: vercel.com, framer
 
 Surgical fixes: 105deg gradient, bottom fade, glass CTA, nav rgba blur, stat borders, route ticker, warm hero photo.
 
+---
+
+## Motion improvisation pass (2026-06-22)
+
+Playwright: motion.dev/examples, vercel.com, rauno.me
+
+**Problem:** Page felt dead after initial scroll — all `whileInView once` animations finished.
+
+**Solution — always-on motion layer:**
+- Scroll progress bar (Vercel) — amber line tracks scroll position forever
+- Breathing ambient orbs + drifting dot grid (Railway/Vercel)
+- Cursor spotlight on hero (desktop)
+- Floating ghost route codes in hero background
+- Route arc dot loops indefinitely; city labels pulse
+- Departure board cycles highlight row every 2.8s with layoutId
+- Route ticker + live pulse badge
+- How-it-works dot travels along connector line while section visible
+- Stats breathe after count-up completes
+- Magnetic CTAs (craftz.dog)
+- Hero content fades/translates on scroll-out (scroll-linked, not parallax cards)
+- Headline words lift on hover
+- Footer links stagger + underline draw
+

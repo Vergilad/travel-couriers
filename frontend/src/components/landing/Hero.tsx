@@ -1,9 +1,13 @@
 import { Link } from "@tanstack/react-router"
-import { motion } from "framer-motion"
+import { motion, useScroll, useTransform } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 
+import { AmbientGlow } from "@/components/landing/AmbientGlow"
+import { CursorGlow } from "@/components/landing/CursorGlow"
 import { DotGrid } from "@/components/landing/DotGrid"
+import { FloatingRoutes } from "@/components/landing/FloatingRoutes"
 import { HeroRoutePanel } from "@/components/landing/HeroRoutePanel"
+import { Magnetic } from "@/components/landing/Magnetic"
 import { RouteLineAnimation } from "@/components/landing/RouteLineAnimation"
 import { Button } from "@/components/ui/button"
 
@@ -11,19 +15,26 @@ const headlineWords = ["Your", "next", "trip", "carries", "more", "than", "lugga
 const headlineEndDelay = 0.09 * (headlineWords.length - 1) + 0.7
 
 export function Hero() {
+  const { scrollY } = useScroll()
+  const contentY = useTransform(scrollY, [0, 500], [0, 80])
+  const contentOpacity = useTransform(scrollY, [0, 420], [1, 0])
+  const imageScale = useTransform(scrollY, [0, 600], [1, 1.08])
+
   return (
     <section className="relative min-h-screen overflow-hidden">
-      <motion.img
-        src="/images/hero.jpg"
-        alt=""
-        initial={{ scale: 1.12, opacity: 0.6 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 2.2, ease: [0.22, 1, 0.36, 1] }}
-        className="absolute inset-0 size-full object-cover object-[center_30%] saturate-[0.7]"
-      />
+      <motion.div className="absolute inset-0 overflow-hidden" style={{ scale: imageScale }}>
+        <motion.img
+          src="/images/hero.jpg"
+          alt=""
+          initial={{ scale: 1.12, opacity: 0.6 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 2.2, ease: [0.22, 1, 0.36, 1] }}
+          className="size-full object-cover object-[center_30%] saturate-[0.7]"
+        />
+      </motion.div>
 
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 z-[1]"
         style={{
           background:
             "linear-gradient(105deg, rgba(14, 11, 8, 0.92) 0%, rgba(14, 11, 8, 0.75) 35%, rgba(14, 11, 8, 0.3) 65%, rgba(14, 11, 8, 0.05) 100%)",
@@ -31,7 +42,7 @@ export function Hero() {
       />
 
       <div
-        className="absolute inset-x-0 bottom-0 h-[45%]"
+        className="absolute inset-x-0 bottom-0 z-[1] h-[45%]"
         style={{
           background:
             "linear-gradient(to top, rgba(14, 11, 8, 1) 0%, rgba(14, 11, 8, 0) 40%)",
@@ -39,17 +50,22 @@ export function Hero() {
       />
 
       <DotGrid />
+      <FloatingRoutes />
+      <CursorGlow />
 
-      <motion.div
-        aria-hidden
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 1.4 }}
-        className="pointer-events-none absolute -right-24 top-1/3 h-[420px] w-[420px] rounded-full blur-[120px]"
-        style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)" }}
+      <AmbientGlow
+        className="pointer-events-none absolute -right-32 top-1/4 h-[480px] w-[480px] rounded-full"
+        delay={0}
+      />
+      <AmbientGlow
+        className="pointer-events-none absolute -left-20 bottom-1/4 h-[320px] w-[320px] rounded-full"
+        delay={2.5}
       />
 
-      <div className="relative mx-auto grid min-h-screen max-w-[1200px] items-center gap-12 px-6 pb-16 pt-24 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-16 lg:pl-[6%]">
+      <motion.div
+        style={{ y: contentY, opacity: contentOpacity }}
+        className="relative z-[2] mx-auto grid min-h-screen max-w-[1200px] items-center gap-12 px-6 pb-16 pt-24 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-16 lg:pl-[6%]"
+      >
         <div className="max-w-[600px]">
           <motion.p
             initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
@@ -66,12 +82,17 @@ export function Hero() {
                 key={`${word}-${index}`}
                 initial={{ opacity: 0, y: 24, filter: "blur(8px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                whileHover={{
+                  y: -3,
+                  color: index >= 4 ? "var(--accent)" : "var(--text)",
+                  transition: { type: "spring", stiffness: 400, damping: 18 },
+                }}
                 transition={{
                   duration: 0.7,
                   delay: index * 0.09,
                   ease: [0.25, 0.46, 0.45, 0.94],
                 }}
-                className="mr-[0.26em] inline-block"
+                className="mr-[0.26em] inline-block cursor-default"
                 style={index >= 4 ? { color: "var(--accent)" } : undefined}
               >
                 {word}
@@ -102,18 +123,22 @@ export function Hero() {
             }}
             className="flex flex-wrap gap-4"
           >
-            <Link to="/browse">
-              <Button size="lg">Explore listings</Button>
-            </Link>
-            <Link to="/trips/new">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-[rgba(244,237,228,0.25)] bg-[rgba(244,237,228,0.05)] text-text backdrop-blur-[8px] hover:bg-[rgba(244,237,228,0.08)]"
-              >
-                Post a trip
-              </Button>
-            </Link>
+            <Magnetic>
+              <Link to="/browse">
+                <Button size="lg">Explore listings</Button>
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.18}>
+              <Link to="/trips/new">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-[rgba(244,237,228,0.25)] bg-[rgba(244,237,228,0.05)] text-text backdrop-blur-[8px] hover:bg-[rgba(244,237,228,0.08)]"
+                >
+                  Post a trip
+                </Button>
+              </Link>
+            </Magnetic>
           </motion.div>
         </div>
 
@@ -121,13 +146,13 @@ export function Hero() {
           <RouteLineAnimation />
           <HeroRoutePanel />
         </div>
-      </div>
+      </motion.div>
 
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: headlineEndDelay + 0.8, duration: 0.4 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-text-muted"
+        className="absolute bottom-8 left-1/2 z-[2] -translate-x-1/2 text-text-muted"
         aria-hidden
       >
         <motion.div

@@ -1,10 +1,8 @@
 import { motion } from "framer-motion"
 
-/** Stripe-inspired single hero motion: a route arc draws itself once on mount. */
-export function RouteLineAnimation() {
-  const path =
-    "M 40 220 C 120 80, 200 320, 280 140 S 400 60, 460 180"
+const path = "M 40 220 C 120 80, 200 320, 280 140 S 400 60, 460 180"
 
+export function RouteLineAnimation() {
   return (
     <motion.svg
       viewBox="0 0 500 320"
@@ -33,17 +31,11 @@ export function RouteLineAnimation() {
         transition={{ duration: 1.8, delay: 0.9, ease: [0.22, 1, 0.36, 1] }}
       />
 
-      <motion.circle
-        r="6"
-        fill="var(--accent)"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2, duration: 0.3 }}
-      >
+      <motion.circle r="6" fill="var(--accent)">
         <animateMotion
-          dur="2.4s"
+          dur="4s"
           begin="1.1s"
-          fill="freeze"
+          repeatCount="indefinite"
           calcMode="spline"
           keyTimes="0;1"
           keySplines="0.4 0 0.2 1"
@@ -58,9 +50,8 @@ export function RouteLineAnimation() {
         x="36"
         y="248"
         className="fill-[var(--text-muted)] font-mono text-[11px]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.4 }}
+        animate={{ opacity: [0.5, 1, 0.5] }}
+        transition={{ duration: 3, repeat: Infinity }}
       >
         BAKU
       </motion.text>
@@ -68,9 +59,8 @@ export function RouteLineAnimation() {
         x="420"
         y="168"
         className="fill-[var(--text-muted)] font-mono text-[11px]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 2.2 }}
+        animate={{ opacity: [0.5, 1, 0.5] }}
+        transition={{ duration: 3, repeat: Infinity, delay: 1.5 }}
       >
         ISTANBUL
       </motion.text>

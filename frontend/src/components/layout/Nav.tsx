@@ -54,18 +54,32 @@ export function Nav() {
           </Link>
 
           <div className="hidden items-center gap-8 md:flex">
-            <Link
-              to="/browse"
-              className="text-[14px] font-normal text-text-muted transition-opacity hover:opacity-85"
-            >
-              Browse
-            </Link>
-            <a
-              href="/#how-it-works"
-              className="text-[14px] font-normal text-text-muted transition-opacity hover:opacity-85"
-            >
-              How it works
-            </a>
+            {[
+              { to: "/browse", label: "Browse" },
+              { href: "/#how-it-works", label: "How it works" },
+            ].map((link) =>
+              "href" in link ? (
+                <motion.a
+                  key={link.label}
+                  href={link.href}
+                  className="group relative text-[14px] font-normal text-text-muted"
+                  whileHover={{ y: -1 }}
+                >
+                  {link.label}
+                  <span className="absolute -bottom-1 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
+                </motion.a>
+              ) : (
+                <motion.div key={link.label} whileHover={{ y: -1 }}>
+                  <Link
+                    to={link.to}
+                    className="group relative text-[14px] font-normal text-text-muted"
+                  >
+                    {link.label}
+                    <span className="absolute -bottom-1 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
+                  </Link>
+                </motion.div>
+              )
+            )}
           </div>
 
           <div className="hidden items-center gap-3 md:flex">

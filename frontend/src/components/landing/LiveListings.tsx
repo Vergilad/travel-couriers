@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 
+import { LivePulse } from "@/components/landing/LivePulse"
 import { staggerContainer, scrollReveal } from "@/components/landing/motion"
 import { ListingRow } from "@/components/ui/listing-row"
 import { fetchOpenListings } from "@/lib/api"
@@ -30,27 +31,39 @@ export function LiveListings() {
   })
 
   return (
-    <div className="border-t border-border bg-surface px-6 py-24 md:py-32">
+    <div className="relative border-t border-border bg-surface px-6 py-24 md:py-32">
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-accent/40"
+        animate={{ scaleX: [0.2, 1, 0.2], opacity: [0.3, 0.8, 0.3] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        style={{ transformOrigin: "left center" }}
+      />
+
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-10 flex items-end justify-between gap-4">
-          <motion.h2
-            variants={scrollReveal}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
-            className="font-heading text-[clamp(2rem,4vw,2.5rem)] text-text"
-          >
-            Live listings
-          </motion.h2>
+          <div className="flex flex-wrap items-center gap-4">
+            <motion.h2
+              variants={scrollReveal}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              className="font-heading text-[clamp(2rem,4vw,2.5rem)] text-text"
+            >
+              Live listings
+            </motion.h2>
+            <LivePulse label="Updating" />
+          </div>
           <motion.div
             initial={{ opacity: 0, x: 12 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.15 }}
+            whileHover={{ x: 4 }}
           >
             <Link
               to="/browse"
-              className="text-[14px] text-text-muted transition-opacity hover:opacity-85"
+              className="text-[14px] text-text-muted transition-opacity hover:text-accent"
             >
               View all →
             </Link>
@@ -83,6 +96,7 @@ export function LiveListings() {
           {data?.map((listing, index) => (
             <motion.div
               key={listing.id}
+              layout
               variants={{
                 hidden: { opacity: 0, y: 24, rotate: 0.6 },
                 show: {
