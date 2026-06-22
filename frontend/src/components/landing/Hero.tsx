@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { motion, useScroll, useTransform } from "framer-motion"
+import { motion, useMotionValue, useSpring, useScroll, useTransform } from "framer-motion"
 import { ChevronDown } from "lucide-react"
 
 import { AmbientGlow } from "@/components/landing/AmbientGlow"
@@ -13,6 +13,58 @@ import { Button } from "@/components/ui/button"
 
 const headlineWords = ["Your", "next", "trip", "carries", "more", "than", "luggage."]
 const headlineEndDelay = 0.09 * (headlineWords.length - 1) + 0.7
+
+function MagneticWord({
+  children,
+  index,
+  accent,
+}: {
+  children: string
+  index: number
+  accent?: boolean
+}) {
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const springX = useSpring(x, { stiffness: 120, damping: 18, mass: 0.6 })
+  const springY = useSpring(y, { stiffness: 120, damping: 18, mass: 0.6 })
+
+  function handleMouseMove(e: React.MouseEvent<HTMLSpanElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    x.set((e.clientX - cx) * 0.18)
+    y.set((e.clientY - cy) * 0.18)
+  }
+
+  function handleMouseLeave() {
+    x.set(0)
+    y.set(0)
+  }
+
+  return (
+    <motion.span
+      initial={{ opacity: 0, y: 24, filter: "blur(8px)" }}
+      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      transition={{
+        duration: 0.7,
+        delay: index * 0.09,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
+      style={{
+        x: springX,
+        y: springY,
+        color: accent ? "var(--accent)" : undefined,
+        display: "inline-block",
+        marginRight: "0.26em",
+        cursor: "default",
+      }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      {children}
+    </motion.span>
+  )
+}
 
 export function Hero() {
   const { scrollY } = useScroll()
@@ -78,25 +130,9 @@ export function Hero() {
 
           <h1 className="mb-6 font-heading text-[clamp(3.5rem,7vw,6rem)] leading-[0.95] text-text">
             {headlineWords.map((word, index) => (
-              <motion.span
-                key={`${word}-${index}`}
-                initial={{ opacity: 0, y: 24, filter: "blur(8px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                whileHover={{
-                  y: -3,
-                  color: index >= 4 ? "var(--accent)" : "var(--text)",
-                  transition: { type: "spring", stiffness: 400, damping: 18 },
-                }}
-                transition={{
-                  duration: 0.7,
-                  delay: index * 0.09,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                }}
-                className="mr-[0.26em] inline-block cursor-default"
-                style={index >= 4 ? { color: "var(--accent)" } : undefined}
-              >
+              <MagneticWord key={`${word}-${index}`} index={index} accent={index >= 4}>
                 {word}
-              </motion.span>
+              </MagneticWord>
             ))}
           </h1>
 
