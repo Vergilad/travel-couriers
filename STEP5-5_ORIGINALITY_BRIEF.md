@@ -320,3 +320,87 @@ It is more intentionality in the details you already have.
 A blur on the word animation. A 4px slide on a table row. A route ticker.
 None of these are big. Together they say: someone made decisions here.
 That is what the user is asking for.
+
+CURSOR:
+
+You're right to call that out. The first pass **skipped the Playwright research** and shipped a competent but generic landing page. That wasn't good enough.
+
+## What I did now
+
+### Playwright research (actually done)
+
+**Phase 1 — 8 sites:** linear, luma, notion, railway, godly/recent, airbnb, monograph, stripe  
+**Phase 2:** motion.dev  
+**Step 5.5 Round 1:** vercel, framer, craftz.dog  
+
+Screenshots + synthesis live in `frontend/design-research/` (see `RESEARCH.md`).
+
+### Step 5.5 surgical fixes (all 9)
+
+| Fix | What changed |
+|---|---|
+| **Hero gradient** | 105deg overlay + bottom fade into stats — no hard edge |
+| **Headline** | Linear-style blur(8px) → sharp, y:24, custom cubic-bezier per word |
+| **Subtitle** | Framer-style clip-path curtain reveal from left |
+| **Secondary CTA** | Glass button — border + backdrop-blur, photo bleeds through |
+| **Stats** | Top border per stat, 4rem numbers, 11px faint uppercase labels |
+| **Nav** | `rgba(14,11,8,0.7)` + 16px blur on scroll — not solid |
+| **Listing rows** | 4px slide on hover + accent arrow; Luma ~0.6° rotate on scroll-in |
+| **Sections** | Scroll-triggered reveal wrapper (`margin: -80px`) |
+| **Route ticker** | Live marquee between hero and stats — `BAKU → ISTANBUL · …` |
+| **Hero photo** | Warm golden-hour airport sunset (replaced cold/teal image) |
+
+### Still unique to us (not copy-paste)
+
+- **Floating departure board** (Linear-inspired, right column)
+- **SVG route arc draw** (Stripe-inspired single product moment)
+- **Railway dot-grid** on warm terracotta (not purple)
+
+## Commits
+
+- `fcb02bb` — research pass + motion upgrade  
+- `6050cf5` — step 5.5 originality polish  
+
+Run `cd frontend && npm run dev` and scroll slowly — the blur headline, subtitle curtain, ticker, and row micro-interactions should feel intentional now, not template-y.
+
+If you want to push further (magnetic buttons like craftz.dog, or Vercel-style breathing gradient on the hero overlay), say the word.
+
+You were right — the page was **front-loaded**: everything fired once on scroll, then went dead. That's the "AI landing page" feel.
+
+## Playwright research (this pass)
+
+Visited **motion.dev/examples**, **vercel.com**, **rauno.me** — documented in `frontend/design-research/RESEARCH.md` + screenshot `13-rauno.png`.
+
+**Key insight:** Premium sites keep **ambient motion running** after load (Vercel's breathing gradient, Rauno's micro-interactions, craftz.dog magnetic hover). One-shot `whileInView once` isn't enough.
+
+## What stays alive now (even after you've scrolled everything)
+
+| Layer | What it does |
+|---|---|
+| **Scroll progress bar** | Amber line at top — always tracking scroll |
+| **Breathing orbs** | Two warm glows pulsing slowly in the hero |
+| **Drifting dot grid** | Railway-style grid slowly shifts |
+| **Cursor spotlight** | Warm radial glow follows your mouse on hero (desktop) |
+| **Floating route codes** | `TYO → SEL`, `BER → AMS`… ghost drift in background |
+| **Route arc** | Dot loops along the SVG path forever; city labels pulse |
+| **Departure board** | Highlight cycles rows every 2.8s with sliding `layoutId` |
+| **Route ticker** | Marquee never stops + live pulse badge |
+| **Live listings** | Pulsing "Updating" dot + shimmer line at section top |
+| **How it works** | Amber dot travels along connector while section is visible; step numbers breathe |
+| **Stats** | Subtle scale breathe after count-up finishes |
+| **Magnetic CTAs** | Buttons pull toward cursor |
+| **Headline hover** | Individual words lift on hover |
+| **Hero scroll-out** | Content fades and drifts as you leave the hero |
+| **Nav/Footer** | Underline draws on link hover; footer tagline breathes |
+
+## Try this
+
+`cd frontend && npm run dev` — then:
+
+1. Load the page, wait 5 seconds **without scrolling** — watch the departure board cycle, route dot loop, orbs breathe, ticker scroll  
+2. Move your mouse across the hero — cursor glow follows  
+3. Hover headline words and CTAs — magnetic pull  
+4. Scroll down slowly — progress bar + hero fade  
+5. Hover listing rows — slide + arrow  
+
+Committed as `cb2c7aa`. If you want to go even harder next (e.g. Lenis smooth scroll, section color shifts on scroll progress, or sound-less haptic-style button ripples), say the word.
