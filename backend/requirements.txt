@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+supabase
+stripe
+resend
+pydantic
+python-dotenv
+python-jose[cryptography]
