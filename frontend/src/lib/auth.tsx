@@ -1,6 +1,7 @@
 import * as React from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { DB, getEmailUsername } from './db_constants'
 
 export interface AuthUser {
   id: string
@@ -30,11 +31,11 @@ function toAuthUser(user: User, profile?: Record<string, unknown> | null): AuthU
     id: user.id,
     email: user.email ?? '',
     displayName:
-      (profile?.display_name as string) ??
+      (profile?.[DB.FIELDS.PROFILES.DISPLAY_NAME] as string) ??
       user.user_metadata?.full_name ??
-      user.email?.split('@')[0] ??
+      getEmailUsername(user.email ?? '') ??
       'Traveler',
-    avatarUrl: (profile?.avatar_url as string) ?? undefined,
+    avatarUrl: (profile?.[DB.FIELDS.PROFILES.AVATAR_URL] as string) ?? undefined,
   }
 }
 
@@ -46,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function loadProfile(supabaseUser: User) {
     const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, avatar_url')
+      .from(DB.TABLES.PROFILES)
+      .select(`${DB.FIELDS.PROFILES.DISPLAY_NAME}, ${DB.FIELDS.PROFILES.AVATAR_URL}`)
       .eq('id', supabaseUser.id)
       .single()
     setUser(toAuthUser(supabaseUser, profile))
@@ -55,10 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function loadUnread(userId: string) {
     const { count } = await supabase
-      .from('messages')
+      .from(DB.TABLES.MESSAGES)
       .select('id', { count: 'exact', head: true })
-      .is('read_at', null)
-      .neq('sender_id', userId)
+      .is(DB.FIELDS.MESSAGES.READ_AT, null)
+      .neq(DB.FIELDS.MESSAGES.SENDER_ID, userId)
     setUnreadCount(count ?? 0)
   }
 

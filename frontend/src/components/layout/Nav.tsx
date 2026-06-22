@@ -11,6 +11,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
+import { getInitial } from "@/lib/db_constants"
 
 export function Nav() {
   const { user, unreadCount, loading } = useAuth()
@@ -87,7 +88,7 @@ export function Nav() {
               user ? (
                 <Link to="/messages" className="relative">
                   <span className="flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text">
-                    {user.displayName.charAt(0).toUpperCase()}
+                    {getInitial(user.displayName)}
                   </span>
                   {unreadCount > 0 && (
                     <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] text-bg">
