@@ -6,17 +6,17 @@
 
 /* Travel-Couriers design tokens — plan.md §10 */
 :root {
-  --bg: #0D0B09;
-  --surface: #151210;
-  --surface-raised: #1C1915;
-  --border: #2C2520;
-  --accent: #C47B22;
-  --accent-dim: #7A4D14;
-  --text: #EDE8E0;
-  --text-muted: #7C6F62;
-  --text-faint: #3D342C;
-  --success: #4E8A5E;
-  --destructive: #9B4040;
+  --bg:             #0E0B08;
+  --surface:        #171109;
+  --surface-raised: #1F1810;
+  --border:         #2E2418;
+  --accent:         #C8956A;   /* warm terracotta, like sand at golden hour */
+  --accent-dim:     #7A5438;
+  --text:           #F4EDE4;   /* warm cream, not cold white */
+  --text-muted:     #8C7B68;
+  --text-faint:     #2A1F14;
+  --success:        #7EB89A;   /* muted seafoam — ocean */
+  --destructive:    #C47B6B;   /* muted coral */
 
   /* Spacing scale: 4 / 8 / 16 / 24 / 40 / 64 / 96 / 128 */
   --space-1: 4px;
@@ -64,8 +64,8 @@
 }
 
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "DM Serif Display", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --color-bg: var(--bg);
@@ -133,14 +133,15 @@
 
   body {
     @apply bg-bg text-text;
-    font-weight: 400;
+    font-weight: 300;
+    line-height: 1.7;
   }
 
-  h1,
-  h2 {
+  h1, h2 {
     font-family: var(--font-heading);
-    font-weight: 600;
-    letter-spacing: -0.03em;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    font-style: italic;
     text-transform: none;
   }
 
@@ -156,10 +157,11 @@
 }
 
 @layer utilities {
-  .font-heading {
+    .font-heading {
     font-family: var(--font-heading);
-    font-weight: 600;
-    letter-spacing: -0.03em;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: -0.01em;
   }
 
   .font-data {
