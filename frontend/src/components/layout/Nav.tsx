@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
 
 export function Nav() {
-  const { user, unreadCount } = useAuth()
+  const { user, unreadCount, loading } = useAuth()
   const location = useLocation()
   const isLanding = location.pathname === "/"
   const [scrolled, setScrolled] = React.useState(false)
@@ -83,26 +83,28 @@ export function Nav() {
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
-            {user ? (
-              <Link to="/messages" className="relative">
-                <span className="flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text">
-                  {user.displayName.charAt(0).toUpperCase()}
-                </span>
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] text-bg">
-                    {unreadCount}
+            {!loading && (
+              user ? (
+                <Link to="/messages" className="relative">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text">
+                    {user.displayName.charAt(0).toUpperCase()}
                   </span>
-                )}
-              </Link>
-            ) : (
-              <>
-                <Link to="/auth">
-                  <Button variant="ghost">Sign in</Button>
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] text-bg">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
-                <Link to="/trips/new">
-                  <Button>Post a trip</Button>
-                </Link>
-              </>
+              ) : (
+                <>
+                  <Link to="/auth">
+                    <Button variant="ghost">Sign in</Button>
+                  </Link>
+                  <Link to="/trips/new">
+                    <Button>Post a trip</Button>
+                  </Link>
+                </>
+              )
             )}
           </div>
 

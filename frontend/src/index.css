@@ -166,8 +166,8 @@
 
   .font-data {
     font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-muted);
   }
 
@@ -175,7 +175,7 @@
     font-family: var(--font-sans);
     font-size: 13px;
     font-weight: 500;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
 }

@@ -12,7 +12,8 @@ async def browse_listings(
     dest_city: str = None,
     status: str = "open",
     order_by: str = "created_at",
-    limit: int = None,
+    limit: int = 20,
+    offset: int = 0
 ):
     try:
         query = supabase.table("listings").select("*").eq("status", status)
@@ -22,10 +23,7 @@ async def browse_listings(
             query = query.ilike("origin_city", f"%{origin_city}%")
         if dest_city:
             query = query.ilike("dest_city", f"%{dest_city}%")
-        query = query.order(order_by, desc=True)
-        if limit:
-            query = query.limit(limit)
-        result = query.execute()
+        result = query.order(order_by, desc=True).limit(limit).offset(offset).execute()
         return result.data
     except Exception as e:
         raise HTTPException(400, f"Failed to browse listings: {str(e)}")
