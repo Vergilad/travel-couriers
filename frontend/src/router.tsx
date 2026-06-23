@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router"
 
 import { Layout } from "@/components/layout/Layout"
+import { AuthPage } from "@/pages/Auth"
 import { LandingPage } from "@/pages/Landing"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
 
@@ -27,7 +28,14 @@ const browseRoute = createRoute({
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth",
-  component: () => <PlaceholderPage title="Auth — coming in step 6" />,
+  validateSearch: (search: Record<string, unknown>) => ({
+    mode: (search.mode as "signin" | "signup" | undefined) ?? "signin",
+    redirect: (search.redirect as string | undefined) ?? undefined,
+  }),
+  component: function AuthRoute() {
+    const { mode, redirect } = authRoute.useSearch()
+    return <AuthPage mode={mode} redirect={redirect} />
+  },
 })
 
 const tripsNewRoute = createRoute({
