@@ -230,37 +230,69 @@ function LandPaths() {
   )
 }
 
-// ── Animated arc ──────────────────────────────────────────────────────────────
+// ── Animated arc + moving courier dot ────────────────────────────────────────
 function AnimatedArc({
   from,
   to,
+  arcId,
   delay,
 }: {
   from: [number, number]
   to: [number, number]
+  arcId: string
   delay: number
 }) {
   const pathRef = useRef<SVGPathElement>(null)
   const [pathLength, setPathLength] = useState(0)
   const d = arcPath(from, to)
+  const pathElemId = `arc-path-${arcId}`
 
   useEffect(() => {
     if (pathRef.current) setPathLength(pathRef.current.getTotalLength())
   }, [d])
 
+  // Vary travel speed slightly per arc so dots feel independent
+  const travelDur = (3.5 + (delay * 7) % 2.5).toFixed(1)
+
   return (
-    <motion.path
-      ref={pathRef}
-      d={d}
-      fill="none"
-      stroke="#C8956A"
-      strokeWidth={1.2}
-      strokeLinecap="round"
-      initial={{ pathLength: 0, opacity: 0 }}
-      animate={{ pathLength: 1, opacity: 0.6 }}
-      transition={{ duration: 1.5, delay, ease: "easeInOut" }}
-      style={{ strokeDasharray: pathLength, strokeDashoffset: 0 }}
-    />
+    <g>
+      {/* The arc line */}
+      <motion.path
+        ref={pathRef}
+        id={pathElemId}
+        d={d}
+        fill="none"
+        stroke="#C8956A"
+        strokeWidth={1.2}
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 0.5 }}
+        transition={{ duration: 1.5, delay, ease: "easeInOut" }}
+        style={{ strokeDasharray: pathLength, strokeDashoffset: 0 }}
+      />
+
+      {/* Outer glow ring — travels with the dot */}
+      <circle r={5} fill="none" stroke="#D4A855" strokeWidth={0.8} opacity={0.35} filter="url(#courier-glow)">
+        <animateMotion
+          dur={`${travelDur}s`}
+          repeatCount="indefinite"
+          begin={`${(delay + 1.6).toFixed(1)}s`}
+        >
+          <mpath href={`#${pathElemId}`} />
+        </animateMotion>
+      </circle>
+
+      {/* Bright core dot */}
+      <circle r={2.8} fill="#F4EDE4" opacity={0.95} filter="url(#courier-glow)">
+        <animateMotion
+          dur={`${travelDur}s`}
+          repeatCount="indefinite"
+          begin={`${(delay + 1.6).toFixed(1)}s`}
+        >
+          <mpath href={`#${pathElemId}`} />
+        </animateMotion>
+      </circle>
+    </g>
   )
 }
 
@@ -361,6 +393,16 @@ export function WorldMap({ listings }: { listings: Listing[] }) {
             className="w-full h-auto"
             style={{ display: "block" }}
           >
+            <defs>
+              <filter id="courier-glow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
             {/* Ocean background */}
             <rect width={W} height={H} fill="#0A0806" />
 
@@ -380,10 +422,11 @@ export function WorldMap({ listings }: { listings: Listing[] }) {
               strokeWidth={1}
             />
 
-            {/* Animated route arcs */}
+            {/* Animated route arcs + courier dots */}
             {arcs.map((arc, idx) => (
               <AnimatedArc
                 key={arc.id}
+                arcId={arc.id}
                 from={arc.fromPt}
                 to={arc.toPt}
                 delay={idx * 0.18}
