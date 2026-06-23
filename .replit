@@ -40,7 +40,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && uvicorn main:app --host localhost --port 8000 --reload"
+args = "cd backend && uvicorn main:app --host 0.0.0.0 --port 8000"
 waitForPort = 8000
 
 [workflows.workflow.metadata]
@@ -49,3 +49,12 @@ outputType = "console"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd backend && uvicorn main:app --host 0.0.0.0 --port 5000"]
+build = ["bash", "-c", "cd frontend && npm run build"]
