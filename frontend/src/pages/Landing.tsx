@@ -4,6 +4,7 @@ import { motion, useMotionValue, useSpring } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 
 import { Magnetic } from "@/components/landing/Magnetic"
+import { WorldMap } from "@/components/landing/WorldMap"
 import { fetchOpenListings } from "@/lib/api"
 import type { Listing } from "@/types/listing"
 
@@ -354,6 +355,9 @@ export function LandingPage() {
           </motion.div>
         </div>
       </section>
+
+      {/* ── World map ────────────────────────────────────────────────────────── */}
+      <WorldMap listings={listings ?? []} />
 
       {/* ── Marquee strip ─────────────────────────────────────────────────────── */}
       <div className="relative z-[2] w-full bg-[#111008] border-y border-[#D4A855]/20 py-4 overflow-hidden flex items-center">

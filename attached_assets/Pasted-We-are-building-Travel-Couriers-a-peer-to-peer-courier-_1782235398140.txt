@@ -1,0 +1,133 @@
+We are building Travel Couriers — a peer-to-peer courier marketplace.
+Read the existing codebase to understand what's already built before doing anything.
+Pay special attention to:
+- src/index.css — design tokens and typography (DM Serif Display + DM Sans, terracotta palette)
+- src/router.tsx — current route structure
+- src/lib/auth.tsx — currently a stub returning hardcoded null
+- src/components/layout/Nav.tsx — already uses useAuth(), needs real data
+- backend/routers/ — FastAPI backend with all routes already built
+- plan.md — full project spec
+
+The landing page is already built and looks great with custom animations.
+Step 6 is auth — match that same quality bar.
+
+---
+
+## WHAT TO BUILD
+
+### 1. src/lib/supabase.ts
+
+Supabase client using:
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
+
+Both come from environment variables. If they're missing, log a warning
+but don't crash — the app should still render.
+
+### 2. src/lib/auth.tsx — replace the stub with real Supabase auth
+
+AuthProvider that:
+- Calls supabase.auth.getSession() on mount
+- Listens to supabase.auth.onAuthStateChange()
+- After login, fetches the user's profile row from the profiles table
+  (display_name, avatar_url) using the Supabase client directly
+- Tracks unread message count: messages where read_at IS NULL
+  and sender_id != current user id
+- Exposes: user, session, loading, unreadCount, signOut()
+- signOut() calls supabase.auth.signOut() then navigates to /
+- While loading, the nav must not flash between logged-in and logged-out states
+
+### 3. src/pages/Auth.tsx — sign in + sign up page
+
+Single page at /auth handling both modes.
+Toggle between sign in and sign up with a tab or toggle.
+Also support ?mode=signup query param for deep-linking from "Post a trip".
+
+Auth methods:
+- Email + password sign in: supabase.auth.signInWithPassword()
+- Email + password sign up: supabase.auth.signUp()
+- Google OAuth: supabase.auth.signInWithOAuth({ provider: 'google',
+  options: { redirectTo: window.location.origin + '/browse' } })
+
+UX requirements:
+- Inline error messages — no browser alerts, show Supabase error strings
+  in a styled error component below the form
+- All buttons show a loading spinner while request is in flight and are disabled
+- After sign in: navigate to ?redirect= param or fall back to /browse
+- After sign up: show a "Check your email to confirm your account" success state
+  with an option to resend or go back
+
+Design — you have full creative freedom here. Requirements:
+- Must use the existing CSS variables from index.css (--bg, --surface, --accent etc.)
+- Must use DM Serif Display italic for any display text
+- Must feel like an extension of the landing page, not a separate product
+- The page should have at least one ambient element that carries the travel theme
+- Google button must be clearly distinct from the email submit button
+- Entry animation on the form — you decide the approach
+
+### 4. Router updates
+
+Add _authenticated layout route:
+- While loading === true: render a minimal centered loading indicator
+- If user is null: redirect to /auth with current path as ?redirect= param
+- If user exists: render <Outlet />
+
+Move under _authenticated:
+- /trips/new
+- /requests/new
+- /deliveries/new
+- /messages
+- /messages/:threadId
+- /settings
+- /reports/new
+
+Keep public (no guard):
+- / — landing
+- /browse
+- /listings/:id
+- /profile/:userId
+- /auth
+
+If a logged-in user visits /auth, redirect them to /browse immediately.
+
+### 5. Nav.tsx — wire real auth state
+
+The nav already calls useAuth() — now that it returns real data:
+- Logged out: Show "Sign in" link + "Post a trip" primary button
+- Loading: Show nothing in the right side (no flash)
+- Logged in: Show avatar circle with user's initial or avatar image,
+  unread badge on messages icon when unreadCount > 0,
+  clicking avatar opens a small dropdown with: Profile (/profile/:id),
+  Settings (/settings), divider, Sign out
+
+---
+
+## SUPABASE NOTES
+
+The database already has:
+- profiles table with id, display_name, avatar_url, bio, city, country
+- A trigger that auto-creates a profile row on auth.users insert
+  so you don't need to manually create profiles after signup
+- RLS policies already set up — use the anon key on the frontend,
+  the service role key stays backend-only
+
+For Google OAuth to work the user needs to:
+1. Enable Google provider in Supabase dashboard → Auth → Providers
+2. Add the Replit dev URL and production URL to redirect URLs in
+   Supabase Auth → URL Configuration
+Add a comment in the code noting this.
+
+---
+
+## AFTER BUILDING
+
+Test this flow:
+1. Visit /trips/new while logged out → should redirect to /auth?redirect=/trips/new
+2. Sign up with a real email → should show "check your email" state
+3. Sign in with wrong password → inline error, no page reload
+4. After sign in → should redirect to /browse or the original ?redirect= path
+5. Nav logged-in state → avatar shows, sign in button gone
+6. Sign out → redirects to /, nav resets to logged-out state
+7. Visiting /auth while logged in → immediately redirects to /browse
+
+Fix any issues found during testing before finishing.
