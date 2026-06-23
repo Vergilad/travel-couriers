@@ -1,3 +1,0 @@
-- [Vite 8 CJS bundling](vite8-cjs.md) — react-simple-maps and other UMD/CJS libs break in Vite 8 (Rolldown); use pure ESM alternatives or write SVG renderers directly.
-- [Auth signOut navigation](auth-patterns.md) — use window.location.href for signOut redirect to avoid circular dep between auth.tsx and router.tsx.
-- [TanStack Router search params](auth-patterns.md) — use validateSearch on the route definition; authRoute.useSearch() in the component.
