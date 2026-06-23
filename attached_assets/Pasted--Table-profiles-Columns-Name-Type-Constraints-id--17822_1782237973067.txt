@@ -1,0 +1,149 @@
+## Table `profiles`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `display_name` | `text` |  Nullable |
+| `avatar_url` | `text` |  Nullable |
+| `bio` | `text` |  Nullable |
+| `city` | `text` |  Nullable |
+| `country` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `is_banned` | `bool` |  Nullable |
+
+## Table `user_roles`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `user_id` | `uuid` | Primary |
+| `role` | `text` | Primary |
+
+## Table `listings`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `owner_id` | `uuid` |  Nullable |
+| `kind` | `text` |  Nullable |
+| `origin_city` | `text` |  Nullable |
+| `origin_country` | `text` |  Nullable |
+| `dest_city` | `text` |  Nullable |
+| `dest_country` | `text` |  Nullable |
+| `depart_date` | `date` |  Nullable |
+| `arrive_date` | `date` |  Nullable |
+| `title` | `text` |  Nullable |
+| `description` | `text` |  Nullable |
+| `price` | `numeric` |  Nullable |
+| `currency` | `text` |  Nullable |
+| `capacity_kg` | `numeric` |  Nullable |
+| `status` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `threads`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `listing_id` | `uuid` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `thread_participants`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `thread_id` | `uuid` | Primary |
+| `user_id` | `uuid` | Primary |
+
+## Table `messages`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `thread_id` | `uuid` |  Nullable |
+| `sender_id` | `uuid` |  Nullable |
+| `body` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `read_at` | `timestamptz` |  Nullable |
+
+## Table `match_confirmations`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `thread_id` | `uuid` | Primary |
+| `user_id` | `uuid` | Primary |
+| `confirmed_at` | `timestamptz` |  Nullable |
+
+## Table `payments`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `thread_id` | `uuid` |  Nullable |
+| `listing_id` | `uuid` |  Nullable |
+| `payer_id` | `uuid` |  Nullable |
+| `payee_id` | `uuid` |  Nullable |
+| `amount` | `numeric` |  Nullable |
+| `currency` | `text` |  Nullable |
+| `stripe_payment_intent_id` | `text` |  Nullable |
+| `stripe_session_id` | `text` |  Nullable |
+| `status` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `completed_at` | `timestamptz` |  Nullable |
+
+## Table `reviews`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `listing_id` | `uuid` |  Nullable |
+| `reviewer_id` | `uuid` |  Nullable |
+| `reviewee_id` | `uuid` |  Nullable |
+| `rating` | `int4` |  Nullable |
+| `comment` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `reports`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `reporter_id` | `uuid` |  Nullable |
+| `target_user_id` | `uuid` |  Nullable |
+| `target_listing_id` | `uuid` |  Nullable |
+| `reason` | `text` |  Nullable |
+| `details` | `text` |  Nullable |
+| `status` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `notification_log`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `user_id` | `uuid` |  Nullable |
+| `kind` | `text` |  Nullable |
+| `payload` | `jsonb` |  Nullable |
+| `sent_at` | `timestamptz` |  Nullable |
+
