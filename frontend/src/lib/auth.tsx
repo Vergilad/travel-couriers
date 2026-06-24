@@ -16,6 +16,7 @@ interface AuthContextValue {
   loading: boolean
   unreadCount: number
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = React.createContext<AuthContextValue>({
@@ -24,6 +25,7 @@ const AuthContext = React.createContext<AuthContextValue>({
   loading: true,
   unreadCount: 0,
   signOut: async () => {},
+  refreshProfile: async () => {},
 })
 
 function toAuthUser(user: User, profile?: Record<string, unknown> | null): AuthUser {
@@ -55,26 +57,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function loadUnread(userId: string) {
+    const { data: participations } = await supabase
+      .from(DB.TABLES.THREAD_PARTICIPANTS)
+      .select(DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID)
+      .eq(DB.FIELDS.THREAD_PARTICIPANTS.USER_ID, userId)
+
+    const threadIds = (participations ?? []).map(
+      (p: Record<string, string>) => p[DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID]
+    )
+
+    if (threadIds.length === 0) {
+      setUnreadCount(0)
+      return
+    }
+
     const { count } = await supabase
       .from(DB.TABLES.MESSAGES)
       .select('id', { count: 'exact', head: true })
       .is(DB.FIELDS.MESSAGES.READ_AT, null)
       .neq(DB.FIELDS.MESSAGES.SENDER_ID, userId)
+      .in(DB.FIELDS.MESSAGES.THREAD_ID, threadIds)
+
     setUnreadCount(count ?? 0)
   }
 
   async function handleAuthStateChange(newSession: Session | null) {
     setSession(newSession)
     if (newSession?.user) {
-      await Promise.all([
-        loadProfile(newSession.user),
-        loadUnread(newSession.user.id),
-      ])
+      await Promise.all([loadProfile(newSession.user), loadUnread(newSession.user.id)])
     } else {
       setUser(null)
       setUnreadCount(0)
     }
   }
+
+  const refreshProfile = React.useCallback(async () => {
+    const { data: { session: current } } = await supabase.auth.getSession()
+    if (current?.user) await loadProfile(current.user)
+  }, [])
 
   React.useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -82,9 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        handleAuthStateChange(session)
-      }
+      (_event, session) => { handleAuthStateChange(session) }
     )
 
     return () => subscription.unsubscribe()
@@ -96,8 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const value = React.useMemo(
-    () => ({ user, session, loading, unreadCount, signOut }),
-    [user, session, loading, unreadCount]
+    () => ({ user, session, loading, unreadCount, signOut, refreshProfile }),
+    [user, session, loading, unreadCount, refreshProfile]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

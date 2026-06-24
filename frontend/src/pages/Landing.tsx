@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "@tanstack/react-router"
-import { motion, useMotionValue, useSpring } from "framer-motion"
+import { motion, useInView } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 
 import { Magnetic } from "@/components/landing/Magnetic"
@@ -18,16 +18,17 @@ function SplitFlapChar({
   targetChar: string
   size?: "large" | "small"
 }) {
-  const [currentChar, setCurrentChar] = useState(" ")
+  const [currentChar, setCurrentChar] = useState(targetChar)
   const [isFlipping, setIsFlipping] = useState(false)
+  const prevTarget = useRef(targetChar)
 
   useEffect(() => {
-    if (currentChar === targetChar) return
+    if (prevTarget.current === targetChar) return
+    prevTarget.current = targetChar
     setIsFlipping(true)
     let iterations = 0
     const maxIterations = 10 + Math.floor(Math.random() * 5)
-    let interval: ReturnType<typeof setInterval>
-    const tick = () => {
+    const interval = setInterval(() => {
       iterations++
       if (iterations >= maxIterations) {
         setCurrentChar(targetChar)
@@ -36,12 +37,11 @@ function SplitFlapChar({
       } else {
         setCurrentChar(CHARS[Math.floor(Math.random() * CHARS.length)])
       }
-    }
-    interval = setInterval(tick, 50)
+    }, 50)
     return () => clearInterval(interval)
-  }, [targetChar]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [targetChar])
 
-  const isSpace = targetChar === " " && !isFlipping
+  const isSpace = currentChar === " " && !isFlipping
   const w = size === "large" ? "w-8" : "w-5 sm:w-6"
   const h = size === "large" ? "h-11" : "h-7 sm:h-8"
   const text = size === "large" ? "text-xl" : "text-xs sm:text-sm"
@@ -133,16 +133,82 @@ const FALLBACK_ROWS: BoardRow[] = [
   { id: "5", route: "AMSTR → BARCE", date: "AUG 12", kind: "DELIVER", status: "OPEN    " },
 ]
 
+const BLANK_ROWS: BoardRow[] = FALLBACK_ROWS.map((r) => ({
+  ...r,
+  route: " ".repeat(r.route.length),
+  date: " ".repeat(r.date.length),
+  kind: " ".repeat(r.kind.length),
+  status: " ".repeat(r.status.length),
+}))
+
 const ROTATING_STATUSES = ["ON TIME ", "BOARDING", "DELAYED ", "OPEN    ", "CLOSED  ", "DEPARTED"]
 
 // ─── Cycling headline phrases ────────────────────────────────────────────────
 const PHRASES = ["ANYTHING.  ", "EVERYTHING.", "YOUR WORLD."]
 
+// ─── Step card (own hover state so animate works correctly) ───────────────────
+interface Step { n: string; title: string; body: string; accent: boolean }
+
+function StepCard({ step, index }: { step: Step; index: number }) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.6, delay: index * 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      className="flex flex-col relative cursor-default"
+    >
+      {/* Big number — animates independently via animate prop */}
+      <motion.div
+        animate={{ y: hovered ? -18 : 0 }}
+        transition={{ type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
+        className="text-[120px] leading-none mb-6 select-none"
+        style={{
+          fontFamily: "'DM Serif Display', serif",
+          WebkitTextStroke: `1px rgba(200, 149, 106, ${step.accent ? 1 : 0.4})`,
+          color: "transparent",
+          willChange: "transform",
+        }}
+      >
+        {step.n}
+      </motion.div>
+
+      {/* Title — slight lift too */}
+      <motion.h3
+        animate={{ y: hovered ? -4 : 0 }}
+        transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.8, delay: 0.03 }}
+        className={`font-bold text-2xl mb-4 ${step.accent ? "text-[#C8956A]" : "text-[#F4EDE4]"}`}
+      >
+        {step.title}
+      </motion.h3>
+
+      <p className="text-[#8C7B68] leading-relaxed">{step.body}</p>
+
+      {/* Subtle bottom accent line on hover */}
+      <motion.div
+        animate={{ scaleX: hovered ? 1 : 0, opacity: hovered ? 1 : 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="mt-6 h-px origin-left"
+        style={{ background: `rgba(200,149,106,${step.accent ? 0.6 : 0.3})` }}
+      />
+    </motion.div>
+  )
+}
+
 // ─── Main page component ─────────────────────────────────────────────────────
 export function LandingPage() {
   const cursorRef = useRef<HTMLDivElement>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
   const [phraseIndex, setPhraseIndex] = useState(0)
   const [boardRows, setBoardRows] = useState<BoardRow[]>(FALLBACK_ROWS)
+  const [displayRows, setDisplayRows] = useState<BoardRow[]>(BLANK_ROWS)
+
+  // Trigger SplitFlap ONLY when board enters viewport
+  const isBoardInView = useInView(boardRef, { once: true, amount: 0.4 })
 
   const { data: listings } = useQuery({
     queryKey: ["listings", "open", 6],
@@ -162,6 +228,19 @@ export function LandingPage() {
       setBoardRows(rows.length >= 5 ? rows : [...rows, ...FALLBACK_ROWS.slice(rows.length)])
     }
   }, [listings])
+
+  // Activate SplitFlap animation only once board is visible — 600ms delay so the
+  // page visually settles before the letters start flipping.
+  useEffect(() => {
+    if (!isBoardInView) return
+    const timer = setTimeout(() => setDisplayRows(boardRows), 600)
+    return () => clearTimeout(timer)
+  }, [isBoardInView]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once activated, keep in sync with live boardRows updates (status rotation)
+  useEffect(() => {
+    if (isBoardInView) setDisplayRows((prev) => prev.map((row, i) => boardRows[i] ?? row))
+  }, [boardRows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phrase cycling
   useEffect(() => {
@@ -199,6 +278,27 @@ export function LandingPage() {
     window.addEventListener("mousemove", updateCursor)
     return () => window.removeEventListener("mousemove", updateCursor)
   }, [])
+
+  const STEPS: Step[] = [
+    {
+      n: "01",
+      title: "Post a Route",
+      body: "Traveling soon? List your flight details, available space, and your fee. Or request an item you need brought to you.",
+      accent: false,
+    },
+    {
+      n: "02",
+      title: "Match & Meet",
+      body: "Connect safely. Agree on terms, verify identities through our platform, and hand off the item before departure.",
+      accent: false,
+    },
+    {
+      n: "03",
+      title: "Deliver & Earn",
+      body: "Hand over the package at the destination. Payment is released from escrow automatically upon successful delivery.",
+      accent: true,
+    },
+  ]
 
   return (
     <div className="overflow-x-hidden selection:bg-[#C8956A] selection:text-[#0E0B08]">
@@ -280,14 +380,15 @@ export function LandingPage() {
         </div>
 
         {/* Right: Solari departure board */}
-        <div className="w-full xl:w-[45%] flex justify-center xl:justify-end">
-          <motion.div
-            animate={{ y: [0, -8, 0] }}
-            transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
+        <div ref={boardRef} className="w-full xl:w-[45%] flex justify-center xl:justify-end">
+          {/* CSS float — runs on compositor thread, no React involvement */}
+          <div
             className="w-full max-w-[700px] bg-[#111008] border border-[#D4A855]/20 p-6 md:p-8 rounded-md relative overflow-hidden"
             style={{
               boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.05)",
               backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)",
+              animation: "boardFloat 7s ease-in-out infinite",
+              willChange: "transform",
             }}
           >
             {/* Glass sheen */}
@@ -322,9 +423,9 @@ export function LandingPage() {
               <div className="col-span-3">STATUS</div>
             </div>
 
-            {/* Board rows */}
+            {/* Board rows — only animate when in view */}
             <div className="space-y-3">
-              {boardRows.map((row) => (
+              {displayRows.map((row) => (
                 <div
                   key={row.id}
                   className="grid grid-cols-12 gap-2 bg-black/20 p-2 rounded-sm border border-white/5"
@@ -352,7 +453,7 @@ export function LandingPage() {
               <span>SOLARI-TRX SYS. V2.4</span>
               <span>SYNC: OK</span>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -401,52 +502,8 @@ export function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 xl:gap-16">
-          {[
-            {
-              n: "01",
-              title: "Post a Route",
-              body: "Traveling soon? List your flight details, available space, and your fee. Or request an item you need brought to you.",
-              accent: false,
-            },
-            {
-              n: "02",
-              title: "Match & Meet",
-              body: "Connect safely. Agree on terms, verify identities through our platform, and hand off the item before departure.",
-              accent: false,
-            },
-            {
-              n: "03",
-              title: "Deliver & Earn",
-              body: "Hand over the package at the destination. Payment is released from escrow automatically upon successful delivery.",
-              accent: true,
-            },
-          ].map((step, index) => (
-            <motion.div
-              key={step.n}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              whileHover={{ y: -6 }}
-              transition={{ type: "spring", stiffness: 80, damping: 20, delay: index * 0.15 }}
-              className="flex flex-col relative group"
-            >
-              <div
-                className="text-[120px] leading-none mb-6 transition-all duration-500 group-hover:-translate-y-4"
-                style={{
-                  fontFamily: "'DM Serif Display', serif",
-                  WebkitTextStroke: `1px rgba(200, 149, 106, ${step.accent ? 1 : 0.4})`,
-                  color: "transparent",
-                }}
-              >
-                {step.n}
-              </div>
-              <h3
-                className={`font-bold text-2xl mb-4 ${step.accent ? "text-[#C8956A]" : "text-[#F4EDE4]"}`}
-              >
-                {step.title}
-              </h3>
-              <p className="text-[#8C7B68] leading-relaxed">{step.body}</p>
-            </motion.div>
+          {STEPS.map((step, index) => (
+            <StepCard key={step.n} step={step} index={index} />
           ))}
         </div>
       </section>

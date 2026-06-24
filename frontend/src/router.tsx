@@ -1,18 +1,72 @@
+import * as React from "react"
 import {
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
+  useNavigate,
 } from "@tanstack/react-router"
 
 import { Layout } from "@/components/layout/Layout"
 import { AuthPage } from "@/pages/Auth"
 import { LandingPage } from "@/pages/Landing"
+import { ProfilePage } from "@/pages/Profile"
+import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
+import { useAuth } from "@/lib/auth"
 
-const rootRoute = createRootRoute({
-  component: Layout,
+// ── Minimal full-page spinner ─────────────────────────────────────────────────
+function FullPageSpinner() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-[#0E0B08] z-50">
+      <div className="w-6 h-6 rounded-full border-2 border-[#C8956A]/20 border-t-[#C8956A] animate-spin" />
+    </div>
+  )
+}
+
+// ── Root ─────────────────────────────────────────────────────────────────────
+const rootRoute = createRootRoute({ component: Layout })
+
+// ── Auth guard layout ─────────────────────────────────────────────────────────
+function AuthGuard() {
+  const { user, loading } = useAuth()
+  const navigate = useNavigate()
+
+  React.useEffect(() => {
+    if (!loading && !user) {
+      const path = window.location.pathname
+      navigate({ to: "/auth", search: { redirect: path } })
+    }
+  }, [loading, user, navigate])
+
+  if (loading) return <FullPageSpinner />
+  if (!user) return null
+  return <Outlet />
+}
+
+const authenticatedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "_authenticated",
+  component: AuthGuard,
 })
 
+// ── Auth route (redirect to /browse if already logged in) ─────────────────────
+function AuthRouteComponent() {
+  const { user, loading } = useAuth()
+  const navigate = useNavigate()
+  const { mode, redirect } = authRoute.useSearch()
+
+  React.useEffect(() => {
+    if (!loading && user) {
+      navigate({ to: redirect ?? "/browse" })
+    }
+  }, [loading, user, navigate, redirect])
+
+  if (!loading && user) return null
+  return <AuthPage mode={mode} redirect={redirect} />
+}
+
+// ── Public routes ─────────────────────────────────────────────────────────────
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -32,22 +86,7 @@ const authRoute = createRoute({
     mode: (search.mode as "signin" | "signup" | undefined) ?? "signin",
     redirect: (search.redirect as string | undefined) ?? undefined,
   }),
-  component: function AuthRoute() {
-    const { mode, redirect } = authRoute.useSearch()
-    return <AuthPage mode={mode} redirect={redirect} />
-  },
-})
-
-const tripsNewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/trips/new",
-  component: () => <PlaceholderPage title="Post a trip — coming in step 8" />,
-})
-
-const messagesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/messages",
-  component: () => <PlaceholderPage title="Messages — coming in step 9" />,
+  component: AuthRouteComponent,
 })
 
 const listingRoute = createRoute({
@@ -59,17 +98,71 @@ const listingRoute = createRoute({
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/profile/$userId",
-  component: () => <PlaceholderPage title="Profile — coming in step 7" />,
+  component: function ProfileRoute() {
+    const { userId } = profileRoute.useParams()
+    return <ProfilePage userId={userId} />
+  },
 })
 
+// ── Protected routes (under _authenticated) ───────────────────────────────────
+const tripsNewRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/trips/new",
+  component: () => <PlaceholderPage title="Post a trip — coming in step 8" />,
+})
+
+const requestsNewRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/requests/new",
+  component: () => <PlaceholderPage title="New request — coming soon" />,
+})
+
+const deliveriesNewRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/deliveries/new",
+  component: () => <PlaceholderPage title="New delivery — coming soon" />,
+})
+
+const messagesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/messages",
+  component: () => <PlaceholderPage title="Messages — coming in step 9" />,
+})
+
+const messageThreadRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/messages/$threadId",
+  component: () => <PlaceholderPage title="Message thread — coming in step 9" />,
+})
+
+const settingsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings",
+  component: SettingsPage,
+})
+
+const reportsNewRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/reports/new",
+  component: () => <PlaceholderPage title="Report — coming soon" />,
+})
+
+// ── Route tree ────────────────────────────────────────────────────────────────
 const routeTree = rootRoute.addChildren([
   indexRoute,
   browseRoute,
   authRoute,
-  tripsNewRoute,
-  messagesRoute,
   listingRoute,
   profileRoute,
+  authenticatedRoute.addChildren([
+    tripsNewRoute,
+    requestsNewRoute,
+    deliveriesNewRoute,
+    messagesRoute,
+    messageThreadRoute,
+    settingsRoute,
+    reportsNewRoute,
+  ]),
 ])
 
 export const router = createRouter({ routeTree })
