@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@keyframes boardFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-9px); }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* Travel-Couriers design tokens — plan.md §10 */

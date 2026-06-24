@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import type { Listing } from "@/types/listing"
 
@@ -43,14 +43,6 @@ const CITY_COORDS: Record<string, [number, number]> = {
   chicago: [41.8781, -87.6298],
   madrid: [40.4168, -3.7038],
   rome: [41.9028, 12.4964],
-  frankfurt: [50.1109, 8.6821],
-  zurich: [47.3769, 8.5417],
-  vienna: [48.2082, 16.3738],
-  warsaw: [52.2297, 21.0122],
-  stockholm: [59.3293, 18.0686],
-  oslo: [59.9139, 10.7522],
-  copenhagen: [55.6761, 12.5683],
-  lisbon: [38.7223, -9.1393],
   doha: [25.2854, 51.531],
   riyadh: [24.7136, 46.6753],
   tehran: [35.6892, 51.389],
@@ -68,237 +60,166 @@ function lookupCoords(city: string): [number, number] | null {
   return CITY_COORDS[city.toLowerCase().trim()] ?? null
 }
 
-// ── Equirectangular projection ────────────────────────────────────────────────
+// ── Projection (equirectangular) ──────────────────────────────────────────────
 const W = 1000
 const H = 480
 
 function project(lat: number, lon: number): [number, number] {
-  const x = ((lon + 180) / 360) * W
-  const y = ((90 - lat) / 180) * H
-  return [x, y]
+  return [((lon + 180) / 360) * W, ((90 - lat) / 180) * H]
 }
 
-// ── Curved arc path between two projected points ─────────────────────────────
-function arcPath(from: [number, number], to: [number, number]): string {
-  const mx = (from[0] + to[0]) / 2
-  const my = (from[1] + to[1]) / 2 - 40 // control point lifted upward
-  return `M ${from[0]} ${from[1]} Q ${mx} ${my} ${to[0]} ${to[1]}`
-}
-
-// ── Graticule lines (lat/lon grid) ────────────────────────────────────────────
-function GraticulePaths() {
+// ── Very subtle graticule ─────────────────────────────────────────────────────
+function Graticule() {
   const lines: string[] = []
-  // Longitude lines every 30°
   for (let lon = -180; lon <= 180; lon += 30) {
-    const [x1] = project(90, lon)
-    const [x2] = project(-90, lon)
-    const [, y1] = project(90, lon)
-    const [, y2] = project(-90, lon)
-    lines.push(`M ${x1} ${y1} L ${x2} ${y2}`)
+    const [x] = project(0, lon)
+    lines.push(`M ${x.toFixed(0)} 0 L ${x.toFixed(0)} ${H}`)
   }
-  // Latitude lines every 30°
   for (let lat = -60; lat <= 60; lat += 30) {
-    const [x1, y1] = project(lat, -180)
-    const [x2, y2] = project(lat, 180)
-    lines.push(`M ${x1} ${y1} L ${x2} ${y2}`)
+    const [, y] = project(lat, 0)
+    lines.push(`M 0 ${y.toFixed(0)} L ${W} ${y.toFixed(0)}`)
   }
   return (
     <g>
       {lines.map((d, i) => (
-        <path key={i} d={d} stroke="#2E2418" strokeWidth={0.5} fill="none" />
+        <path key={i} d={d} stroke="#16100A" strokeWidth={0.6} fill="none" />
       ))}
     </g>
   )
 }
 
-// ── Continent outlines (simplified polygon points in lat/lon) ─────────────────
-// Coordinates as [lat, lon] pairs, simplified to ~110m resolution silhouettes
-const LAND_POLYGONS: [number, number][][] = [
-  // North America
-  [
-    [71, -141], [60, -141], [60, -134], [55, -130], [50, -124], [48, -124],
-    [47, -124], [42, -124], [37, -122], [32, -117], [30, -110], [25, -110],
-    [23, -106], [20, -105], [18, -104], [15, -90], [8, -83], [8, -77],
-    [10, -75], [10, -62], [12, -62], [15, -61], [18, -67], [20, -74],
-    [23, -82], [25, -80], [27, -80], [30, -81], [32, -81], [35, -75],
-    [40, -74], [41, -70], [43, -70], [45, -67], [47, -53], [50, -56],
-    [52, -55], [55, -60], [58, -65], [60, -65], [62, -78], [63, -83],
-    [60, -85], [62, -90], [68, -96], [70, -100], [72, -100], [72, -80],
-    [73, -70], [75, -75], [78, -90], [82, -90], [83, -60], [80, -65],
-    [72, -65], [68, -60], [63, -65], [62, -68], [58, -68], [55, -60],
-    [53, -57], [52, -56], [52, -60], [55, -60], [60, -65], [65, -68],
-    [68, -68], [71, -141],
-  ],
-  // Greenland (simplified)
-  [
-    [60, -45], [65, -52], [70, -55], [75, -60], [80, -65], [83, -45],
-    [83, -25], [80, -18], [76, -18], [72, -22], [68, -30], [65, -38],
-    [60, -45],
-  ],
-  // South America
-  [
-    [12, -72], [10, -62], [8, -60], [5, -55], [4, -52], [3, -51],
-    [0, -50], [-5, -35], [-10, -38], [-15, -39], [-20, -41], [-23, -43],
-    [-30, -50], [-33, -53], [-35, -58], [-40, -62], [-42, -65], [-45, -65],
-    [-50, -69], [-53, -70], [-55, -68], [-55, -65], [-52, -58], [-48, -56],
-    [-40, -55], [-35, -52], [-27, -50], [-22, -42], [-15, -39], [-10, -37],
-    [-5, -35], [0, -50], [3, -52], [6, -60], [6, -63], [8, -63],
-    [10, -62], [10, -72], [12, -72],
-  ],
-  // Europe (simplified)
-  [
-    [71, 28], [70, 20], [68, 15], [65, 14], [63, 8], [60, 5], [58, 5],
-    [55, 8], [53, 9], [52, 5], [51, 2], [51, 3], [50, 5], [50, 8],
-    [47, 8], [46, 10], [44, 12], [41, 14], [38, 15], [37, 15], [36, 13],
-    [36, 15], [37, 22], [37, 25], [38, 26], [40, 26], [41, 28], [41, 29],
-    [42, 28], [43, 25], [44, 25], [46, 22], [47, 18], [48, 18], [50, 18],
-    [52, 23], [54, 18], [55, 21], [56, 21], [57, 24], [58, 25], [59, 26],
-    [60, 25], [60, 22], [62, 22], [63, 25], [65, 25], [68, 25], [70, 28],
-    [71, 28],
-  ],
-  // Africa (simplified)
-  [
-    [37, 42], [37, 36], [35, 33], [30, 32], [27, 34], [22, 37], [18, 39],
-    [15, 42], [12, 44], [12, 42], [15, 40], [15, 38], [10, 40], [8, 39],
-    [4, 40], [0, 42], [-5, 40], [-8, 35], [-10, 28], [-12, 18], [-15, 12],
-    [-15, 8], [-12, 2], [-8, -5], [-5, -10], [-5, -15], [-8, -20],
-    [-12, -22], [-18, -22], [-20, -25], [-22, -28], [-27, -33], [-30, -30],
-    [-32, -28], [-33, -28], [-32, -18], [-28, -16], [-22, -14], [-18, -12],
-    [-13, -15], [-8, -14], [-5, -10], [0, -7], [2, -2], [4, 2], [3, 9],
-    [3, 10], [5, 10], [5, 15], [8, 15], [10, 15], [12, 14], [14, 13],
-    [15, 15], [18, 15], [22, 15], [22, 22], [22, 37], [30, 32], [35, 36],
-    [37, 42],
-  ],
-  // Russia/Central Asia (simplified)
-  [
-    [72, 28], [72, 40], [70, 50], [68, 58], [68, 70], [70, 80], [72, 90],
-    [72, 100], [70, 110], [68, 120], [68, 140], [65, 160], [62, 165],
-    [60, 162], [58, 162], [55, 160], [52, 142], [50, 142], [48, 138],
-    [46, 136], [43, 132], [42, 130], [40, 126], [42, 126], [42, 120],
-    [40, 116], [40, 110], [42, 104], [42, 96], [40, 96], [38, 90],
-    [38, 84], [40, 78], [38, 73], [36, 72], [36, 64], [38, 56], [40, 52],
-    [40, 50], [42, 50], [42, 44], [44, 42], [48, 38], [50, 36], [54, 38],
-    [55, 38], [55, 40], [58, 46], [60, 60], [60, 70], [60, 80], [62, 86],
-    [60, 90], [60, 100], [62, 106], [62, 110], [65, 110], [65, 90],
-    [65, 80], [65, 70], [68, 60], [68, 50], [68, 40], [68, 32], [70, 28],
-    [72, 28],
-  ],
-  // Asia (India, Southeast Asia simplified)
-  [
-    [38, 56], [36, 64], [38, 73], [38, 78], [36, 78], [34, 76], [32, 77],
-    [28, 88], [26, 92], [24, 92], [22, 92], [20, 93], [18, 94], [16, 98],
-    [14, 98], [10, 100], [5, 103], [1, 103], [-1, 104], [-4, 105],
-    [-8, 115], [-8, 125], [-8, 130], [-5, 134], [-2, 132], [0, 128],
-    [2, 125], [5, 118], [8, 114], [10, 108], [14, 108], [16, 108],
-    [18, 108], [20, 110], [22, 114], [22, 120], [24, 120], [26, 120],
-    [28, 122], [30, 122], [32, 120], [35, 120], [35, 116], [38, 110],
-    [40, 104], [42, 96], [40, 96], [40, 88], [38, 80], [36, 78],
-    [32, 77], [28, 72], [26, 68], [24, 68], [22, 70], [20, 73],
-    [18, 74], [16, 74], [14, 74], [10, 76], [8, 78], [8, 80],
-    [10, 80], [12, 78], [14, 80], [10, 80], [8, 78], [8, 76],
-    [10, 76], [14, 74], [18, 72], [20, 73], [22, 72], [24, 68],
-    [26, 64], [28, 62], [30, 62], [32, 62], [34, 60], [36, 56], [38, 56],
-  ],
-  // Australia (simplified)
-  [
-    [-15, 130], [-15, 136], [-12, 136], [-12, 142], [-18, 148], [-22, 150],
-    [-28, 154], [-34, 152], [-38, 148], [-38, 142], [-36, 140], [-38, 138],
-    [-40, 148], [-42, 148], [-43, 146], [-43, 144], [-38, 140], [-34, 136],
-    [-32, 132], [-32, 126], [-30, 122], [-26, 114], [-22, 114], [-20, 116],
-    [-18, 122], [-16, 122], [-15, 130],
-  ],
-]
-
-function LandPaths() {
-  return (
-    <g>
-      {LAND_POLYGONS.map((poly, i) => {
-        const pts = poly.map(([lat, lon]) => project(lat, lon))
-        const d = `M ${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L ")} Z`
-        return (
-          <path
-            key={i}
-            d={d}
-            fill="#1E1608"
-            stroke="#2E2418"
-            strokeWidth={0.8}
-            strokeLinejoin="round"
-          />
-        )
-      })}
-    </g>
-  )
+// ── TopoJSON decoder ──────────────────────────────────────────────────────────
+interface TopoJSON {
+  transform: { scale: [number, number]; translate: [number, number] }
+  arcs: [number, number][][]
+  objects: {
+    land: {
+      type: string
+      geometries: Array<{
+        type: "Polygon" | "MultiPolygon"
+        arcs: number[][] | number[][][]
+      }>
+    }
+  }
 }
 
-// ── Animated arc + moving courier dot ────────────────────────────────────────
+function decodeArcs(topo: TopoJSON): [number, number][][] {
+  const { scale, translate } = topo.transform
+  return topo.arcs.map((arc) => {
+    let x = 0, y = 0
+    return arc.map(([dx, dy]) => {
+      x += dx; y += dy
+      return [x * scale[0] + translate[0], y * scale[1] + translate[1]] as [number, number]
+    })
+  })
+}
+
+function getArc(decoded: [number, number][][], i: number): [number, number][] {
+  return i < 0 ? [...decoded[~i]].reverse() : decoded[i]
+}
+
+function makeRing(decoded: [number, number][][], refs: number[]): [number, number][] {
+  const pts: [number, number][] = []
+  for (const ref of refs) {
+    const arc = getArc(decoded, ref)
+    pts.push(...(pts.length ? arc.slice(1) : arc))
+  }
+  return pts
+}
+
+/**
+ * Build land SVG path, aggressively skipping nearby points.
+ * minDist=10 keeps recognisable continents but tosses fine coastline detail.
+ */
+function buildLandPath(topo: TopoJSON, minDist = 10): string {
+  const decoded = decodeArcs(topo)
+  const parts: string[] = []
+
+  for (const geom of topo.objects.land.geometries) {
+    const polygons =
+      geom.type === "Polygon"
+        ? [geom.arcs as number[][]]
+        : (geom.arcs as number[][][])
+
+    for (const polygon of polygons) {
+      for (const ring of polygon) {
+        const raw = makeRing(decoded, ring)
+        const pts: [number, number][] = []
+
+        for (const [lon, lat] of raw) {
+          const pt = project(lat, lon)
+          if (!pts.length || Math.hypot(pt[0] - pts[pts.length - 1][0], pt[1] - pts[pts.length - 1][1]) >= minDist) {
+            pts.push(pt)
+          }
+        }
+        if (pts.length < 3) continue
+        parts.push("M " + pts.map(([x, y]) => `${x.toFixed(0)},${y.toFixed(0)}`).join(" L ") + " Z")
+      }
+    }
+  }
+
+  return parts.join(" ")
+}
+
+// ── Arc geometry ──────────────────────────────────────────────────────────────
+function arcPath(from: [number, number], to: [number, number]): string {
+  const mx = (from[0] + to[0]) / 2
+  const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
+  const lift = Math.min(72, dist * 0.42)
+  const my = (from[1] + to[1]) / 2 - lift
+  return `M ${from[0]} ${from[1]} Q ${mx} ${my} ${to[0]} ${to[1]}`
+}
+
+// ── Animated arc ─────────────────────────────────────────────────────────────
+// Key insight: the STATIC path (no Framer Motion) is the mpath reference,
+// so animateMotion never sees stroke-dasharray mutations → zero jitter.
 function AnimatedArc({
-  from,
-  to,
-  arcId,
-  delay,
+  from, to, arcId, delay,
 }: {
-  from: [number, number]
-  to: [number, number]
-  arcId: string
-  delay: number
+  from: [number, number]; to: [number, number]; arcId: string; delay: number
 }) {
-  const pathRef = useRef<SVGPathElement>(null)
-  const [pathLength, setPathLength] = useState(0)
   const d = arcPath(from, to)
-  const pathElemId = `arc-path-${arcId}`
-
-  useEffect(() => {
-    if (pathRef.current) setPathLength(pathRef.current.getTotalLength())
-  }, [d])
-
-  // Vary travel speed slightly per arc so dots feel independent
-  const travelDur = (3.5 + (delay * 7) % 2.5).toFixed(1)
+  const refId = `ar-${arcId}`           // stable, static path for mpath
+  const dur = `${(3.8 + (delay * 9) % 2.8).toFixed(1)}s`
+  const begin = `${(delay + 1.8).toFixed(1)}s`
 
   return (
     <g>
-      {/* The arc line */}
+      {/* ① Static invisible path — only used as <mpath> geometry reference */}
+      <path id={refId} d={d} fill="none" stroke="none" />
+
+      {/* ② Framer Motion animates ONLY this visual path — separate from ref */}
       <motion.path
-        ref={pathRef}
-        id={pathElemId}
         d={d}
         fill="none"
         stroke="#C8956A"
-        strokeWidth={1.2}
+        strokeWidth={0.9}
         strokeLinecap="round"
         initial={{ pathLength: 0, opacity: 0 }}
-        animate={{ pathLength: 1, opacity: 0.5 }}
-        transition={{ duration: 1.5, delay, ease: "easeInOut" }}
-        style={{ strokeDasharray: pathLength, strokeDashoffset: 0 }}
+        animate={{ pathLength: 1, opacity: 0.38 }}
+        transition={{ duration: 2, delay, ease: [0.4, 0, 0.6, 1] }}
       />
 
-      {/* Outer glow ring — travels with the dot */}
-      <circle r={5} fill="none" stroke="#D4A855" strokeWidth={0.8} opacity={0.35} filter="url(#courier-glow)">
-        <animateMotion
-          dur={`${travelDur}s`}
-          repeatCount="indefinite"
-          begin={`${(delay + 1.6).toFixed(1)}s`}
-        >
-          <mpath href={`#${pathElemId}`} />
+      {/* ③ Moving glow halo — travels on static ref path, no filters */}
+      <circle r={4.5} fill="none" stroke="#D4A855" strokeWidth={0.7} opacity={0}>
+        <animate attributeName="opacity" values="0.35;0.35" dur={dur} repeatCount="indefinite" begin={begin} />
+        <animateMotion dur={dur} repeatCount="indefinite" begin={begin} calcMode="linear">
+          <mpath href={`#${refId}`} />
         </animateMotion>
       </circle>
 
-      {/* Bright core dot */}
-      <circle r={2.8} fill="#F4EDE4" opacity={0.95} filter="url(#courier-glow)">
-        <animateMotion
-          dur={`${travelDur}s`}
-          repeatCount="indefinite"
-          begin={`${(delay + 1.6).toFixed(1)}s`}
-        >
-          <mpath href={`#${pathElemId}`} />
+      {/* ④ Moving core dot — no filters → no repaint glitches */}
+      <circle r={2.2} fill="#F4EDE4" opacity={0.9}>
+        <animateMotion dur={dur} repeatCount="indefinite" begin={begin} calcMode="linear">
+          <mpath href={`#${refId}`} />
         </animateMotion>
       </circle>
     </g>
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-// Default demo routes shown when no real listings are available
-const DEMO_ROUTES: Array<{ from: string; to: string }> = [
+// ── Default demo routes ────────────────────────────────────────────────────────
+const DEMO_ROUTES = [
   { from: "baku", to: "istanbul" },
   { from: "london", to: "paris" },
   { from: "dubai", to: "tbilisi" },
@@ -309,52 +230,54 @@ const DEMO_ROUTES: Array<{ from: string; to: string }> = [
   { from: "nairobi", to: "cairo" },
 ]
 
-interface RouteArc {
-  id: string
-  fromPt: [number, number]
-  toPt: [number, number]
-}
+interface RouteArc { id: string; fromPt: [number, number]; toPt: [number, number] }
+interface CityDot { name: string; x: number; y: number }
 
-interface CityDot {
-  name: string
-  x: number
-  y: number
-}
-
+// ── Main component ────────────────────────────────────────────────────────────
 export function WorldMap({ listings }: { listings: Listing[] }) {
+  const [landPath, setLandPath] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json")
+      .then(r => r.json())
+      .then((topo: TopoJSON) => {
+        if (!cancelled) setLandPath(buildLandPath(topo, 10))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   const { arcs, cities } = useMemo<{ arcs: RouteArc[]; cities: CityDot[] }>(() => {
     const arcList: RouteArc[] = []
     const cityMap = new Map<string, [number, number]>()
 
-    const routes =
-      listings.length > 0
-        ? listings.map((l) => ({ from: l.origin_city, to: l.dest_city, id: l.id }))
-        : DEMO_ROUTES.map((r, i) => ({ from: r.from, to: r.to, id: String(i) }))
+    const routes = listings.length > 0
+      ? listings.map(l => ({ from: l.origin_city, to: l.dest_city, id: l.id }))
+      : DEMO_ROUTES.map((r, i) => ({ ...r, id: String(i) }))
 
     for (const route of routes) {
-      const fromCoords = lookupCoords(route.from)
-      const toCoords = lookupCoords(route.to)
-      if (fromCoords && toCoords) {
-        const fromPt = project(fromCoords[0], fromCoords[1])
-        const toPt = project(toCoords[0], toCoords[1])
+      const fc = lookupCoords(route.from)
+      const tc = lookupCoords(route.to)
+      if (fc && tc) {
+        const fromPt = project(fc[0], fc[1])
+        const toPt = project(tc[0], tc[1])
         arcList.push({ id: route.id, fromPt, toPt })
         cityMap.set(route.from, fromPt)
         cityMap.set(route.to, toPt)
       }
     }
 
-    const cityList: CityDot[] = Array.from(cityMap.entries()).map(([name, [x, y]]) => ({
-      name,
-      x,
-      y,
-    }))
-    return { arcs: arcList, cities: cityList }
+    return {
+      arcs: arcList,
+      cities: Array.from(cityMap.entries()).map(([name, [x, y]]) => ({ name, x, y })),
+    }
   }, [listings])
 
   return (
     <section className="relative z-[2] py-16 px-6 md:px-12">
       <div className="max-w-[1400px] mx-auto">
-        {/* Header */}
+        {/* Label */}
         <div className="flex items-center gap-4 mb-6">
           <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
           <span
@@ -367,104 +290,106 @@ export function WorldMap({ listings }: { listings: Listing[] }) {
 
         {/* Map */}
         <div
-          className="relative rounded-md overflow-hidden border border-[#2E2418]"
-          style={{ background: "#0A0806" }}
+          className="relative rounded-lg overflow-hidden"
+          style={{ background: "#060504", boxShadow: "0 0 0 1px rgba(46,36,24,0.5)" }}
         >
-          {/* Edge vignette */}
+          {/* Vignette */}
           <div
-            className="absolute inset-0 pointer-events-none z-10 rounded-md"
+            className="absolute inset-0 pointer-events-none z-10 rounded-lg"
             style={{
-              background:
-                "radial-gradient(ellipse at center, transparent 55%, rgba(10,8,6,0.85) 100%)",
+              background: "radial-gradient(ellipse at center, transparent 35%, rgba(6,5,4,0.92) 100%)",
             }}
           />
 
-          {/* Scan line overlay */}
-          <div
-            className="absolute inset-0 pointer-events-none z-[11] opacity-[0.025]"
-            style={{
-              backgroundImage: "linear-gradient(rgba(212,168,85,1) 1px, transparent 1px)",
-              backgroundSize: "100% 3px",
-            }}
-          />
-
-          <svg
-            viewBox={`0 0 ${W} ${H}`}
-            className="w-full h-auto"
-            style={{ display: "block" }}
-          >
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block">
             <defs>
-              <filter id="courier-glow" x="-80%" y="-80%" width="260%" height="260%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
+              {/*
+               * Land glow: two-pass — blurred copy behind for soft glow,
+               * sharp(er) copy in front. Gives the "illuminated from within" feel.
+               */}
+              <filter id="land-glow" x="-8%" y="-8%" width="116%" height="116%">
+                <feGaussianBlur stdDeviation="5" />
               </filter>
             </defs>
 
-            {/* Ocean background */}
-            <rect width={W} height={H} fill="#0A0806" />
+            {/* Ocean */}
+            <rect width={W} height={H} fill="#060504" />
 
             {/* Graticule */}
-            <GraticulePaths />
+            <Graticule />
 
-            {/* Land */}
-            <LandPaths />
+            {landPath && (
+              <>
+                {/* Glow bloom under continents */}
+                <path
+                  d={landPath}
+                  fill="rgba(200,149,106,0.12)"
+                  stroke="none"
+                  filter="url(#land-glow)"
+                />
+                {/* Main landmass — simplified + softened with a touch of blur in CSS */}
+                <path
+                  d={landPath}
+                  fill="#1A1208"
+                  stroke="#251B0A"
+                  strokeWidth={0.7}
+                  strokeLinejoin="round"
+                  style={{ filter: "blur(0.8px)" }}
+                />
+              </>
+            )}
 
-            {/* Equator emphasis */}
-            <line
-              x1={0}
-              y1={H / 2}
-              x2={W}
-              y2={H / 2}
-              stroke="#2E2418"
-              strokeWidth={1}
-            />
+            {/* Equator */}
+            <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#1E1408" strokeWidth={0.8} />
 
-            {/* Animated route arcs + courier dots */}
+            {/* Arcs + courier dots */}
             {arcs.map((arc, idx) => (
               <AnimatedArc
                 key={arc.id}
                 arcId={arc.id}
                 from={arc.fromPt}
                 to={arc.toPt}
-                delay={idx * 0.18}
+                delay={idx * 0.2}
               />
             ))}
 
-            {/* City pulse rings */}
-            {cities.map((city) => (
+            {/* City dots — pure SMIL, no Framer Motion, no filters */}
+            {cities.map(city => (
               <g key={city.name}>
-                <motion.circle
-                  cx={city.x}
-                  cy={city.y}
-                  r={6}
-                  fill="none"
-                  stroke="#C8956A"
-                  strokeWidth={0.6}
-                  initial={{ opacity: 0.4, scale: 1 }}
-                  animate={{ opacity: 0, scale: 2.5 }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 1.5 }}
-                  style={{ transformOrigin: `${city.x}px ${city.y}px` }}
-                />
-                <circle
-                  cx={city.x}
-                  cy={city.y}
-                  r={2.5}
-                  fill="#C8956A"
-                />
+                {/* Pulse ring */}
+                <circle cx={city.x} cy={city.y} r={2} fill="none" stroke="#C8956A" strokeWidth={0.8}>
+                  <animate
+                    attributeName="r"
+                    from="2" to="16"
+                    dur="2.6s"
+                    repeatCount="indefinite"
+                    calcMode="spline"
+                    keyTimes="0;1"
+                    keySplines="0.15 0 0.85 1"
+                  />
+                  <animate
+                    attributeName="opacity"
+                    from="0.55" to="0"
+                    dur="2.6s"
+                    repeatCount="indefinite"
+                    calcMode="spline"
+                    keyTimes="0;1"
+                    keySplines="0.15 0 0.85 1"
+                  />
+                </circle>
+                {/* Core */}
+                <circle cx={city.x} cy={city.y} r={2} fill="#C8956A" opacity={0.8} />
+                <circle cx={city.x} cy={city.y} r={1} fill="#F4EDE4" opacity={0.95} />
               </g>
             ))}
           </svg>
         </div>
 
-        {/* Footer label */}
         <p
-          className="text-center mt-4 text-[10px] text-[#3A2E20] tracking-widest"
+          className="text-center mt-4 text-[10px] text-[#1E1408] tracking-widest"
           style={{ fontFamily: "'JetBrains Mono', monospace" }}
         >
-          EQUIRECTANGULAR PROJECTION · SOLARI-TRX ROUTE INTELLIGENCE
+          NATURAL EARTH · SOLARI-TRX ROUTE NETWORK
         </p>
       </div>
     </section>

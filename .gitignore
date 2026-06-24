@@ -9,6 +9,5 @@ backend/__pycache__/
 dist/
 build/
 .DS_Store
-.env
 backend/venv/
 frontend/.env
