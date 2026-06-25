@@ -18,4 +18,5 @@ export interface Listing {
   capacity_kg: number
   status: ListingStatus
   created_at: string
+  owner_display_name?: string | null
 }

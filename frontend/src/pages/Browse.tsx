@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Link } from "wouter"
+import { Link } from "@tanstack/react-router"
 import { motion, AnimatePresence } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 import type { Listing, ListingKind } from "@/types/listing"
@@ -23,9 +23,8 @@ function KindBadge({ kind }: { kind: ListingKind }) {
 function ListingCard({ listing }: { listing: Listing }) {
   return (
     <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.28 }} whileHover={{ y: -2 }}>
-      <Link href={`/listings/${listing.id}`}>
+      <Link to="/listings/$id" params={{ id: listing.id }}>
         <div className="group relative bg-[#111008] border border-[#2E2418] hover:border-[#C8956A]/40 rounded-md p-5 cursor-pointer transition-all duration-200 hover:shadow-[0_0_24px_rgba(200,149,106,0.08)]">
-          {/* Kind + price */}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex-1 min-w-0">
               <div className="mb-2"><KindBadge kind={listing.kind} /></div>
@@ -45,7 +44,6 @@ function ListingCard({ listing }: { listing: Listing }) {
             </div>
           </div>
 
-          {/* Route */}
           <div className="flex items-center gap-2 mb-3 text-sm">
             <span className="text-[#F4EDE4] font-medium">{listing.origin_city}</span>
             <span className="text-[#8C7B68] text-xs">{listing.origin_country}</span>
@@ -54,7 +52,6 @@ function ListingCard({ listing }: { listing: Listing }) {
             <span className="text-[#8C7B68] text-xs">{listing.dest_country}</span>
           </div>
 
-          {/* Date + owner */}
           <div className="flex items-center justify-between text-[11px] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
             <div className="flex items-center gap-2">
               {listing.depart_date && <span>{formatListingDate(listing.depart_date)}</span>}
@@ -130,7 +127,6 @@ export function Browse() {
 
   return (
     <div className="min-h-screen bg-[#0E0B08] pt-16">
-      {/* Sticky header */}
       <div className="border-b border-[#1E1810] bg-[#0E0B08]/90 backdrop-blur-sm sticky top-16 z-30">
         <div className="max-w-[1200px] mx-auto px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-end gap-4">
@@ -142,12 +138,12 @@ export function Browse() {
               <h1 className="text-2xl text-[#F4EDE4]" style={{ fontFamily: "'DM Serif Display', serif" }}>Active Routes</h1>
             </div>
             <div className="flex gap-2 shrink-0">
-              <Link href="/trips/new">
+              <Link to="/trips/new">
                 <button className="px-4 py-2 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold text-[11px] tracking-widest rounded-sm transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                   + TRIP
                 </button>
               </Link>
-              <Link href="/requests/new">
+              <Link to="/requests/new">
                 <button className="px-4 py-2 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] hover:text-[#F4EDE4] font-bold text-[11px] tracking-widest rounded-sm transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                   + REQUEST
                 </button>
@@ -158,7 +154,6 @@ export function Browse() {
       </div>
 
       <div className="max-w-[1200px] mx-auto px-6 py-8">
-        {/* Filters */}
         <div className="bg-[#0D0B08] border border-[#1E1810] rounded-md p-5 mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <FilterInput label="From city" value={originCity} onChange={setOriginCity} placeholder="e.g. London" />
@@ -176,7 +171,6 @@ export function Browse() {
           </div>
         </div>
 
-        {/* Results */}
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <svg className="animate-spin h-8 w-8 text-[#C8956A]" viewBox="0 0 24 24" fill="none">

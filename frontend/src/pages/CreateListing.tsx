@@ -1,7 +1,8 @@
 import * as React from "react"
-import { useLocation, Link } from "wouter"
+import { useNavigate, Link } from "@tanstack/react-router"
 import { motion, AnimatePresence } from "framer-motion"
-import { useAuth, authedFetch } from "@/lib/auth"
+import { useAuth } from "@/lib/auth"
+import { authedFetch } from "@/lib/api"
 
 type Kind = "trip" | "request" | "delivery"
 
@@ -80,8 +81,8 @@ const KIND_META: Record<Kind, { headline: string; sub: string; gate: string }> =
 }
 
 export function CreateListing({ kind }: { kind: Kind }) {
-  const { user, session, loading } = useAuth()
-  const [, navigate] = useLocation()
+  const { user, loading } = useAuth()
+  const navigate = useNavigate()
   const meta = KIND_META[kind]
 
   const [form, setForm] = React.useState<FormData>({
@@ -98,7 +99,10 @@ export function CreateListing({ kind }: { kind: Kind }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!user) { navigate("/auth"); return }
+    if (!user) {
+      navigate({ to: "/auth", search: { mode: "signin", redirect: `/${kind}s/new` } })
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -117,8 +121,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
       if (form.price) body.price = Number(form.price)
       if (form.capacity_kg) body.capacity_kg = Number(form.capacity_kg)
 
-      const fetch = authedFetch(session)
-      const res = await fetch("/api/listings", {
+      const res = await authedFetch("/api/listings", {
         method: "POST",
         body: JSON.stringify(body),
       })
@@ -127,7 +130,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
         throw new Error(data.error ?? `Server error ${res.status}`)
       }
       const listing = await res.json()
-      navigate(`/listings/${listing.id}`)
+      navigate({ to: "/listings/$id", params: { id: listing.id } })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong")
     } finally {
@@ -157,7 +160,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
           </div>
           <h2 className="text-[#F4EDE4] text-2xl mb-3" style={{ fontFamily: "'DM Serif Display', serif" }}>Sign in required</h2>
           <p className="text-[#8C7B68] text-sm leading-relaxed mb-8">You must be signed in to post a {kind}. Join the network to list your routes and requests.</p>
-          <Link href={`/auth?redirect=/${kind}s/new`}>
+          <Link to="/auth" search={{ mode: "signin", redirect: `/${kind}s/new` }}>
             <button className="px-8 py-3 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-xs rounded-sm transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               SIGN IN TO CONTINUE
             </button>
@@ -169,7 +172,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
 
   return (
     <div className="min-h-screen bg-[#0E0B08] pt-16">
-      {/* Header */}
       <div className="border-b border-[#1E1810]">
         <div className="max-w-[900px] mx-auto px-6 py-8">
           <div className="flex items-center gap-2 mb-2">
@@ -183,7 +185,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
 
       <div className="max-w-[900px] mx-auto px-6 py-10">
         <form onSubmit={handleSubmit} className="space-y-10">
-          {/* Route section */}
           <div>
             <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               — Route Information
@@ -202,7 +203,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
             </div>
           </div>
 
-          {/* Details section */}
           <div>
             <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               — Listing Details
@@ -249,7 +249,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
             </div>
           </div>
 
-          {/* Error */}
           <AnimatePresence>
             {error && (
               <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -262,9 +261,8 @@ export function CreateListing({ kind }: { kind: Kind }) {
             )}
           </AnimatePresence>
 
-          {/* Submit */}
           <div className="flex items-center justify-between pt-6 border-t border-[#1E1810]">
-            <Link href="/browse">
+            <Link to="/browse">
               <button type="button" className="text-[11px] text-[#8C7B68] hover:text-[#F4EDE4] tracking-widest transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                 ← CANCEL
               </button>
