@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useParams, Link } from "wouter"
+import { useParams, Link } from "@tanstack/react-router"
 import { motion } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
@@ -45,13 +45,12 @@ function StarRating({ rating, count }: { rating: number | null; count: number })
 }
 
 export function ListingDetail() {
-  const params = useParams()
-  const id = params.id as string
+  const { id } = useParams({ strict: false })
   const { user } = useAuth()
 
   const { data: listing, isLoading, isError } = useQuery({
     queryKey: ["listing", id],
-    queryFn: () => fetchListing(id),
+    queryFn: () => fetchListing(id as string),
     enabled: !!id,
   })
 
@@ -75,7 +74,7 @@ export function ListingDetail() {
         <div className="text-[64px] mb-4" style={{ fontFamily: "'DM Serif Display', serif", color: "transparent", WebkitTextStroke: "1px rgba(200,149,106,0.4)" }}>404</div>
         <h2 className="text-[#F4EDE4] text-2xl mb-3" style={{ fontFamily: "'DM Serif Display', serif" }}>Listing Not Found</h2>
         <p className="text-[#8C7B68] text-sm mb-8">This route or item could not be located in the system.</p>
-        <Link href="/browse">
+        <Link to="/browse">
           <button className="px-6 py-2.5 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] hover:text-[#F4EDE4] text-[11px] tracking-widest rounded-sm transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
             ← BACK TO BOARD
           </button>
@@ -89,10 +88,9 @@ export function ListingDetail() {
 
   return (
     <div className="min-h-screen bg-[#0E0B08] pt-16">
-      {/* Back nav */}
       <div className="border-b border-[#1E1810]">
         <div className="max-w-[1100px] mx-auto px-6 py-3">
-          <Link href="/browse">
+          <Link to="/browse">
             <button className="text-[11px] text-[#8C7B68] hover:text-[#C8956A] tracking-widest transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               ← BACK TO BOARD
             </button>
@@ -101,9 +99,7 @@ export function ListingDetail() {
       </div>
 
       <div className="max-w-[1100px] mx-auto px-6 py-10 flex flex-col lg:flex-row gap-12">
-        {/* Left: main content */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex-1 min-w-0">
-          {/* Route header */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] tracking-widest border ${KIND_COLORS[listing.kind] ?? "bg-white/5 text-[#8C7B68] border-white/10"}`} style={{ fontFamily: "'JetBrains Mono', monospace" }}>
@@ -125,7 +121,6 @@ export function ListingDetail() {
             </div>
           </div>
 
-          {/* Meta strip */}
           <div className="flex flex-wrap gap-8 py-5 border-y border-[#1E1810] mb-8" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
             {listing.depart_date && (
               <div>
@@ -153,7 +148,6 @@ export function ListingDetail() {
             )}
           </div>
 
-          {/* Description */}
           <div className="mb-10">
             <h2 className="text-[10px] tracking-[0.2em] text-[#8C7B68] mb-4 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Details</h2>
             <p className="text-[#8C7B68] leading-relaxed text-[15px]">
@@ -161,7 +155,6 @@ export function ListingDetail() {
             </p>
           </div>
 
-          {/* Owner card */}
           {owner && (
             <div className="bg-[#111008] border border-[#2E2418] rounded-md p-6">
               <h3 className="text-[10px] tracking-[0.2em] text-[#8C7B68] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
@@ -196,10 +189,8 @@ export function ListingDetail() {
           )}
         </motion.div>
 
-        {/* Right: action panel */}
         <motion.aside initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="w-full lg:w-[300px] shrink-0">
           <div className="sticky top-24 bg-[#111008] border border-[#2E2418] rounded-md p-6">
-            {/* Price */}
             <div className="mb-6">
               <p className="text-[9px] tracking-[0.2em] text-[#8C7B68] mb-2 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                 {listing.kind === "request" ? "Offered Reward" : "Base Price"}
@@ -209,7 +200,6 @@ export function ListingDetail() {
               </p>
             </div>
 
-            {/* Status */}
             <div className="flex items-center gap-2 mb-6 py-3 border-y border-[#1E1810]">
               <div className={`w-2 h-2 rounded-full ${listing.status === "open" ? "bg-[#7EB89A] shadow-[0_0_8px_rgba(126,184,154,0.6)]" : "bg-[#8C7B68]"} animate-pulse`} />
               <span className="text-[11px] tracking-widest text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
@@ -217,7 +207,6 @@ export function ListingDetail() {
               </span>
             </div>
 
-            {/* CTA */}
             {isOwn ? (
               <div className="py-3 text-center">
                 <p className="text-[11px] text-[#8C7B68] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace" }}>YOUR LISTING</p>
@@ -228,7 +217,7 @@ export function ListingDetail() {
                   CONTACT {listing.kind === "trip" ? "COURIER" : "REQUESTER"}
                 </button>
               ) : (
-                <Link href="/auth">
+                <Link to="/auth" search={{ mode: "signin", redirect: undefined }}>
                   <button className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-xs rounded-sm transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                     SIGN IN TO CONTACT
                   </button>
