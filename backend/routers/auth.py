@@ -2,6 +2,8 @@ from fastapi import Header, HTTPException, Depends
 from db import supabase
 
 async def get_current_user(authorization: str = Header(None)):
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Auth service not configured")
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
     if not authorization.startswith("Bearer "):

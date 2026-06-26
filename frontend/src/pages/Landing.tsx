@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react"
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { motion, useInView } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 
 import { Magnetic } from "@/components/landing/Magnetic"
 import { WorldMap } from "@/components/landing/WorldMap"
+import { CityAutocomplete } from "@/components/CityAutocomplete"
 import { fetchOpenListings } from "@/lib/api"
 import type { Listing } from "@/types/listing"
 
@@ -199,6 +200,105 @@ function StepCard({ step, index }: { step: Step; index: number }) {
   )
 }
 
+// ─── Bottom route search ──────────────────────────────────────────────────────
+function RouteSearch() {
+  const navigate = useNavigate()
+  const [from, setFrom] = useState("")
+  const [to, setTo] = useState("")
+
+  function handleSearch() {
+    const q: Record<string, string> = {}
+    if (from) q.origin_city = from
+    if (to) q.dest_city = to
+    navigate({ to: "/browse", search: q as any })
+  }
+
+  return (
+    <section className="relative z-[2] py-24 px-6 md:px-12 xl:px-20 border-t border-[#1E1810]">
+      <div className="max-w-[900px] mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="text-center mb-12"
+        >
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
+            <span className="text-[11px] tracking-[0.2em] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              FIND A ROUTE
+            </span>
+          </div>
+          <h2 className="text-4xl md:text-5xl text-[#F4EDE4] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
+            Where are you sending?
+          </h2>
+          <p className="text-[#8C7B68] text-base">
+            Search for travelers already heading your way.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.6, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="bg-[#0D0B08] border border-[#2E2418] rounded-md p-6"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-3 items-end">
+            <CityAutocomplete
+              label="From"
+              value={from}
+              placeholder="London, Tokyo…"
+              onSelect={(city) => setFrom(city)}
+              onChange={(raw) => setFrom(raw)}
+              onClear={() => setFrom("")}
+            />
+
+            <div className="hidden sm:flex items-end pb-3">
+              <span className="text-[#C8956A] text-xl px-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>→</span>
+            </div>
+
+            <CityAutocomplete
+              label="To"
+              value={to}
+              placeholder="Dubai, New York…"
+              onSelect={(city) => setTo(city)}
+              onChange={(raw) => setTo(raw)}
+              onClear={() => setTo("")}
+            />
+
+            <button
+              onClick={handleSearch}
+              className="px-8 py-3 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold text-[11px] tracking-widest rounded-full transition-colors shadow-[0_0_20px_rgba(200,149,106,0.15)] hover:shadow-[0_0_30px_rgba(200,149,106,0.3)] whitespace-nowrap"
+              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              FIND ROUTES
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[
+              ["London", "Paris"],
+              ["Dubai", "Tbilisi"],
+              ["Singapore", "Sydney"],
+              ["Toronto", "Lagos"],
+            ].map(([f, t]) => (
+              <button
+                key={`${f}-${t}`}
+                onClick={() => { setFrom(f); setTo(t) }}
+                className="px-3 py-1 text-[10px] tracking-widest text-[#8C7B68] hover:text-[#C8956A] border border-[#1E1810] hover:border-[#C8956A]/30 rounded-full transition-colors"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {f.toUpperCase()} → {t.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  )
+}
+
 // ─── Main page component ─────────────────────────────────────────────────────
 export function LandingPage() {
   const cursorRef = useRef<HTMLDivElement>(null)
@@ -371,11 +471,11 @@ export function LandingPage() {
             className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#8C7B68] tracking-wider"
             style={{ fontFamily: "'JetBrains Mono', monospace" }}
           >
-            <span>1,240 ACTIVE COURIERS</span>
+            <span>FREE TO JOIN</span>
             <span className="text-[#C8956A]">·</span>
-            <span>86 COUNTRIES</span>
+            <span>PEER-TO-PEER</span>
             <span className="text-[#C8956A]">·</span>
-            <span>$2.4M DELIVERED</span>
+            <span>ESCROW PAYMENTS</span>
           </div>
         </div>
 
@@ -507,6 +607,9 @@ export function LandingPage() {
           ))}
         </div>
       </section>
+
+      {/* ── Route search ──────────────────────────────────────────────────────── */}
+      <RouteSearch />
     </div>
   )
 }
