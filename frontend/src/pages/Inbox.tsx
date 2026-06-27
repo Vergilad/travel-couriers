@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate } from "@tanstack/react-router"
+import { useNavigate, Link } from "@tanstack/react-router"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getInitial } from "@/lib/db_constants"
@@ -236,9 +236,13 @@ function ConversationPanel({
         >
           ←
         </button>
-        <UserAvatar name={other.display_name} url={other.avatar_url} size={36} />
+        <Link to="/profile/$userId" params={{ userId: other.id }} className="shrink-0">
+          <UserAvatar name={other.display_name} url={other.avatar_url} size={36} />
+        </Link>
         <div className="flex-1 min-w-0">
-          <div className="text-[14px] text-[#F4EDE4]">{other.display_name ?? "Anonymous"}</div>
+          <Link to="/profile/$userId" params={{ userId: other.id }} className="text-[14px] text-[#F4EDE4] hover:text-[#C8956A] transition-colors">
+            {other.display_name ?? "Anonymous"}
+          </Link>
           {listingLabel && (
             <div
               className="text-[10px] text-[#C8956A] truncate"
@@ -508,4 +512,3 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     </div>
   )
 }
-

@@ -47,30 +47,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(!!supabase)
   const [unreadCount, setUnreadCount] = React.useState(0)
 
+  // Keep a ref of current userId for use in realtime callbacks (avoids stale closures)
+  const userIdRef = React.useRef<string | null>(null)
+
   async function loadProfile(supabaseUser: User) {
     if (!supabase) return
     const { data: profile } = await supabase
       .from(DB.TABLES.PROFILES)
-      .select("display_name, avatar_url")
+      .select(`${DB.FIELDS.PROFILES.DISPLAY_NAME}, ${DB.FIELDS.PROFILES.AVATAR_URL}`)
       .eq('id', supabaseUser.id)
       .single()
     setUser(toAuthUser(supabaseUser, profile))
   }
 
-  async function loadUnread(userId: string) {
+  const loadUnread = React.useCallback(async (userId: string) => {
     if (!supabase) return
+
     const { data: participations } = await supabase
       .from(DB.TABLES.THREAD_PARTICIPANTS)
       .select(DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID)
       .eq(DB.FIELDS.THREAD_PARTICIPANTS.USER_ID, userId)
 
     const threadIds = (participations ?? []).map(
-      (p: Record<string, string>) => p[DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID]
+      (p: Record<string, string>) =>
+        p[DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID]
     )
 
     if (threadIds.length === 0) {
-      setUnreadCount(0)
-      return
+        setUnreadCount(0)
+        return
     }
 
     const { count } = await supabase
@@ -81,13 +86,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .in(DB.FIELDS.MESSAGES.THREAD_ID, threadIds)
 
     setUnreadCount(count ?? 0)
-  }
+  }, [])
 
   async function handleAuthStateChange(newSession: Session | null) {
     setSession(newSession)
     if (newSession?.user) {
+      userIdRef.current = newSession.user.id
       await Promise.all([loadProfile(newSession.user), loadUnread(newSession.user.id)])
     } else {
+      userIdRef.current = null
       setUser(null)
       setUnreadCount(0)
     }
@@ -99,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (current?.user) await loadProfile(current.user)
   }, [])
 
+  // Auth state
   React.useEffect(() => {
     if (!supabase) return
 
@@ -111,6 +119,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
+  }, [])
+
+  // Realtime: refresh unread counter whenever a message is inserted.
+  React.useEffect(() => {
+    if (!supabase) return
+
+    const channel = supabase
+      .channel('global:new-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        async () => {
+          const uid = userIdRef.current
+          if (!uid) return
+
+          await loadUnread(uid)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
   }, [])
 
   const signOut = async () => {
