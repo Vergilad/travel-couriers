@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useParams, Link } from "@tanstack/react-router"
+import { useParams, Link, useNavigate } from "@tanstack/react-router"
 import { motion } from "framer-motion"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
@@ -57,6 +57,65 @@ function StarRating({ rating, count }: { rating: number | null; count: number })
       ))}
       {count > 0 && <span className="ml-1 text-[#8C7B68]">({count})</span>}
     </span>
+  )
+}
+
+function ContactButton({ listing }: { listing: ListingWithOwner }) {
+  const { user, session } = useAuth()
+  const navigate = useNavigate()
+  const [contacting, setContacting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const label =
+    listing.kind === "trip" ? "COURIER" : listing.kind === "delivery" ? "CARRIER" : "REQUESTER"
+
+  async function handleContact() {
+    if (!session?.access_token) return
+    setContacting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/threads?listing_id=${listing.id}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail ?? "Failed to start conversation")
+      }
+      const thread = await res.json()
+      navigate({ to: "/messages/$threadId", params: { threadId: thread.id } })
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Something went wrong")
+      setContacting(false)
+    }
+  }
+
+  if (!user) {
+    return (
+      <Link to="/auth" search={{ mode: "signin", redirect: undefined }}>
+        <button className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-[11px] rounded-full transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          SIGN IN TO CONTACT
+        </button>
+      </Link>
+    )
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleContact}
+        disabled={contacting}
+        className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-60 disabled:cursor-wait text-[#0E0B08] font-bold tracking-widest text-[11px] rounded-full transition-colors"
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        {contacting ? "OPENING…" : `CONTACT ${label}`}
+      </button>
+      {error && (
+        <p className="text-[11px] text-[#C47B6B] text-center mt-2" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          {error}
+        </p>
+      )}
+    </>
   )
 }
 
@@ -242,20 +301,7 @@ export function ListingDetail() {
                 <p className="text-[11px] text-[#8C7B68] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace" }}>YOUR LISTING</p>
               </div>
             ) : listing.status === "open" ? (
-              user ? (
-                <button
-                  className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-[11px] rounded-full transition-colors"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                >
-                  CONTACT {listing.kind === "trip" ? "COURIER" : listing.kind === "delivery" ? "CARRIER" : "REQUESTER"}
-                </button>
-              ) : (
-                <Link to="/auth" search={{ mode: "signin", redirect: undefined }}>
-                  <button className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-[11px] rounded-full transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    SIGN IN TO CONTACT
-                  </button>
-                </Link>
-              )
+              <ContactButton listing={listing} />
             ) : (
               <button disabled className="w-full py-3.5 border border-[#2E2418] text-[#8C7B68] text-[11px] tracking-widest rounded-full cursor-not-allowed" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                 LISTING CLOSED

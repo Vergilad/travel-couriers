@@ -51,7 +51,7 @@ export const DB = {
       STATUS: 'status',
     },
   },
-}
+} as const
 
 export function getEmailUsername(email: string): string {
   return email.split('@')[0]

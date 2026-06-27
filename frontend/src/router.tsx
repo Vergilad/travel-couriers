@@ -13,7 +13,9 @@ import { LandingPage } from "@/pages/Landing"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
+import { Inbox } from "@/pages/Inbox"
 import { Browse } from "@/pages/Browse"
+import { MyListings } from "@/pages/MyListings"
 import { CreateListing } from "@/pages/CreateListing"
 import { ListingDetail } from "@/pages/ListingDetail"
 import { useAuth } from "@/lib/auth"
@@ -123,19 +125,28 @@ const deliveriesNewRoute = createRoute({
 const messagesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/messages",
-  component: () => <PlaceholderPage title="Messages — coming in step 9" />,
+  component: () => <Inbox />,
 })
 
 const messageThreadRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/messages/$threadId",
-  component: () => <PlaceholderPage title="Message thread — coming in step 9" />,
+  component: function MessageThreadRoute() {
+    const { threadId } = messageThreadRoute.useParams()
+    return <Inbox initialThreadId={threadId} />
+  },
 })
 
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings",
   component: SettingsPage,
+})
+
+const myListingsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/my-listings",
+  component: MyListings,
 })
 
 const reportsNewRoute = createRoute({
@@ -157,6 +168,7 @@ const routeTree = rootRoute.addChildren([
     messagesRoute,
     messageThreadRoute,
     settingsRoute,
+    myListingsRoute,
     reportsNewRoute,
   ]),
 ])

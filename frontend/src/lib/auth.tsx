@@ -22,7 +22,7 @@ interface AuthContextValue {
 const AuthContext = React.createContext<AuthContextValue>({
   user: null,
   session: null,
-  loading: true,
+  loading: false,
   unreadCount: 0,
   signOut: async () => {},
   refreshProfile: async () => {},
@@ -44,19 +44,21 @@ function toAuthUser(user: User, profile?: Record<string, unknown> | null): AuthU
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null>(null)
   const [user, setUser] = React.useState<AuthUser | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(!!supabase)
   const [unreadCount, setUnreadCount] = React.useState(0)
 
   async function loadProfile(supabaseUser: User) {
+    if (!supabase) return
     const { data: profile } = await supabase
       .from(DB.TABLES.PROFILES)
-      .select(`${DB.FIELDS.PROFILES.DISPLAY_NAME}, ${DB.FIELDS.PROFILES.AVATAR_URL}`)
+      .select("display_name, avatar_url")
       .eq('id', supabaseUser.id)
       .single()
     setUser(toAuthUser(supabaseUser, profile))
   }
 
   async function loadUnread(userId: string) {
+    if (!supabase) return
     const { data: participations } = await supabase
       .from(DB.TABLES.THREAD_PARTICIPANTS)
       .select(DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID)
@@ -92,11 +94,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const refreshProfile = React.useCallback(async () => {
+    if (!supabase) return
     const { data: { session: current } } = await supabase.auth.getSession()
     if (current?.user) await loadProfile(current.user)
   }, [])
 
   React.useEffect(() => {
+    if (!supabase) return
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleAuthStateChange(session).finally(() => setLoading(false))
     })
@@ -109,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
+    if (supabase) await supabase.auth.signOut()
     window.location.href = '/'
   }
 
