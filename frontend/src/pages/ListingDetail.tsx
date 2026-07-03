@@ -1,8 +1,9 @@
 import * as React from "react"
 import { useParams, Link, useNavigate } from "@tanstack/react-router"
-import { motion } from "framer-motion"
-import { useQuery } from "@tanstack/react-query"
+import { motion, AnimatePresence } from "framer-motion"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
+import { authedFetch } from "@/lib/api"
 import type { Listing } from "@/types/listing"
 import { formatListingDate } from "@/lib/listings"
 
@@ -119,14 +120,121 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
   )
 }
 
+// ─── Owner actions (Close / Delete) ──────────────────────────────────────────
+async function closeListing(id: string) {
+  const res = await authedFetch(`/api/listings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "cancelled" }),
+  })
+  if (!res.ok) throw new Error("Failed to close listing")
+  return res.json()
+}
+
+async function deleteListing(id: string) {
+  const res = await authedFetch(`/api/listings/${id}`, { method: "DELETE" })
+  if (!res.ok) throw new Error("Failed to delete listing")
+  return res.json()
+}
+
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  danger,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  title: string
+  message: string
+  confirmLabel: string
+  danger?: boolean
+  busy?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0E0B08]/80 backdrop-blur-sm px-4"
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        transition={{ duration: 0.18 }}
+        className="bg-[#171109] border border-[#2E2418] rounded-md p-6 max-w-sm w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-[#F4EDE4] text-lg mb-2" style={{ fontFamily: "'DM Serif Display', serif" }}>{title}</h3>
+        <p className="text-[#8C7B68] text-sm leading-relaxed mb-6">{message}</p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="px-5 py-2 text-[11px] tracking-widest text-[#8C7B68] hover:text-[#F4EDE4] transition-colors border border-[#2E2418] rounded-full disabled:opacity-40"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className={`px-5 py-2 text-[11px] tracking-widest font-bold rounded-full transition-colors disabled:opacity-60 ${
+              danger
+                ? "bg-[#C47B6B] hover:bg-[#D4846E] text-white"
+                : "bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08]"
+            }`}
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {busy ? "…" : confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export function ListingDetail() {
   const { id } = useParams({ strict: false })
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [confirmClose, setConfirmClose] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
+  const [actionError, setActionError] = React.useState<string | null>(null)
 
   const { data: listing, isLoading, isError } = useQuery({
     queryKey: ["listing", id],
     queryFn: () => fetchListing(id as string),
     enabled: !!id,
+  })
+
+  const closeMutation = useMutation({
+    mutationFn: () => closeListing(id as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["listing", id] })
+      queryClient.invalidateQueries({ queryKey: ["my-listings"] })
+      queryClient.invalidateQueries({ queryKey: ["listings"] })
+      setConfirmClose(false)
+    },
+    onError: (e: unknown) => setActionError(e instanceof Error ? e.message : "Failed to close"),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteListing(id as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-listings"] })
+      queryClient.invalidateQueries({ queryKey: ["listings"] })
+      navigate({ to: "/browse" })
+    },
+    onError: (e: unknown) => {
+      setActionError(e instanceof Error ? e.message : "Failed to delete")
+      setConfirmDelete(false)
+    },
   })
 
   if (isLoading) {
@@ -237,12 +345,16 @@ export function ListingDetail() {
           </div>
 
           {owner && (
-            <div className="bg-[#111008] border border-[#2E2418] rounded-md p-6">
+            <Link
+              to="/profile/$userId"
+              params={{ userId: owner.id }}
+              className="block bg-[#111008] border border-[#2E2418] rounded-md p-6 hover:border-[#C8956A]/40 transition-colors group"
+            >
               <h3 className="text-[10px] tracking-[0.2em] text-[#8C7B68] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
                 {listing.kind === "trip" ? "Traveler Profile" : listing.kind === "delivery" ? "Carrier Profile" : "Requester Profile"}
               </h3>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center shrink-0 overflow-hidden">
+                <div className="w-14 h-14 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-[#C8956A]/40 transition-colors">
                   {owner.avatar_url ? (
                     <img src={owner.avatar_url} alt={owner.display_name ?? "User"} className="w-full h-full object-cover" />
                   ) : (
@@ -253,7 +365,7 @@ export function ListingDetail() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 flex-wrap mb-1.5">
-                    <span className="text-[#F4EDE4] text-lg" style={{ fontFamily: "'DM Serif Display', serif" }}>
+                    <span className="text-[#F4EDE4] text-lg group-hover:text-[#C8956A] transition-colors" style={{ fontFamily: "'DM Serif Display', serif" }}>
                       {owner.display_name ?? "Anonymous"}
                     </span>
                     <StarRating rating={owner.rating} count={owner.review_count ?? 0} />
@@ -265,8 +377,11 @@ export function ListingDetail() {
                   )}
                   {owner.bio && <p className="text-[13px] text-[#8C7B68] leading-relaxed line-clamp-2">{owner.bio}</p>}
                 </div>
+                <span className="text-[#3A2E20] text-[11px] tracking-widest group-hover:text-[#C8956A] transition-colors shrink-0 self-center" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                  VIEW →
+                </span>
               </div>
-            </div>
+            </Link>
           )}
         </motion.div>
 
@@ -297,8 +412,24 @@ export function ListingDetail() {
             </div>
 
             {isOwn ? (
-              <div className="py-3 text-center">
-                <p className="text-[11px] text-[#8C7B68] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace" }}>YOUR LISTING</p>
+              <div className="space-y-3">
+                <p className="text-center text-[11px] text-[#8C7B68] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace" }}>YOUR LISTING</p>
+                {listing.status === "open" && (
+                  <button
+                    onClick={() => setConfirmClose(true)}
+                    className="w-full py-3 border border-[#2E2418] hover:border-[#D4A855]/40 text-[#8C7B68] hover:text-[#D4A855] text-[11px] tracking-widest rounded-full transition-colors"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    CLOSE LISTING
+                  </button>
+                )}
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full py-3 border border-[#2E2418] hover:border-[#C47B6B]/40 text-[#8C7B68] hover:text-[#C47B6B] text-[11px] tracking-widest rounded-full transition-colors"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  DELETE LISTING
+                </button>
               </div>
             ) : listing.status === "open" ? (
               <ContactButton listing={listing} />
@@ -308,12 +439,43 @@ export function ListingDetail() {
               </button>
             )}
 
+            {actionError && (
+              <p className="text-[11px] text-[#C47B6B] text-center" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                {actionError}
+              </p>
+            )}
+
             <p className="text-center text-[10px] text-[#3A2E20] mt-4 tracking-wider" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
               SECURED BY TRAVEL COURIERS
             </p>
           </div>
         </motion.aside>
       </div>
+
+      {/* Owner action confirm modals */}
+      <AnimatePresence>
+        {confirmClose && (
+          <ConfirmModal
+            title="Close this listing?"
+            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" will be marked as closed and removed from browse. You won't receive new contacts, but existing messages remain open.`}
+            confirmLabel="CLOSE LISTING"
+            busy={closeMutation.isPending}
+            onConfirm={() => closeMutation.mutate()}
+            onCancel={() => setConfirmClose(false)}
+          />
+        )}
+        {confirmDelete && (
+          <ConfirmModal
+            title="Delete this listing?"
+            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" will be permanently removed along with its messages. This cannot be undone.`}
+            confirmLabel="DELETE"
+            danger
+            busy={deleteMutation.isPending}
+            onConfirm={() => deleteMutation.mutate()}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

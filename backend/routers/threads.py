@@ -86,7 +86,7 @@ async def list_threads(user=Depends(get_current_user)):
                 listings_map[l["id"]] = l
 
         # 6. All messages for these threads (batch — avoid N+1)
-        msgs_res = supabase.table("messages").select("id, thread_id, sender_id, body, read_at, created_at").in_("thread_id", thread_ids).order("created_at").execute()
+        msgs_res = supabase.table("messages").select("id, thread_id, sender_id, body, read_at, created_at, is_system").in_("thread_id", thread_ids).order("created_at").execute()
         thread_messages: dict[str, list] = {}
         for m in (msgs_res.data or []):
             thread_messages.setdefault(m["thread_id"], []).append(m)

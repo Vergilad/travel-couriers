@@ -1,206 +1,217 @@
-import { useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { motion, useInView } from "framer-motion"
-import { useQuery } from "@tanstack/react-query"
+import { motion } from "framer-motion"
 
 import { Magnetic } from "@/components/landing/Magnetic"
-import { WorldMap } from "@/components/landing/WorldMap"
 import { CityAutocomplete } from "@/components/CityAutocomplete"
-import { fetchOpenListings } from "@/lib/api"
-import type { Listing } from "@/types/listing"
 
-// ─── Solari split-flap alphabet ─────────────────────────────────────────────
-const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ·→$-"
+// ─── Domain semantics (single source of truth for the landing) ───────────────
+// trip     → the traveler.  "I'm going A→B (fly, drive, train, ferry — any mode,
+//            home or abroad). I have spare capacity — bring stuff with me."
+// delivery → the sender who stays put. "I have an item that needs to move A→B.
+//            I need a courier to carry it."
+// request  → a buy-and-bring. "Buy item X in another city and bring it to me."
+type Role = "trip" | "delivery" | "request"
 
-function SplitFlapChar({
-  targetChar,
-  size = "large",
-}: {
-  targetChar: string
-  size?: "large" | "small"
-}) {
-  const [currentChar, setCurrentChar] = useState(targetChar)
-  const [isFlipping, setIsFlipping] = useState(false)
-  const prevTarget = useRef(targetChar)
-
-  useEffect(() => {
-    if (prevTarget.current === targetChar) return
-    prevTarget.current = targetChar
-    setIsFlipping(true)
-    let iterations = 0
-    const maxIterations = 10 + Math.floor(Math.random() * 5)
-    const interval = setInterval(() => {
-      iterations++
-      if (iterations >= maxIterations) {
-        setCurrentChar(targetChar)
-        setIsFlipping(false)
-        clearInterval(interval)
-      } else {
-        setCurrentChar(CHARS[Math.floor(Math.random() * CHARS.length)])
-      }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [targetChar])
-
-  const isSpace = currentChar === " " && !isFlipping
-  const w = size === "large" ? "w-8" : "w-5 sm:w-6"
-  const h = size === "large" ? "h-11" : "h-7 sm:h-8"
-  const text = size === "large" ? "text-xl" : "text-xs sm:text-sm"
-
-  return (
-    <div
-      className={`relative flex items-center justify-center ${w} ${h} rounded-[2px] overflow-hidden ${
-        isSpace ? "bg-transparent" : "bg-[#1A1200] shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]"
-      }`}
-      style={{
-        fontFamily: "'JetBrains Mono', monospace",
-        color: "#D4A855",
-        boxShadow: isSpace
-          ? "none"
-          : "inset 0 1px 2px rgba(255,255,255,0.05), inset 0 -1px 2px rgba(0,0,0,0.5)",
-      }}
-    >
-      {!isSpace && (
-        <>
-          <div
-            className="absolute inset-0 pointer-events-none opacity-20"
-            style={{
-              backgroundImage: "linear-gradient(rgba(212, 168, 85, 0.1) 1px, transparent 1px)",
-              backgroundSize: "100% 2px",
-            }}
-          />
-          <div className="absolute top-1/2 left-0 w-full h-[1px] bg-[#D4A855] opacity-20 -translate-y-1/2 z-10" />
-          <span className={`relative z-0 leading-none ${text} ${isFlipping ? "blur-[0.5px]" : ""}`}>
-            {currentChar}
-          </span>
-        </>
-      )}
-    </div>
-  )
+interface Step {
+  n: string
+  title: string
+  body: string
+  accent?: boolean
 }
 
-function SplitFlapWord({
-  text,
-  size = "large",
-}: {
-  text: string
-  size?: "large" | "small"
-}) {
-  return (
-    <div className="flex gap-[2px]">
-      {text.split("").map((char, i) => (
-        <SplitFlapChar key={i} targetChar={char.toUpperCase()} size={size} />
-      ))}
-    </div>
-  )
+interface RoleCopy {
+  tab: string
+  label: string
+  headline: string
+  intro: string
+  steps: Step[]
 }
 
-// ─── Data helpers ────────────────────────────────────────────────────────────
-const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-
-function fmtRoute(l: Listing) {
-  const from = l.origin_city.toUpperCase().slice(0, 5).padEnd(5)
-  const to = l.dest_city.toUpperCase().slice(0, 5).padEnd(5)
-  return `${from} → ${to}`.padEnd(15, " ").slice(0, 15)
+const HOW: Record<Role, RoleCopy> = {
+  trip: {
+    tab: "TRIP",
+    label: "I'm traveling",
+    headline: "Fill your empty space — and your wallet",
+    intro:
+      "You're already going somewhere. By plane, car, train or ferry, at home or abroad. List the route and let people pay you to ride along with their things.",
+    steps: [
+      {
+        n: "01",
+        title: "List your route",
+        body: "Where from, where to, when, and how much room you can spare. Set your price or leave it open. Your trip — your terms.",
+      },
+      {
+        n: "02",
+        title: "Choose who you carry for",
+        body: "Senders message you. Read their profile, agree on the item and the handoff, and confirm when you're both happy. You decide who rides with you.",
+      },
+      {
+        n: "03",
+        title: "Deliver and earn",
+        body: "Hand it over at your destination. Close the deal and it's saved to your travel history — your listing stays open for more senders.",
+        accent: true,
+      },
+    ],
+  },
+  delivery: {
+    tab: "DELIVERY",
+    label: "I need it delivered",
+    headline: "Send anything, with someone already going",
+    intro:
+      "You have an item that needs to reach another city — and you're not traveling. Post it and let a courier who's already headed that way carry it for you.",
+    steps: [
+      {
+        n: "01",
+        title: "Post your item",
+        body: "Describe what needs to move, the origin and destination, your deadline and what you'll pay. You stay exactly where you are.",
+      },
+      {
+        n: "02",
+        title: "Match with a courier",
+        body: "Travelers already going your way will reach out. Agree on the item, pickup and drop-off, and confirm the match — your request then closes to other couriers.",
+      },
+      {
+        n: "03",
+        title: "Receive it, done",
+        body: "The courier delivers it at the destination. Close the deal and it's archived to your history — no logistics, no chasing.",
+        accent: true,
+      },
+    ],
+  },
+  request: {
+    tab: "REQUEST",
+    label: "Buy it for me",
+    headline: "Get something from another city",
+    intro:
+      "Saw it abroad — or just two cities over — and can't get there? Ask a traveler passing through to pick it up and bring it to you.",
+    steps: [
+      {
+        n: "01",
+        title: "Describe what you want",
+        body: "What it is, where it's sold, and where you'd like it brought. Name the reward you're willing to offer for the favor.",
+      },
+      {
+        n: "02",
+        title: "Find a shopper on the way",
+        body: "Travelers heading to that city will see it. Chat, agree on the price and handoff, and confirm the match with your courier.",
+      },
+      {
+        n: "03",
+        title: "It arrives with them",
+        body: "They buy it, bring it back, and hand it over. Close the deal and it's added to your history.",
+        accent: true,
+      },
+    ],
+  },
 }
 
-function fmtDate(l: Listing) {
-  const d = new Date(l.depart_date)
-  return `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}`
-}
-
-function fmtKind(l: Listing) {
-  const map: Record<string, string> = { trip: "TRIP   ", request: "REQUEST", delivery: "DELIVER" }
-  return map[l.kind] ?? "TRIP   "
-}
-
-function fmtStatus(l: Listing) {
-  const map: Record<string, string> = {
-    open: "OPEN    ",
-    matched: "MATCHED ",
-    completed: "DONE    ",
-    cancelled: "CLOSED  ",
-  }
-  return map[l.status] ?? "OPEN    "
-}
-
-type BoardRow = { id: string; route: string; date: string; kind: string; status: string }
-
-const FALLBACK_ROWS: BoardRow[] = [
-  { id: "1", route: "BAKU  → ISTAN", date: "JUL 15", kind: "TRIP   ", status: "BOARDING" },
-  { id: "2", route: "LONDN → PARIS", date: "JUL 18", kind: "TRIP   ", status: "ON TIME " },
-  { id: "3", route: "DUBAI → TBILI", date: "AUG 01", kind: "REQUEST", status: "OPEN    " },
-  { id: "4", route: "TORON → LAGOS", date: "AUG 05", kind: "TRIP   ", status: "OPEN    " },
-  { id: "5", route: "AMSTR → BARCE", date: "AUG 12", kind: "DELIVER", status: "OPEN    " },
-]
-
-const BLANK_ROWS: BoardRow[] = FALLBACK_ROWS.map((r) => ({
-  ...r,
-  route: " ".repeat(r.route.length),
-  date: " ".repeat(r.date.length),
-  kind: " ".repeat(r.kind.length),
-  status: " ".repeat(r.status.length),
-}))
-
-const ROTATING_STATUSES = ["ON TIME ", "BOARDING", "DELAYED ", "OPEN    ", "CLOSED  ", "DEPARTED"]
-
-// ─── Cycling headline phrases ────────────────────────────────────────────────
-const PHRASES = ["ANYTHING.  ", "EVERYTHING.", "YOUR WORLD."]
-
-// ─── Step card (own hover state so animate works correctly) ───────────────────
-interface Step { n: string; title: string; body: string; accent: boolean }
+const ROLES: Role[] = ["trip", "delivery", "request"]
 
 function StepCard({ step, index }: { step: Step; index: number }) {
-  const [hovered, setHovered] = useState(false)
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.6, delay: index * 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
       className="flex flex-col relative cursor-default"
     >
-      {/* Big number — animates independently via animate prop */}
       <motion.div
-        animate={{ y: hovered ? -18 : 0 }}
-        transition={{ type: "spring", stiffness: 340, damping: 26, mass: 0.8 }}
         className="text-[120px] leading-none mb-6 select-none"
         style={{
           fontFamily: "'DM Serif Display', serif",
           WebkitTextStroke: `1px rgba(200, 149, 106, ${step.accent ? 1 : 0.4})`,
           color: "transparent",
-          willChange: "transform",
         }}
       >
         {step.n}
       </motion.div>
 
-      {/* Title — slight lift too */}
-      <motion.h3
-        animate={{ y: hovered ? -4 : 0 }}
-        transition={{ type: "spring", stiffness: 340, damping: 30, mass: 0.8, delay: 0.03 }}
+      <h3
         className={`font-bold text-2xl mb-4 ${step.accent ? "text-[#C8956A]" : "text-[#F4EDE4]"}`}
       >
         {step.title}
-      </motion.h3>
+      </h3>
 
       <p className="text-[#8C7B68] leading-relaxed">{step.body}</p>
 
-      {/* Subtle bottom accent line on hover */}
-      <motion.div
-        animate={{ scaleX: hovered ? 1 : 0, opacity: hovered ? 1 : 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="mt-6 h-px origin-left"
-        style={{ background: `rgba(200,149,106,${step.accent ? 0.6 : 0.3})` }}
+      <div
+        className="mt-6 h-px"
+        style={{ background: `rgba(200,149,106,${step.accent ? 0.6 : 0.2})` }}
       />
     </motion.div>
   )
 }
 
-// ─── Bottom route search ──────────────────────────────────────────────────────
+function HowItWorksTabs() {
+  const [role, setRole] = useState<Role>("trip")
+  const copy = HOW[role]
+
+  return (
+    <section id="how-it-works" className="relative z-[2] py-32 px-6 md:px-12 xl:px-20 max-w-[1800px] mx-auto">
+      <div className="text-center mb-16">
+        <motion.h2
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-5xl md:text-6xl text-[#F4EDE4] mb-6"
+          style={{ fontFamily: "'DM Serif Display', serif" }}
+        >
+          How It Works
+        </motion.h2>
+        <p className="text-[#8C7B68] max-w-2xl mx-auto text-lg">
+          Three ways to use the network — pick the one that fits you.
+        </p>
+      </div>
+
+      {/* Role tabs */}
+      <div className="flex justify-center mb-16">
+        <div className="flex gap-1.5 flex-wrap justify-center">
+          {ROLES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRole(r)}
+              className={`px-6 py-2.5 text-[11px] tracking-[0.15em] rounded-full border transition-all ${
+                role === r
+                  ? "bg-[#C8956A] border-[#C8956A] text-[#0E0B08] font-bold"
+                  : "border-[#2E2418] text-[#8C7B68] hover:border-[#C8956A]/40 hover:text-[#F4EDE4]"
+              }`}
+              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              {HOW[r].tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Active role panel */}
+      <motion.div
+        key={role}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+        className="max-w-3xl mx-auto mb-24 text-center"
+      >
+        <p className="text-[11px] tracking-[0.2em] text-[#C8956A] mb-3" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          {copy.label.toUpperCase()}
+        </p>
+        <h3 className="text-3xl md:text-4xl text-[#F4EDE4] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
+          {copy.headline}
+        </h3>
+        <p className="text-[#8C7B68] text-base leading-relaxed max-w-2xl mx-auto">{copy.intro}</p>
+      </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 xl:gap-16">
+        {copy.steps.map((step, index) => (
+          <StepCard key={step.n} step={step} index={index} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ─── Route search ────────────────────────────────────────────────────────────
 function RouteSearch() {
   const navigate = useNavigate()
   const [from, setFrom] = useState("")
@@ -230,10 +241,10 @@ function RouteSearch() {
             </span>
           </div>
           <h2 className="text-4xl md:text-5xl text-[#F4EDE4] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Where are you sending?
+            Where to, and where from?
           </h2>
           <p className="text-[#8C7B68] text-base">
-            Search for travelers already heading your way.
+            Find couriers already going your way — across an ocean or across town.
           </p>
         </motion.div>
 
@@ -248,7 +259,7 @@ function RouteSearch() {
             <CityAutocomplete
               label="From"
               value={from}
-              placeholder="London, Tokyo…"
+              placeholder="Any city…"
               onSelect={(city) => setFrom(city)}
               onChange={(raw) => setFrom(raw)}
               onClear={() => setFrom("")}
@@ -261,7 +272,7 @@ function RouteSearch() {
             <CityAutocomplete
               label="To"
               value={to}
-              placeholder="Dubai, New York…"
+              placeholder="Any city…"
               onSelect={(city) => setTo(city)}
               onChange={(raw) => setTo(raw)}
               onClear={() => setTo("")}
@@ -272,26 +283,8 @@ function RouteSearch() {
               className="px-8 py-3 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold text-[11px] tracking-widest rounded-full transition-colors shadow-[0_0_20px_rgba(200,149,106,0.15)] hover:shadow-[0_0_30px_rgba(200,149,106,0.3)] whitespace-nowrap"
               style={{ fontFamily: "'JetBrains Mono', monospace" }}
             >
-              FIND ROUTES
+              FIND COURIERS
             </button>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[
-              ["London", "Paris"],
-              ["Dubai", "Tbilisi"],
-              ["Singapore", "Sydney"],
-              ["Toronto", "Lagos"],
-            ].map(([f, t]) => (
-              <button
-                key={`${f}-${t}`}
-                onClick={() => { setFrom(f); setTo(t) }}
-                className="px-3 py-1 text-[10px] tracking-widest text-[#8C7B68] hover:text-[#C8956A] border border-[#1E1810] hover:border-[#C8956A]/30 rounded-full transition-colors"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                {f.toUpperCase()} → {t.toUpperCase()}
-              </button>
-            ))}
           </div>
         </motion.div>
       </div>
@@ -299,316 +292,101 @@ function RouteSearch() {
   )
 }
 
-// ─── Main page component ─────────────────────────────────────────────────────
+// ─── Main page ───────────────────────────────────────────────────────────────
 export function LandingPage() {
-  const cursorRef = useRef<HTMLDivElement>(null)
-  const boardRef = useRef<HTMLDivElement>(null)
-  const [phraseIndex, setPhraseIndex] = useState(0)
-  const [boardRows, setBoardRows] = useState<BoardRow[]>(FALLBACK_ROWS)
-  const [displayRows, setDisplayRows] = useState<BoardRow[]>(BLANK_ROWS)
-
-  // Trigger SplitFlap ONLY when board enters viewport
-  const isBoardInView = useInView(boardRef, { once: true, amount: 0.4 })
-
-  const { data: listings } = useQuery({
-    queryKey: ["listings", "open", 6],
-    queryFn: () => fetchOpenListings(6),
-  })
-
-  // Populate board with real data when available
-  useEffect(() => {
-    if (listings && listings.length > 0) {
-      const rows = listings.slice(0, 6).map((l) => ({
-        id: l.id,
-        route: fmtRoute(l),
-        date: fmtDate(l),
-        kind: fmtKind(l),
-        status: fmtStatus(l),
-      }))
-      setBoardRows(rows.length >= 5 ? rows : [...rows, ...FALLBACK_ROWS.slice(rows.length)])
-    }
-  }, [listings])
-
-  // Activate SplitFlap animation only once board is visible — 600ms delay so the
-  // page visually settles before the letters start flipping.
-  useEffect(() => {
-    if (!isBoardInView) return
-    const timer = setTimeout(() => setDisplayRows(boardRows), 600)
-    return () => clearTimeout(timer)
-  }, [isBoardInView]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Once activated, keep in sync with live boardRows updates (status rotation)
-  useEffect(() => {
-    if (isBoardInView) setDisplayRows((prev) => prev.map((row, i) => boardRows[i] ?? row))
-  }, [boardRows]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Phrase cycling
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPhraseIndex((prev) => (prev + 1) % PHRASES.length)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Random board status updates (visual drama)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setBoardRows((current) => {
-        const next = [...current]
-        const randomRow = Math.floor(Math.random() * next.length)
-        next[randomRow] = {
-          ...next[randomRow],
-          status: ROTATING_STATUSES[Math.floor(Math.random() * ROTATING_STATUSES.length)],
-        }
-        return next
-      })
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Aurora cursor glow
-  useEffect(() => {
-    const updateCursor = (e: MouseEvent) => {
-      requestAnimationFrame(() => {
-        if (cursorRef.current) {
-          cursorRef.current.style.transform = `translate(${e.clientX - 300}px, ${e.clientY - 300}px)`
-        }
-      })
-    }
-    window.addEventListener("mousemove", updateCursor)
-    return () => window.removeEventListener("mousemove", updateCursor)
-  }, [])
-
-  const STEPS: Step[] = [
-    {
-      n: "01",
-      title: "Post a Route",
-      body: "Traveling soon? List your flight details, available space, and your fee. Or request an item you need brought to you.",
-      accent: false,
-    },
-    {
-      n: "02",
-      title: "Match & Meet",
-      body: "Connect safely. Agree on terms, verify identities through our platform, and hand off the item before departure.",
-      accent: false,
-    },
-    {
-      n: "03",
-      title: "Deliver & Earn",
-      body: "Hand over the package at the destination. Payment is released from escrow automatically upon successful delivery.",
-      accent: true,
-    },
-  ]
-
   return (
     <div className="overflow-x-hidden selection:bg-[#C8956A] selection:text-[#0E0B08]">
-      {/* Aurora Cursor */}
-      <div
-        ref={cursorRef}
-        className="fixed top-0 left-0 w-[600px] h-[600px] pointer-events-none z-[1] rounded-full"
-        style={{
-          background: "radial-gradient(circle, rgba(200, 149, 106, 0.08) 0%, transparent 60%)",
-          willChange: "transform",
-        }}
-      />
-
-      {/* ── Hero ─────────────────────────────────────────────────────────────── */}
-      <section className="relative z-[2] min-h-screen flex flex-col xl:flex-row items-center pt-28 pb-20 px-6 md:px-12 xl:px-20 gap-16 xl:gap-8 max-w-[1800px] mx-auto">
-        {/* Left: copy */}
-        <div className="w-full xl:w-[55%] flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
-            <p
-              className="text-[11px] tracking-[0.2em] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              PEER-TO-PEER COURIER NETWORK
-            </p>
-          </div>
-
-          <h1
-            className="leading-[0.9] tracking-tight mb-8"
-            style={{ fontFamily: "'DM Serif Display', serif" }}
-          >
-            <Magnetic>
-              <div className="text-[clamp(4rem,8vw,10rem)] text-[#F4EDE4]">YOUR NEXT TRIP</div>
-            </Magnetic>
-            <Magnetic>
-              <div
-                className="text-[clamp(4rem,8vw,10rem)]"
-                style={{ WebkitTextStroke: "1px #C8956A", color: "transparent" }}
-              >
-                CARRIES
-              </div>
-            </Magnetic>
-            <Magnetic>
-              <div className="text-[clamp(4rem,8vw,10rem)] text-[#C8956A]">MORE.</div>
-            </Magnetic>
-          </h1>
-
-          <div className="h-16 mb-12 flex items-center">
-            <SplitFlapWord text={PHRASES[phraseIndex]} size="large" />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6 mb-16">
-            <Magnetic>
-              <Link to="/browse">
-                <button className="px-8 py-4 bg-[#C8956A] text-[#0E0B08] font-bold tracking-widest text-sm hover:bg-[#D4A855] transition-colors rounded-sm shadow-[0_0_20px_rgba(200,149,106,0.2)] hover:shadow-[0_0_30px_rgba(200,149,106,0.4)] cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                  EXPLORE ROUTES
-                </button>
-              </Link>
-            </Magnetic>
-            <Magnetic>
-              <Link to="/trips/new">
-                <button className="px-8 py-4 bg-transparent border border-[#C8956A]/50 text-[#C8956A] font-bold tracking-widest text-sm hover:bg-[#C8956A]/10 transition-colors rounded-sm cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                  POST A TRIP
-                </button>
-              </Link>
-            </Magnetic>
-          </div>
-
-          <div
-            className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#8C7B68] tracking-wider"
+      {/* ── Hero — centered ────────────────────────────────────────────────── */}
+      <section className="relative z-[2] min-h-screen flex flex-col items-center justify-center text-center px-6 max-w-[1100px] mx-auto pt-28 pb-24">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center gap-2 mb-10"
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
+          <p
+            className="text-[11px] tracking-[0.22em] text-[#8C7B68]"
             style={{ fontFamily: "'JetBrains Mono', monospace" }}
           >
-            <span>FREE TO JOIN</span>
-            <span className="text-[#C8956A]">·</span>
-            <span>PEER-TO-PEER</span>
-            <span className="text-[#C8956A]">·</span>
-            <span>ESCROW PAYMENTS</span>
-          </div>
-        </div>
+            PEER-TO-PEER COURIER NETWORK
+          </p>
+        </motion.div>
 
-        {/* Right: Solari departure board */}
-        <div ref={boardRef} className="w-full xl:w-[45%] flex justify-center xl:justify-end">
-          {/* CSS float — runs on compositor thread, no React involvement */}
-          <div
-            className="w-full max-w-[700px] bg-[#111008] border border-[#D4A855]/20 p-6 md:p-8 rounded-md relative overflow-hidden"
-            style={{
-              boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.05)",
-              backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)",
-              animation: "boardFloat 7s ease-in-out infinite",
-              willChange: "transform",
-            }}
+        <h1
+          className="leading-[0.92] tracking-tight mb-8"
+          style={{ fontFamily: "'DM Serif Display', serif" }}
+        >
+          <motion.span
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="block text-[clamp(3rem,8vw,7rem)] text-[#F4EDE4]"
           >
-            {/* Glass sheen */}
-            <div className="absolute top-0 left-0 w-full h-[40%] bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none rounded-t-md" />
+            Your route
+          </motion.span>
+          <motion.span
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="block text-[clamp(3rem,8vw,7rem)] italic text-[#C8956A]"
+          >
+            carries more.
+          </motion.span>
+        </h1>
 
-            <div className="flex justify-between items-end border-b border-[#D4A855]/20 pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)] animate-pulse" />
-                <h2
-                  className="text-lg text-[#F4EDE4] tracking-widest"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                >
-                  DEPARTURES
-                </h2>
-              </div>
-              <span
-                className="text-xs text-[#8C7B68] tracking-widest hidden sm:block"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                LIVE STATUS
-              </span>
-            </div>
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="text-[#8C7B68] text-lg leading-relaxed max-w-xl mb-12"
+        >
+          People are already going where you need — by plane, train, car or ferry,
+          at home or across borders. Send with them, or carry and earn.
+        </motion.p>
 
-            {/* Column headers */}
-            <div
-              className="grid grid-cols-12 gap-2 mb-2 px-2 text-[10px] text-[#8C7B68] tracking-widest"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              <div className="col-span-5">ROUTE</div>
-              <div className="col-span-2">DATE</div>
-              <div className="col-span-2">KIND</div>
-              <div className="col-span-3">STATUS</div>
-            </div>
-
-            {/* Board rows — only animate when in view */}
-            <div className="space-y-3">
-              {displayRows.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-12 gap-2 bg-black/20 p-2 rounded-sm border border-white/5"
-                >
-                  <div className="col-span-12 sm:col-span-5 overflow-hidden">
-                    <SplitFlapWord text={row.route} size="small" />
-                  </div>
-                  <div className="col-span-2 hidden sm:block">
-                    <SplitFlapWord text={row.date} size="small" />
-                  </div>
-                  <div className="col-span-2 hidden sm:block">
-                    <SplitFlapWord text={row.kind} size="small" />
-                  </div>
-                  <div className="col-span-12 sm:col-span-3">
-                    <SplitFlapWord text={row.status} size="small" />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div
-              className="mt-6 flex justify-between items-center text-[10px] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              <span>SOLARI-TRX SYS. V2.4</span>
-              <span>SYNC: OK</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── World map ────────────────────────────────────────────────────────── */}
-      <WorldMap listings={listings ?? []} />
-
-      {/* ── Marquee strip ─────────────────────────────────────────────────────── */}
-      <div className="relative z-[2] w-full bg-[#111008] border-y border-[#D4A855]/20 py-4 overflow-hidden flex items-center">
-        <div
-          className="absolute inset-0 pointer-events-none opacity-10 z-10"
-          style={{
-            backgroundImage: "linear-gradient(rgba(212, 168, 85, 1) 1px, transparent 1px)",
-            backgroundSize: "100% 3px",
-          }}
-        />
+        {/* Buttons keep the magnetic effect */}
         <motion.div
-          animate={{ x: ["0%", "-50%"] }}
-          transition={{ repeat: Infinity, ease: "linear", duration: 30 }}
-          className="flex whitespace-nowrap text-[#C8956A] text-lg tracking-[0.2em]"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.42 }}
+          className="flex flex-wrap items-center justify-center gap-4 mb-14"
+        >
+          <Magnetic>
+            <Link to="/browse">
+              <button className="px-8 py-4 bg-[#C8956A] text-[#0E0B08] font-bold tracking-widest text-sm hover:bg-[#D4A855] transition-colors rounded-full shadow-[0_0_24px_rgba(200,149,106,0.25)] hover:shadow-[0_0_36px_rgba(200,149,106,0.45)] cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                EXPLORE ROUTES
+              </button>
+            </Link>
+          </Magnetic>
+          <Magnetic>
+            <Link to="/trips/new">
+              <button className="px-8 py-4 bg-transparent border border-[#C8956A]/50 text-[#C8956A] font-bold tracking-widest text-sm hover:bg-[#C8956A]/10 transition-colors rounded-full cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                POST A TRIP
+              </button>
+            </Link>
+          </Magnetic>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-[#3A2E20] tracking-[0.2em]"
           style={{ fontFamily: "'JetBrains Mono', monospace" }}
         >
-          <span className="pr-8">
-            BAKU → ISTANBUL · LONDON → PARIS · DUBAI → TBILISI · AMSTERDAM → BARCELONA · TORONTO → LAGOS · SINGAPORE → SYDNEY · NAIROBI → CAIRO · TOKYO → SEOUL ·
-          </span>
-          <span className="pr-8">
-            BAKU → ISTANBUL · LONDON → PARIS · DUBAI → TBILISI · AMSTERDAM → BARCELONA · TORONTO → LAGOS · SINGAPORE → SYDNEY · NAIROBI → CAIRO · TOKYO → SEOUL ·
-          </span>
+          <span>ANY MODE</span>
+          <span className="text-[#C8956A]/60">·</span>
+          <span>ANY DISTANCE</span>
+          <span className="text-[#C8956A]/60">·</span>
+          <span>PEER-TO-PEER</span>
         </motion.div>
-      </div>
-
-      {/* ── How it works ──────────────────────────────────────────────────────── */}
-      <section id="how-it-works" className="relative z-[2] py-32 px-6 md:px-12 xl:px-20 max-w-[1800px] mx-auto">
-        <div className="text-center mb-24">
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-5xl md:text-6xl text-[#F4EDE4] mb-6"
-            style={{ fontFamily: "'DM Serif Display', serif" }}
-          >
-            How It Works
-          </motion.h2>
-          <p className="text-[#8C7B68] max-w-2xl mx-auto text-lg">
-            A trusted network of travelers turning empty luggage space into a global logistics solution.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 xl:gap-16">
-          {STEPS.map((step, index) => (
-            <StepCard key={step.n} step={step} index={index} />
-          ))}
-        </div>
       </section>
 
-      {/* ── Route search ──────────────────────────────────────────────────────── */}
+      {/* ── How it works (role tabs) ───────────────────────────────────────── */}
+      <HowItWorksTabs />
+
+      {/* ── Route search ───────────────────────────────────────────────────── */}
       <RouteSearch />
     </div>
   )

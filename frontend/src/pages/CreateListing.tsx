@@ -104,18 +104,18 @@ const FLEXIBILITY_OPTIONS: { value: DateFlexibility; label: string; desc: string
 const KIND_META: Record<Kind, { headline: string; sub: string; gate: string }> = {
   trip: {
     headline: "Post a Trip",
-    sub: "Share your travel plans and earn by carrying items along your route.",
+    sub: "You're traveling somewhere — by plane, train, car or ferry. Offer your spare capacity and earn by carrying things along your route.",
     gate: "GATE: TRAVELER MANIFEST",
   },
-  request: {
-    headline: "Make a Request",
-    sub: "Need something from abroad? Post a request for a traveler to bring it to you.",
-    gate: "GATE: ITEM REQUEST",
-  },
   delivery: {
-    headline: "Offer Delivery",
-    sub: "Have an item you're willing to transport? List your delivery offer here.",
-    gate: "GATE: DELIVERY OFFER",
+    headline: "Send a Delivery",
+    sub: "You have an item that needs to reach another city and you're not traveling. Post it for a courier already going that way to carry.",
+    gate: "GATE: DELIVERY REQUEST",
+  },
+  request: {
+    headline: "Request a Pickup",
+    sub: "Want something bought in another city and brought to you? Ask a traveler passing through to pick it up for you.",
+    gate: "GATE: BUY-AND-BRING",
   },
 }
 
@@ -133,12 +133,16 @@ export function CreateListing({ kind }: { kind: Kind }) {
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [clientError, setClientError] = React.useState<string | null>(null)
+  // Cities must be picked from the autocomplete list, not free-typed.
+  const [originConfirmed, setOriginConfirmed] = React.useState(false)
+  const [destConfirmed, setDestConfirmed] = React.useState(false)
 
   function set(field: keyof FormData) {
     return (value: string | boolean) => setForm((prev) => ({ ...prev, [field]: value }))
   }
 
   function validateClient(): string | null {
+    if (!originConfirmed || !destConfirmed) return "Please pick both cities from the list."
     if (form.price && Number(form.price) > MAX_PRICE) return `Price cannot exceed $${MAX_PRICE.toLocaleString()}`
     if (form.capacity_kg && Number(form.capacity_kg) > MAX_KG) return `Capacity cannot exceed ${MAX_KG.toLocaleString()} kg`
     if (form.price && Number(form.price) < 0) return "Price cannot be negative"
@@ -222,7 +226,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
     )
   }
 
-  const hasDateFlexibility = (kind === "trip" || kind === "delivery") && form.depart_date
+  const hasDateFlexibility = kind === "trip" && form.depart_date
 
   return (
     <div className="min-h-screen bg-[#0E0B08] pt-16">
@@ -246,14 +250,16 @@ export function CreateListing({ kind }: { kind: Kind }) {
               <CityAutocomplete
                 label="Origin city"
                 value={form.origin_city}
-                onSelect={(city, country) => setForm(p => ({ ...p, origin_city: city, origin_country: country }))}
+                onSelect={(city, country) => { setForm(p => ({ ...p, origin_city: city, origin_country: country })); setOriginConfirmed(true) }}
+                onClear={() => { setForm(p => ({ ...p, origin_city: "", origin_country: "" })); setOriginConfirmed(false) }}
                 placeholder="London, Tokyo…"
                 required
               />
               <CityAutocomplete
                 label="Destination city"
                 value={form.dest_city}
-                onSelect={(city, country) => setForm(p => ({ ...p, dest_city: city, dest_country: country }))}
+                onSelect={(city, country) => { setForm(p => ({ ...p, dest_city: city, dest_country: country })); setDestConfirmed(true) }}
+                onClear={() => { setForm(p => ({ ...p, dest_city: "", dest_country: "" })); setDestConfirmed(false) }}
                 placeholder="Dubai, New York…"
                 required
               />
@@ -265,9 +271,9 @@ export function CreateListing({ kind }: { kind: Kind }) {
             )}
           </div>
 
-          {(kind === "trip" || kind === "delivery") && (
+          {kind === "trip" && (
             <div>
-              <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Dates</h2>
+              <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Travel dates</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
                 <TerminalInput
                   label="Departure date"
@@ -307,17 +313,36 @@ export function CreateListing({ kind }: { kind: Kind }) {
             </div>
           )}
 
+          {(kind === "delivery" || kind === "request") && (
+            <div>
+              <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Timing</h2>
+              <TerminalInput
+                label={kind === "delivery" ? "Needed by (latest delivery)" : "Needed by (latest pickup)"}
+                type="date"
+                value={form.arrive_date}
+                onChange={set("arrive_date")}
+              />
+              <p className="mt-2 text-[11px] text-[#8C7B68]/70" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                Couriers whose trip arrives before this date will match your {kind === "delivery" ? "delivery" : "request"}.
+              </p>
+            </div>
+          )}
+
           <div>
             <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Listing Details</h2>
             <div className="space-y-5">
               <TerminalInput
-                label={kind === "trip" ? "Trip summary" : kind === "request" ? "What do you need?" : "Item description"}
+                label={
+                  kind === "trip" ? "Trip summary"
+                  : kind === "request" ? "What do you want bought?"
+                  : "What needs delivering?"
+                }
                 value={form.title}
                 onChange={set("title")}
                 placeholder={
-                  kind === "trip" ? "e.g. Flying light, happy to carry small items"
-                  : kind === "request" ? "e.g. Japanese skincare from Tokyo"
-                  : "e.g. Small electronics package, well packed"
+                  kind === "trip" ? "e.g. Driving to Glasgow, room for a few kilos"
+                  : kind === "request" ? "e.g. A specific tea from a Lisbon shop"
+                  : "e.g. Box of books, ~3kg, well packed"
                 }
                 required
               />
@@ -329,7 +354,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
               />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <TerminalInput
-                  label={kind === "request" ? "Offered reward ($)" : "Price ($)"}
+                  label={kind === "trip" ? "Your fee ($)" : "Offering to pay ($)"}
                   type="number"
                   value={form.price}
                   onChange={set("price")}
@@ -353,9 +378,9 @@ export function CreateListing({ kind }: { kind: Kind }) {
                     <option value="JPY">JPY</option>
                   </select>
                 </div>
-                {(kind === "trip" || kind === "delivery") && (
+                {kind === "trip" && (
                   <TerminalInput
-                    label={`Capacity (kg, max ${MAX_KG.toLocaleString()})`}
+                    label={`Spare capacity (kg, max ${MAX_KG.toLocaleString()})`}
                     type="number"
                     value={form.capacity_kg}
                     onChange={set("capacity_kg")}

@@ -53,12 +53,18 @@ export function CityAutocomplete({
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [activeIndex, setActiveIndex] = React.useState(-1)
+  // `confirmed` is true ONLY after the user picks a real result from the list.
+  // Typing (which only filters) sets it false, invalidating any stale selection
+  // in the parent so gibberish can never be submitted.
+  const [confirmed, setConfirmed] = React.useState(!!value)
+  const [touched, setTouched] = React.useState(false)
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     setInputValue(value)
+    setConfirmed(!!value)
   }, [value])
 
   React.useEffect(() => {
@@ -87,12 +93,18 @@ export function CityAutocomplete({
 
   function handleChange(raw: string) {
     setInputValue(raw)
+    setConfirmed(false)
+    // Typing that diverges from the committed value invalidates the parent's
+    // selection — the parent must only ever hold a city that came from a pick.
+    if (raw !== value) onClear?.()
     onChange?.(raw)
     if (!raw && onClear) onClear()
   }
 
   function handleSelect(r: CityResult) {
     setInputValue(r.city)
+    setConfirmed(true)
+    setTouched(false)
     onSelect(r.city, r.country)
     onChange?.(r.city)
     setOpen(false)
@@ -100,8 +112,23 @@ export function CityAutocomplete({
     inputRef.current?.blur()
   }
 
+  function handleBlur() {
+    setTouched(true)
+    // If the field holds unconfirmed text (not picked from the list), revert it
+    // to the last valid value — or clear it if there was none.
+    if (!confirmed) {
+      if (value) {
+        setInputValue(value)
+      } else {
+        setInputValue("")
+        onClear?.()
+      }
+    }
+  }
+
   function handleClear() {
     setInputValue("")
+    setConfirmed(false)
     onChange?.("")
     onClear?.()
     setResults([])
@@ -134,12 +161,13 @@ export function CityAutocomplete({
           value={inputValue}
           onChange={e => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           onFocus={() => { if (results.length > 0) setOpen(true) }}
           placeholder={placeholder}
           required={required}
           autoComplete="off"
           spellCheck={false}
-          className={`w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm ${py} pl-8 pr-8 text-[12px] transition-colors`}
+          className={`w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm ${py} pl-8 pr-8 text-[12px] transition-colors ${touched && !confirmed ? "border-[#C47B6B]/60" : ""}`}
           style={{ fontFamily: "'JetBrains Mono', monospace" }}
         />
         {loading && (
@@ -163,6 +191,15 @@ export function CityAutocomplete({
           </button>
         )}
       </div>
+
+      {touched && !confirmed && inputValue && (
+        <p
+          className="mt-1.5 text-[10px] text-[#C47B6B] tracking-wider"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          PICK A CITY FROM THE LIST
+        </p>
+      )}
 
       <AnimatePresence>
         {open && results.length > 0 && (

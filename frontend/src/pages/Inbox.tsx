@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useNavigate, Link } from "@tanstack/react-router"
+import { motion } from "framer-motion"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getInitial } from "@/lib/db_constants"
@@ -12,26 +13,36 @@ interface ThreadSummary {
   listing_title: string
   created_at: string
   other_participant: { id: string; display_name: string | null; avatar_url: string | null }
-  last_message: { id: string; body: string; created_at: string; sender_id: string } | null
+  last_message: { id: string; body: string; created_at: string; sender_id: string | null } | null
   unread_count: number
 }
 
 interface Message {
   id: string
   thread_id: string
-  sender_id: string
+  sender_id: string | null
   body: string
   read_at: string | null
   created_at: string
+  is_system?: boolean
 }
 
 interface ThreadDetail {
   id: string
   listing_id: string
-  listing: { id: string; title: string | null; origin_city: string; dest_city: string; kind: string } | null
+  listing: { id: string; title: string | null; origin_city: string; dest_city: string; kind: string; status?: string } | null
   other_participant: { id: string; display_name: string | null; avatar_url: string | null }
   messages: Message[]
   created_at: string
+}
+
+interface MatchState {
+  stage: "none" | "matched" | "done"
+  me_confirmed: boolean
+  other_confirmed: boolean
+  both_confirmed: boolean
+  listing_kind: string | null
+  listing_status: string | null
 }
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
@@ -67,6 +78,29 @@ async function apiMarkRead(threadId: string, token: string): Promise<void> {
     method: "PATCH",
     headers: authHeaders(token),
   })
+}
+
+async function apiGetMatchState(threadId: string, token: string): Promise<MatchState> {
+  const res = await fetch(`/api/matches?thread_id=${threadId}`, { headers: authHeaders(token) })
+  if (!res.ok) throw new Error("Failed to load match state")
+  return res.json()
+}
+
+async function apiConfirmMatch(threadId: string, token: string): Promise<{ both_confirmed: boolean }> {
+  const res = await fetch(`/api/matches/confirm?thread_id=${threadId}`, { method: "POST", headers: authHeaders(token) })
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}))
+    throw new Error(d.detail ?? "Failed to confirm")
+  }
+  return res.json()
+}
+
+async function apiCloseDeal(threadId: string, token: string): Promise<void> {
+  const res = await fetch(`/api/matches/close-deal?thread_id=${threadId}`, { method: "POST", headers: authHeaders(token) })
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}))
+    throw new Error(d.detail ?? "Failed to close deal")
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -158,6 +192,18 @@ function ThreadItem({
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
 function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
+  if (msg.is_system) {
+    return (
+      <div className="flex justify-center mb-3">
+        <div
+          className="px-4 py-1.5 rounded-full text-[11px] tracking-wider text-[#C8956A] bg-[#C8956A]/08 border border-[#C8956A]/20 text-center max-w-[85%]"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          {msg.body}
+        </div>
+      </div>
+    )
+  }
   return (
     <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-3`}>
       <div className={`max-w-[72%] ${isOwn ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
@@ -178,23 +224,120 @@ function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   )
 }
 
+// ─── Match bar (Stage 1 confirm + Stage 2 close-the-deal) ─────────────────────
+
+function MatchBar({
+  match,
+  otherName,
+  onConfirm,
+  onDeal,
+  busy,
+  justMatched,
+}: {
+  match: MatchState
+  otherName: string
+  onConfirm: () => void
+  onDeal: () => void
+  busy: boolean
+  justMatched: boolean
+}) {
+  if (match.stage === "done") {
+    return (
+      <div
+        className="px-5 py-2.5 border-b border-[#1E1810] text-center text-[11px] tracking-widest text-[#7EB89A] bg-[#7EB89A]/05"
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        ✓ DEAL ARCHIVED
+      </div>
+    )
+  }
+
+  if (match.both_confirmed) {
+    return (
+      <div className="px-5 py-2.5 border-b border-[#1E1810] bg-[#1A1208] flex flex-col sm:flex-row items-center justify-between gap-2">
+        <span
+          className="text-[11px] tracking-wider text-[#7EB89A] flex items-center gap-2"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          <motion.span
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="inline-block"
+          >
+            ✓
+          </motion.span>
+          MATCHED — agree on the details, then close the deal
+        </span>
+        <button
+          onClick={onDeal}
+          disabled={busy}
+          className="px-4 py-1.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-60 text-[#0E0B08] text-[10px] font-bold tracking-widest rounded-full transition-colors shrink-0"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        >
+          {busy ? "…" : "CLOSE THE DEAL"}
+        </button>
+      </div>
+    )
+  }
+
+  if (match.me_confirmed && !match.both_confirmed) {
+    return (
+      <div
+        className="px-5 py-2.5 border-b border-[#1E1810] text-center text-[11px] tracking-wider text-[#8C7B68]"
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        WAITING FOR {otherName.toUpperCase()} TO CONFIRM…
+      </div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={justMatched ? { scale: [1, 1.02, 1], boxShadow: ["0 0 0px rgba(200,149,106,0)", "0 0 24px rgba(200,149,106,0.35)", "0 0 0px rgba(200,149,106,0)"] } : false}
+      transition={{ duration: 0.9 }}
+      className="px-5 py-2.5 border-b border-[#1E1810] bg-[#1A1208] flex items-center justify-between gap-3"
+    >
+      <span className="text-[11px] tracking-wider text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+        CONFIRM TO CONNECT
+      </span>
+      <button
+        onClick={onConfirm}
+        disabled={busy}
+        className="px-4 py-1.5 border border-[#C8956A]/40 hover:bg-[#C8956A]/10 text-[#C8956A] text-[10px] font-bold tracking-widest rounded-full transition-colors shrink-0 disabled:opacity-60"
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+      >
+        {busy ? "…" : "CONFIRM MATCH"}
+      </button>
+    </motion.div>
+  )
+}
+
 // ─── Conversation panel ───────────────────────────────────────────────────────
 
 function ConversationPanel({
   thread,
   messages,
   currentUserId,
+  match,
   onSend,
+  onConfirm,
+  onDeal,
   onBack,
 }: {
   thread: ThreadDetail
   messages: Message[]
   currentUserId: string
+  match: MatchState | null
   onSend: (body: string) => Promise<void>
+  onConfirm: () => Promise<void>
+  onDeal: () => Promise<void>
   onBack: () => void
 }) {
   const [input, setInput] = React.useState("")
   const [sending, setSending] = React.useState(false)
+  const [matchBusy, setMatchBusy] = React.useState(false)
+  const [justMatched, setJustMatched] = React.useState(false)
+  const prevBoth = React.useRef<boolean>(match?.both_confirmed ?? false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const other = thread.other_participant
   const listing = thread.listing
@@ -205,6 +348,13 @@ function ConversationPanel({
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [messages.length])
+
+  // Fire the "just matched" glow once when both_confirmed flips true.
+  React.useEffect(() => {
+    const nowBoth = match?.both_confirmed ?? false
+    if (nowBoth && !prevBoth.current) setJustMatched(true)
+    prevBoth.current = nowBoth
+  }, [match?.both_confirmed])
 
   async function handleSend() {
     const text = input.trim()
@@ -218,12 +368,24 @@ function ConversationPanel({
     }
   }
 
+  async function handleConfirm() {
+    setMatchBusy(true)
+    try { await onConfirm() } finally { setMatchBusy(false) }
+  }
+
+  async function handleDeal() {
+    setMatchBusy(true)
+    try { await onDeal() } finally { setMatchBusy(false) }
+  }
+
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
   }
+
+  const dealDone = match?.stage === "done"
 
   return (
     <div className="flex flex-col h-full">
@@ -254,6 +416,18 @@ function ConversationPanel({
         </div>
       </div>
 
+      {/* Match bar (hidden once deal is archived) */}
+      {match && !dealDone && (
+        <MatchBar
+          match={match}
+          otherName={other.display_name ?? "the other party"}
+          onConfirm={handleConfirm}
+          onDeal={handleDeal}
+          busy={matchBusy}
+          justMatched={justMatched}
+        />
+      )}
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
         {messages.length === 0 ? (
@@ -272,20 +446,21 @@ function ConversationPanel({
         )}
       </div>
 
-      {/* Input */}
+      {/* Input — disabled once deal is done */}
       <div className="shrink-0 px-5 py-4 border-t border-[#1E1810] flex gap-3 items-end">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder="Type a message…"
+          placeholder={dealDone ? "This conversation is closed." : "Type a message…"}
+          disabled={dealDone}
           rows={1}
-          className="flex-1 bg-[#111008] border border-[#2E2418] rounded-md px-4 py-2.5 text-[14px] text-[#F4EDE4] placeholder-[#3A2E20] resize-none focus:outline-none focus:border-[#C8956A]/40 transition-colors"
+          className="flex-1 bg-[#111008] border border-[#2E2418] rounded-md px-4 py-2.5 text-[14px] text-[#F4EDE4] placeholder-[#3A2E20] resize-none focus:outline-none focus:border-[#C8956A]/40 transition-colors disabled:opacity-50"
           style={{ minHeight: 42, maxHeight: 120 }}
         />
         <button
           onClick={handleSend}
-          disabled={!input.trim() || sending}
+          disabled={!input.trim() || sending || dealDone}
           className="px-5 py-2.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-40 disabled:cursor-not-allowed text-[#0E0B08] text-[11px] font-bold tracking-widest rounded-full transition-colors shrink-0"
           style={{ fontFamily: "'JetBrains Mono', monospace" }}
         >
@@ -308,13 +483,13 @@ function EmptyState({ noThreads }: { noThreads: boolean }) {
             className="text-5xl text-[#2E2418]"
             style={{ fontFamily: "'DM Serif Display', serif" }}
           >
-            ✈
+            ✉
           </div>
           <p className="text-[#F4EDE4] text-lg" style={{ fontFamily: "'DM Serif Display', serif" }}>
             No conversations yet
           </p>
           <p className="text-[#8C7B68] text-sm">
-            Browse listings and contact a traveler to start messaging.
+            Browse listings and contact someone to start messaging.
           </p>
           <button
             onClick={() => navigate({ to: "/browse" })}
@@ -347,6 +522,7 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(initialThreadId ?? null)
   const [threadDetail, setThreadDetail] = React.useState<ThreadDetail | null>(null)
   const [messages, setMessages] = React.useState<Message[]>([])
+  const [match, setMatch] = React.useState<MatchState | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const navigate = useNavigate()
 
@@ -364,6 +540,7 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   React.useEffect(() => {
     if (!selectedId || !token) return
     setDetailLoading(true)
+    setMatch(null)
     apiFetchThread(selectedId, token)
       .then((detail) => {
         setThreadDetail(detail)
@@ -374,6 +551,8 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
             prev.map((t) => (t.id === selectedId ? { ...t, unread_count: 0 } : t))
           )
         })
+        // Load match state for this thread
+        apiGetMatchState(selectedId, token).then(setMatch).catch(() => setMatch(null))
       })
       .catch(() => {})
       .finally(() => setDetailLoading(false))
@@ -412,6 +591,22 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     }
   }, [selectedId, token, user?.id])
 
+  // Realtime — refresh match state when a confirmation is inserted in this thread
+  React.useEffect(() => {
+    if (!selectedId || !supabase || !token) return
+    const channel = supabase
+      .channel(`matches:${selectedId}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "match_confirmations", filter: `thread_id=eq.${selectedId}` }, () => {
+        apiGetMatchState(selectedId, token).then(setMatch).catch(() => {})
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [selectedId, token])
+
   function selectThread(id: string) {
     setSelectedId(id)
     setThreadDetail(null)
@@ -436,6 +631,32 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
           : t
       )
     )
+  }
+
+  async function handleConfirm() {
+    if (!selectedId || !token) return
+    const res = await apiConfirmMatch(selectedId, token)
+    // Refresh full match state (the system message arrives via the messages
+    // realtime channel and renders as a system bubble automatically).
+    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
+    if (updated) setMatch(updated)
+    if (res.both_confirmed) {
+      // Both confirmed: pull the system message the backend just inserted.
+      apiFetchThread(selectedId, token)
+        .then((detail) => setMessages(detail.messages))
+        .catch(() => {})
+    }
+  }
+
+  async function handleDeal() {
+    if (!selectedId || !token) return
+    await apiCloseDeal(selectedId, token)
+    setMatch({ stage: "done", me_confirmed: true, other_confirmed: true, both_confirmed: true, listing_kind: null, listing_status: "completed" })
+    // For non-trip deals the listing/thread is deleted server-side; drop it
+    // from the list after a short beat so the user sees the "archived" state.
+    setTimeout(() => {
+      setThreads((prev) => prev.filter((t) => t.id !== selectedId))
+    }, 2500)
   }
 
   const showConversation = !!selectedId && !!threadDetail
@@ -501,7 +722,10 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
               thread={threadDetail}
               messages={messages}
               currentUserId={user?.id ?? ""}
+              match={match}
               onSend={handleSend}
+              onConfirm={handleConfirm}
+              onDeal={handleDeal}
               onBack={handleBack}
             />
           ) : (

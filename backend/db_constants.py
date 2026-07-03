@@ -2,6 +2,7 @@ class Tables:
     PROFILES = "profiles"
     LISTINGS = "listings"
     MESSAGES = "messages"
+    COMPLETED_DEALS = "completed_deals"
 
 
 class ProfileFields:
@@ -31,8 +32,12 @@ class MessageFields:
     ID = "id"
     READ_AT = "read_at"
     SENDER_ID = "sender_id"
+    IS_SYSTEM = "is_system"
 
 
 class ListingStatus:
     OPEN = "open"
+    MATCHED = "matched"
+    DEALING = "dealing"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"

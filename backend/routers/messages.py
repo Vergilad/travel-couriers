@@ -43,6 +43,7 @@ async def send_message(body: MessageCreate, user=Depends(get_current_user)):
             "thread_id": body.thread_id,
             "sender_id": user.id,
             "body": text,
+            "is_system": False,
         }).execute()
         return result.data[0]
     except HTTPException:
@@ -57,6 +58,8 @@ async def mark_thread_read(thread_id: str, user=Depends(get_current_user)):
     try:
         _assert_participant(thread_id, user.id)
         now = datetime.now(timezone.utc).isoformat()
+        # Mark unread messages from the other party as read. System messages
+        # (sender_id NULL) are auto-read and never count toward unread.
         supabase.table("messages").update({"read_at": now}).eq("thread_id", thread_id).neq("sender_id", user.id).is_("read_at", "null").execute()
         return {"ok": True}
     except HTTPException:

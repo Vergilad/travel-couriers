@@ -22,6 +22,16 @@ interface ProfileListing {
   created_at: string
 }
 
+interface HistoryDeal {
+  id: string
+  kind: string
+  origin_city: string
+  dest_city: string
+  depart_date: string | null
+  completed_at: string
+  partner: { display_name: string | null; avatar_url: string | null }
+}
+
 interface Review {
   id: string
   reviewer_id: string
@@ -77,6 +87,16 @@ export function ProfilePage({ userId }: { userId: string }) {
       const res = await fetch(`/api/reviews/${userId}`)
       if (!res.ok) return []
       return res.json() as Promise<Review[]>
+    },
+    enabled: !!profile,
+  })
+
+  const { data: history } = useQuery({
+    queryKey: ["profile-history", userId],
+    queryFn: async () => {
+      const res = await fetch(`/api/profiles/${userId}/history`)
+      if (!res.ok) return []
+      return res.json() as Promise<HistoryDeal[]>
     },
     enabled: !!profile,
   })
@@ -286,6 +306,103 @@ export function ProfilePage({ userId }: { userId: string }) {
                   </span>
                 </motion.div>
               ))}
+            </div>
+          )}
+        </motion.div>
+      </section>
+
+      {/* ── History ── */}
+      <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-1 h-4 bg-[#C8956A]/40 rounded-full" />
+            <h2
+              className="text-[10px] tracking-[0.22em] text-[#8C7B68]"
+              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              HISTORY
+            </h2>
+            {history && history.length > 0 && (
+              <span
+                className="text-[10px] text-[#3A2E20] tabular-nums"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                {history.length}
+              </span>
+            )}
+          </div>
+
+          {!history ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : history.length === 0 ? (
+            <p
+              className="text-[#3A2E20] text-[11px] tracking-wider"
+              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              No completed deals yet.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {history.map((deal, i) => {
+                const partnerName = deal.partner?.display_name ?? "Anonymous"
+                return (
+                  <motion.div
+                    key={deal.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
+                    className="flex items-center justify-between px-4 py-3.5 bg-[#0E0B08] border border-[#1A1208] hover:border-[#2E2418] rounded-sm transition-colors"
+                  >
+                    <div className="flex items-center gap-5 min-w-0">
+                      <span
+                        className="text-[9px] text-[#C8956A]/50 tracking-widest w-14 shrink-0"
+                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        {deal.kind?.toUpperCase()}
+                      </span>
+                      <span className="text-sm text-[#F4EDE4] truncate">
+                        {deal.origin_city}
+                        <span className="text-[#C8956A]/50 mx-2">→</span>
+                        {deal.dest_city}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-4 h-4 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center overflow-hidden">
+                          {deal.partner?.avatar_url ? (
+                            <img src={deal.partner.avatar_url} alt={partnerName} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[8px] text-[#C8956A]" style={{ fontFamily: "'DM Serif Display', serif" }}>
+                              {(partnerName).charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                          {partnerName}
+                        </span>
+                      </div>
+                      <span
+                        className="text-[9px] text-[#3A2E20] tracking-widest"
+                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        {new Date(deal.completed_at)
+                          .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                          .toUpperCase()}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </motion.div>

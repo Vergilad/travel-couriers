@@ -80,3 +80,4 @@ class ProfileUpdate(BaseModel):
     bio: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    avatar_url: Optional[str] = None

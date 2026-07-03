@@ -1,3 +1,15 @@
+-- ============================================================================
+-- NOTE: This file documents the initial schema. Schema evolution is tracked
+-- in supabase/migrations/. Relevant later migrations:
+--   20260626000000_listings_extended_fields.sql  → listings.date_flexibility
+--   20260629000000_match_and_history.sql         → two-stage match & deal flow:
+--       • listings.status gains 'dealing'
+--       • messages.sender_id nullable + messages.is_system (system messages)
+--       • trigger handle_match_confirmation reworked (trip stays open; no auto-payment)
+--       • FK ON DELETE CASCADE on threads/thread_participants/messages/match_confirmations/payments
+--       • new completed_deals table (public History archive)
+-- ============================================================================
+
 -- Create profiles table
 CREATE TABLE profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id),
