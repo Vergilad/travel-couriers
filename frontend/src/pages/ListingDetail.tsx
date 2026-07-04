@@ -14,10 +14,9 @@ const KIND_COLORS: Record<string, string> = {
 }
 
 const FLEXIBILITY_LABELS: Record<string, string> = {
-  exact: "Exact dates",
-  "3days": "±3 days flexible",
-  "1week": "±1 week flexible",
-  "2weeks": "±2 weeks flexible",
+  exact: "Exact date",
+  week: "±1 week flexible",
+  month: "±1 month flexible",
 }
 
 function formatPrice(price: number | string | null | undefined, currency: string | null | undefined): string {

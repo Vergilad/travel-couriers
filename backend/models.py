@@ -1,9 +1,26 @@
 from pydantic import BaseModel, field_validator, model_validator
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal, Optional
 
 MAX_PRICE = 10_000.0
 MAX_CAPACITY_KG = 3_000.0
+
+# Text length boundaries, enforced on the backend as well as the UI.
+MAX_DISPLAY_NAME = 40
+MAX_BIO = 300
+MAX_TITLE = 80
+MAX_DESCRIPTION = 500
+MAX_MESSAGE = 1000
+MAX_REVIEW_COMMENT = 500
+MAX_REPORT_DETAILS = 500
+
+# Flexibility window (in days) applied when filtering listings by date.
+FLEXIBILITY_DAYS: dict[str, int] = {
+    "exact": 0,
+    "week": 7,
+    "month": 30,
+}
+
 
 class ListingCreate(BaseModel):
     kind: Literal["trip", "request", "delivery"]
@@ -19,7 +36,7 @@ class ListingCreate(BaseModel):
     depart_date: Optional[date] = None
     arrive_date: Optional[date] = None
     accepts_multiple: bool = False
-    date_flexibility: Literal["exact", "3days", "1week", "2weeks"] = "exact"
+    date_flexibility: Literal["exact", "week", "month"] = "exact"
 
     @field_validator("price")
     @classmethod
@@ -48,6 +65,20 @@ class ListingCreate(BaseModel):
             raise ValueError("Field cannot be empty")
         return v.strip()
 
+    @field_validator("title")
+    @classmethod
+    def validate_title_length(cls, v):
+        if len(v) > MAX_TITLE:
+            raise ValueError(f"Title cannot exceed {MAX_TITLE} characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_description_length(cls, v):
+        if v is not None and len(v) > MAX_DESCRIPTION:
+            raise ValueError(f"Description cannot exceed {MAX_DESCRIPTION} characters")
+        return v
+
     @model_validator(mode="after")
     def validate_dates(self):
         if self.arrive_date and self.depart_date:
@@ -60,12 +91,28 @@ class MessageCreate(BaseModel):
     thread_id: str
     body: str
 
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Message cannot be empty")
+        if len(v) > MAX_MESSAGE:
+            raise ValueError(f"Message cannot exceed {MAX_MESSAGE} characters")
+        return v
+
 
 class ReviewCreate(BaseModel):
     listing_id: str
     reviewee_id: str
     rating: int
     comment: str
+
+    @field_validator("comment")
+    @classmethod
+    def validate_comment(cls, v):
+        if len(v) > MAX_REVIEW_COMMENT:
+            raise ValueError(f"Comment cannot exceed {MAX_REVIEW_COMMENT} characters")
+        return v
 
 
 class ReportCreate(BaseModel):
@@ -74,6 +121,13 @@ class ReportCreate(BaseModel):
     reason: str
     details: str
 
+    @field_validator("details")
+    @classmethod
+    def validate_details(cls, v):
+        if len(v) > MAX_REPORT_DETAILS:
+            raise ValueError(f"Details cannot exceed {MAX_REPORT_DETAILS} characters")
+        return v
+
 
 class ProfileUpdate(BaseModel):
     display_name: Optional[str] = None
@@ -81,3 +135,46 @@ class ProfileUpdate(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, v):
+        if v is not None and len(v) > MAX_DISPLAY_NAME:
+            raise ValueError(f"Display name cannot exceed {MAX_DISPLAY_NAME} characters")
+        return v
+
+    @field_validator("bio")
+    @classmethod
+    def validate_bio(cls, v):
+        if v is not None and len(v) > MAX_BIO:
+            raise ValueError(f"Bio cannot exceed {MAX_BIO} characters")
+        return v
+
+
+def flexibility_window_days(value: Optional[str]) -> int:
+    """Days of slack a listing's date gets when filtered by depart_from/depart_to."""
+    if not value:
+        return 0
+    return FLEXIBILITY_DAYS.get(value, 0)
+
+
+def date_falls_in_window(
+    listing_date: Optional[date],
+    depart_from: Optional[date],
+    depart_to: Optional[date],
+    flexibility_days: int,
+) -> bool:
+    """Does `listing_date` satisfy the [depart_from, depart_to] window,
+    expanded by `flexibility_days` on both sides?
+
+    Listings with no date (NULL) are treated as always matching — they surface
+    under any time filter (sorted to the bottom by the caller)."""
+    if listing_date is None:
+        return True
+    lo = depart_from - timedelta(days=flexibility_days) if depart_from else None
+    hi = depart_to + timedelta(days=flexibility_days) if depart_to else None
+    if lo and listing_date < lo:
+        return False
+    if hi and listing_date > hi:
+        return False
+    return True

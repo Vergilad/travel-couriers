@@ -5,6 +5,7 @@ import { authedFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 
 const MAX_BIO = 300
+const MAX_DISPLAY_NAME = 40
 
 type Section = "profile" | "account" | "danger"
 
@@ -25,20 +26,23 @@ function Input({
   placeholder,
   disabled,
   type = "text",
+  maxLength,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   disabled?: boolean
   type?: string
+  maxLength?: number
 }) {
   return (
     <input
       type={type}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
+      maxLength={maxLength}
       className="w-full bg-[#0E0B08] border border-[#2E2418] focus:border-[#C8956A]/50 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 px-4 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{ fontFamily: "'JetBrains Mono', monospace" }}
     />
@@ -127,8 +131,6 @@ export function SettingsPage() {
   // Profile fields
   const [displayName, setDisplayName] = React.useState("")
   const [bio, setBio] = React.useState("")
-  const [city, setCity] = React.useState("")
-  const [country, setCountry] = React.useState("")
   const [avatarUrl, setAvatarUrl] = React.useState<string | undefined>()
   const [avatarUploading, setAvatarUploading] = React.useState(false)
   const [profileSaving, setProfileSaving] = React.useState(false)
@@ -152,14 +154,12 @@ export function SettingsPage() {
     async function loadProfile() {
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, bio, city, country, avatar_url")
+        .select("display_name, bio, avatar_url")
         .eq("id", user!.id)
         .single()
       if (data) {
         setDisplayName(data.display_name ?? "")
         setBio(data.bio ?? "")
-        setCity(data.city ?? "")
-        setCountry(data.country ?? "")
         setAvatarUrl(data.avatar_url ?? undefined)
       }
     }
@@ -215,8 +215,6 @@ export function SettingsPage() {
         body: JSON.stringify({
           display_name: displayName || undefined,
           bio: bio || undefined,
-          city: city || undefined,
-          country: country || undefined,
         }),
       })
       if (!res.ok) {
@@ -396,7 +394,17 @@ export function SettingsPage() {
                       value={displayName}
                       onChange={setDisplayName}
                       placeholder="Your name"
+                      maxLength={MAX_DISPLAY_NAME}
                     />
+                    <p
+                      className="mt-1.5 text-right text-[9px] tracking-wider tabular-nums"
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: displayName.length >= MAX_DISPLAY_NAME - 5 ? "#C47B6B" : "#3A2E20",
+                      }}
+                    >
+                      {displayName.length}/{MAX_DISPLAY_NAME}
+                    </p>
                   </div>
 
                   <div>
@@ -416,17 +424,6 @@ export function SettingsPage() {
                     >
                       {bio.length}/{MAX_BIO}
                     </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>City</Label>
-                      <Input value={city} onChange={setCity} placeholder="Istanbul" />
-                    </div>
-                    <div>
-                      <Label>Country</Label>
-                      <Input value={country} onChange={setCountry} placeholder="Turkey" />
-                    </div>
                   </div>
 
                   <AnimatePresence>

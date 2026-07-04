@@ -137,11 +137,30 @@ export function CityAutocomplete({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (!open) return
-    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, results.length - 1)) }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
-    else if (e.key === "Enter" && activeIndex >= 0) { e.preventDefault(); handleSelect(results[activeIndex]) }
-    else if (e.key === "Escape") { setOpen(false); inputRef.current?.blur() }
+    if (e.key === "ArrowDown" && open) {
+      e.preventDefault(); setActiveIndex(i => Math.min(i + 1, results.length - 1))
+    } else if (e.key === "ArrowUp" && open) {
+      e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0))
+    } else if (e.key === "Enter") {
+      // The city field must never submit its parent form by itself.
+      // Pick a highlighted row if there is one; otherwise revert any
+      // unconfirmed text (blank on a new listing) so the user has to
+      // type again AND choose from the list.
+      e.preventDefault()
+      if (open && activeIndex >= 0 && results[activeIndex]) {
+        handleSelect(results[activeIndex])
+      } else if (!confirmed) {
+        if (value) {
+          setInputValue(value)
+        } else {
+          setInputValue("")
+          onClear?.()
+        }
+        setOpen(false)
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false); inputRef.current?.blur()
+    }
   }
 
   const py = compact ? "py-2" : "py-3"

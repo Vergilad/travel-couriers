@@ -6,7 +6,7 @@ import { authedFetch } from "@/lib/api"
 import { CityAutocomplete } from "@/components/CityAutocomplete"
 
 type Kind = "trip" | "request" | "delivery"
-type DateFlexibility = "exact" | "3days" | "1week" | "2weeks"
+type DateFlexibility = "exact" | "week" | "month"
 
 interface FormData {
   title: string
@@ -21,17 +21,21 @@ interface FormData {
   currency: string
   capacity_kg: string
   date_flexibility: DateFlexibility
+  no_date: boolean
 }
 
 const MAX_PRICE = 10_000
 const MAX_KG = 3_000
+const MAX_TITLE = 80
+const MAX_DESCRIPTION = 500
 
 function TerminalInput({
-  label, type = "text", value, onChange, placeholder, required, min, max, step,
+  label, type = "text", value, onChange, placeholder, required, min, max, step, maxLength,
 }: {
   label: string; type?: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; required?: boolean; min?: number; max?: number; step?: string;
+  placeholder?: string; required?: boolean; min?: number; max?: number; step?: string; maxLength?: number;
 }) {
+  const atLimit = maxLength && value.length >= maxLength
   return (
     <div>
       <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
@@ -42,34 +46,53 @@ function TerminalInput({
         <input
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
           placeholder={placeholder}
           required={required}
           min={min}
           max={max}
           step={step}
-          className="w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 pl-8 pr-4 text-[12px] transition-colors"
+          maxLength={maxLength}
+          className={`w-full bg-[#111008] border focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 pl-8 ${maxLength ? "pr-16" : "pr-4"} text-[12px] transition-colors ${atLimit ? "border-[#C47B6B]/60 focus:border-[#C47B6B]/60" : "border-[#2E2418] focus:border-[#C8956A]/60"}`}
           style={{ fontFamily: "'JetBrains Mono', monospace", colorScheme: "dark" }}
         />
+        {maxLength && (
+          <span
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-wider tabular-nums pointer-events-none"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: atLimit ? "#C47B6B" : "#3A2E20" }}
+          >
+            {value.length}/{maxLength}
+          </span>
+        )}
       </div>
     </div>
   )
 }
 
-function TerminalTextarea({ label, value, onChange, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string
+function TerminalTextarea({ label, value, onChange, placeholder, maxLength }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number
 }) {
+  const atLimit = maxLength && value.length >= maxLength
   return (
     <div>
       <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{label}</label>
       <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
         placeholder={placeholder}
+        maxLength={maxLength}
         rows={4}
-        className="w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 px-4 text-[12px] transition-colors resize-none leading-relaxed"
+        className={`w-full bg-[#111008] border focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 px-4 text-[12px] transition-colors resize-none leading-relaxed ${atLimit ? "border-[#C47B6B]/60 focus:border-[#C47B6B]/60" : "border-[#2E2418] focus:border-[#C8956A]/60"}`}
         style={{ fontFamily: "'JetBrains Mono', monospace" }}
       />
+      {maxLength && (
+        <p
+          className="mt-1.5 text-right text-[9px] tracking-wider tabular-nums"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: atLimit ? "#C47B6B" : "#3A2E20" }}
+        >
+          {value.length}/{maxLength}
+        </p>
+      )}
     </div>
   )
 }
@@ -95,10 +118,9 @@ function Toggle({ checked, onChange, label, sublabel }: {
 }
 
 const FLEXIBILITY_OPTIONS: { value: DateFlexibility; label: string; desc: string }[] = [
-  { value: "exact", label: "EXACT", desc: "Specific dates only" },
-  { value: "3days", label: "±3 DAYS", desc: "Give or take a few days" },
-  { value: "1week", label: "±1 WEEK", desc: "Roughly that week" },
-  { value: "2weeks", label: "±2 WEEKS", desc: "Approximate window" },
+  { value: "exact", label: "EXACT", desc: "Specific date only" },
+  { value: "week", label: "±1 WEEK", desc: "Roughly that week" },
+  { value: "month", label: "±1 MONTH", desc: "Approximate month" },
 ]
 
 const KIND_META: Record<Kind, { headline: string; sub: string; gate: string }> = {
@@ -128,7 +150,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
     title: "", description: "", origin_city: "", origin_country: "",
     dest_city: "", dest_country: "", depart_date: "", arrive_date: "",
     price: "", currency: "USD", capacity_kg: "",
-    date_flexibility: "exact",
+    date_flexibility: "exact", no_date: false,
   })
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -172,11 +194,14 @@ export function CreateListing({ kind }: { kind: Kind }) {
         dest_city: form.dest_city,
         dest_country: form.dest_country,
         currency: form.currency || "USD",
-        date_flexibility: form.date_flexibility,
+        // When the user picked "no specific date", leave flexibility at exact
+        // and omit the dates entirely so the backend stores NULLs — those
+        // listings then surface under every time filter.
+        date_flexibility: form.no_date ? "exact" : form.date_flexibility,
       }
       if (form.description) body.description = form.description
-      if (form.depart_date) body.depart_date = form.depart_date
-      if (form.arrive_date) body.arrive_date = form.arrive_date
+      if (!form.no_date && form.depart_date) body.depart_date = form.depart_date
+      if (!form.no_date && form.arrive_date) body.arrive_date = form.arrive_date
       if (form.price) body.price = Math.min(Number(form.price), MAX_PRICE)
       if (form.capacity_kg) body.capacity_kg = Math.min(Number(form.capacity_kg), MAX_KG)
 
@@ -226,7 +251,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
     )
   }
 
-  const hasDateFlexibility = kind === "trip" && form.depart_date
+  const hasDateFlexibility = kind === "trip" && !form.no_date && form.depart_date
 
   return (
     <div className="min-h-screen bg-[#0E0B08] pt-16">
@@ -274,41 +299,60 @@ export function CreateListing({ kind }: { kind: Kind }) {
           {kind === "trip" && (
             <div>
               <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Travel dates</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-                <TerminalInput
-                  label="Departure date"
-                  type="date"
-                  value={form.depart_date}
-                  onChange={set("depart_date")}
-                />
-                <TerminalInput
-                  label="Arrival date"
-                  type="date"
-                  value={form.arrive_date}
-                  onChange={set("arrive_date")}
-                />
-              </div>
-              {hasDateFlexibility && (
-                <div>
-                  <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-2 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    Date flexibility
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {FLEXIBILITY_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => set("date_flexibility")(opt.value)}
-                        className={`py-2.5 px-3 rounded-sm border text-center transition-all ${form.date_flexibility === opt.value
-                          ? "border-[#C8956A]/50 bg-[#C8956A]/10 text-[#C8956A]"
-                          : "border-[#2E2418] text-[#8C7B68] hover:border-[#2E2418]/80 hover:text-[#F4EDE4]"}`}
-                      >
-                        <p className="text-[10px] tracking-widest font-bold" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{opt.label}</p>
-                        <p className="text-[10px] mt-0.5 opacity-70">{opt.desc}</p>
-                      </button>
-                    ))}
+              <div className="mb-5">
+                <button
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, no_date: !p.no_date, depart_date: !p.no_date ? "" : p.depart_date, arrive_date: !p.no_date ? "" : p.arrive_date }))}
+                  className={`flex items-center gap-4 w-full p-4 rounded-sm border transition-all text-left ${form.no_date ? "border-[#C8956A]/40 bg-[#C8956A]/5" : "border-[#2E2418] hover:border-[#2E2418]/80"}`}
+                >
+                  <div className={`w-9 h-5 rounded-full flex items-center transition-all shrink-0 ${form.no_date ? "bg-[#C8956A]" : "bg-[#1F1810] border border-[#2E2418]"}`}>
+                    <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mx-0.5 ${form.no_date ? "translate-x-4" : "translate-x-0"}`} />
                   </div>
-                </div>
+                  <div>
+                    <p className="text-[12px] text-[#F4EDE4]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>No specific date</p>
+                    <p className="text-[11px] text-[#8C7B68] mt-0.5">Show this listing under every time filter.</p>
+                  </div>
+                </button>
+              </div>
+              {!form.no_date && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+                    <TerminalInput
+                      label="Departure date"
+                      type="date"
+                      value={form.depart_date}
+                      onChange={set("depart_date")}
+                    />
+                    <TerminalInput
+                      label="Arrival date"
+                      type="date"
+                      value={form.arrive_date}
+                      onChange={set("arrive_date")}
+                    />
+                  </div>
+                  {hasDateFlexibility && (
+                    <div>
+                      <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-2 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                        Date flexibility
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {FLEXIBILITY_OPTIONS.map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => set("date_flexibility")(opt.value)}
+                            className={`py-2.5 px-3 rounded-sm border text-center transition-all ${form.date_flexibility === opt.value
+                              ? "border-[#C8956A]/50 bg-[#C8956A]/10 text-[#C8956A]"
+                              : "border-[#2E2418] text-[#8C7B68] hover:border-[#2E2418]/80 hover:text-[#F4EDE4]"}`}
+                          >
+                            <p className="text-[10px] tracking-widest font-bold" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{opt.label}</p>
+                            <p className="text-[10px] mt-0.5 opacity-70">{opt.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -316,15 +360,34 @@ export function CreateListing({ kind }: { kind: Kind }) {
           {(kind === "delivery" || kind === "request") && (
             <div>
               <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Timing</h2>
-              <TerminalInput
-                label={kind === "delivery" ? "Needed by (latest delivery)" : "Needed by (latest pickup)"}
-                type="date"
-                value={form.arrive_date}
-                onChange={set("arrive_date")}
-              />
-              <p className="mt-2 text-[11px] text-[#8C7B68]/70" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                Couriers whose trip arrives before this date will match your {kind === "delivery" ? "delivery" : "request"}.
-              </p>
+              <div className="mb-5">
+                <button
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, no_date: !p.no_date, arrive_date: !p.no_date ? "" : p.arrive_date }))}
+                  className={`flex items-center gap-4 w-full p-4 rounded-sm border transition-all text-left ${form.no_date ? "border-[#C8956A]/40 bg-[#C8956A]/5" : "border-[#2E2418] hover:border-[#2E2418]/80"}`}
+                >
+                  <div className={`w-9 h-5 rounded-full flex items-center transition-all shrink-0 ${form.no_date ? "bg-[#C8956A]" : "bg-[#1F1810] border border-[#2E2418]"}`}>
+                    <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mx-0.5 ${form.no_date ? "translate-x-4" : "translate-x-0"}`} />
+                  </div>
+                  <div>
+                    <p className="text-[12px] text-[#F4EDE4]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>No specific date</p>
+                    <p className="text-[11px] text-[#8C7B68] mt-0.5">Show this listing under every time filter.</p>
+                  </div>
+                </button>
+              </div>
+              {!form.no_date && (
+                <>
+                  <TerminalInput
+                    label={kind === "delivery" ? "Needed by (latest delivery)" : "Needed by (latest pickup)"}
+                    type="date"
+                    value={form.arrive_date}
+                    onChange={set("arrive_date")}
+                  />
+                  <p className="mt-2 text-[11px] text-[#8C7B68]/70" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                    Couriers whose trip arrives before this date will match your {kind === "delivery" ? "delivery" : "request"}.
+                  </p>
+                </>
+              )}
             </div>
           )}
 
@@ -344,6 +407,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
                   : kind === "request" ? "e.g. A specific tea from a Lisbon shop"
                   : "e.g. Box of books, ~3kg, well packed"
                 }
+                maxLength={MAX_TITLE}
                 required
               />
               <TerminalTextarea
@@ -351,6 +415,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
                 value={form.description}
                 onChange={set("description")}
                 placeholder="Size restrictions, handling instructions, meeting preferences…"
+                maxLength={MAX_DESCRIPTION}
               />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <TerminalInput

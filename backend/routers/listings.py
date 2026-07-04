@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from db import supabase
-from models import ListingCreate
+from models import ListingCreate, flexibility_window_days, date_falls_in_window
 from routers.auth import get_current_user
 from typing import Optional
+from datetime import date
 
 router = APIRouter()
 
@@ -78,6 +79,10 @@ async def browse_listings(
     offset: int = 0,
 ):
     _require_db()
+    # Date filtering is applied in Python (not SQL) so that:
+    #   • a listing's flexibility window widens its matchable range, and
+    #   • undated listings (NULL depart_date) still surface under any time
+    #     filter instead of being dropped by a `depart_date >= X` clause.
     query = (
         supabase.table("listings")
         .select("*")
@@ -93,14 +98,35 @@ async def browse_listings(
         query = query.gte("price", price_min)
     if price_max is not None:
         query = query.lte("price", price_max)
-    if depart_from:
-        query = query.gte("depart_date", depart_from)
-    if depart_to:
-        query = query.lte("depart_date", depart_to)
 
-    result = query.order(order_by, desc=True).limit(limit).offset(offset).execute()
+    # Fetch a generous pool so Python-side date filtering + sort don't get
+    # truncated by the page limit before undated listings can surface.
+    pool_limit = min(max(limit * 5, limit + 50), 200)
+    result = query.order(order_by, desc=True).limit(pool_limit).execute()
+    rows = result.data or []
 
-    return attach_owner_profiles(result.data or [])
+    has_date_filter = bool(depart_from or depart_to)
+    parsed_from = date.fromisoformat(depart_from) if depart_from else None
+    parsed_to = date.fromisoformat(depart_to) if depart_to else None
+
+    if has_date_filter:
+        def in_window(row: dict) -> bool:
+            raw = row.get("depart_date")
+            listing_date = date.fromisoformat(raw) if isinstance(raw, str) else raw
+            flex = flexibility_window_days(row.get("date_flexibility"))
+            return date_falls_in_window(listing_date, parsed_from, parsed_to, flex)
+
+        rows = [r for r in rows if in_window(r)]
+
+    # Sort: dated listings first (newest created_at first), then undated ones
+    # (newest first). ISO timestamps sort lexically, so to get newest-first we
+    # sort ascending on the group flag then reverse-compare created_at via a
+    # two-pass stable sort (Python's sort is stable, so each pass refines).
+    rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)  # newest first
+    rows.sort(key=lambda r: 0 if r.get("depart_date") else 1)         # dated first, stable
+
+    page = rows[offset:offset + limit] if offset else rows[:limit]
+    return attach_owner_profiles(page)
 
 
 @router.get("/{listing_id}")

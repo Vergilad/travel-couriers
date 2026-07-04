@@ -76,10 +76,13 @@ function ListingCard({ listing }: { listing: Listing }) {
                   {formatListingDate(listing.depart_date)}
                   {(listing as any).date_flexibility && (listing as any).date_flexibility !== "exact" && (
                     <span className="text-[#8C7B68]/60 ml-1">
-                      {(listing as any).date_flexibility === "3days" ? "±3d" : (listing as any).date_flexibility === "1week" ? "±1w" : "±2w"}
+                      {(listing as any).date_flexibility === "week" ? "±1w" : "±1mo"}
                     </span>
                   )}
                 </span>
+              )}
+              {!listing.depart_date && (
+                <span className="text-[#8C7B68]/60 italic">FLEXIBLE</span>
               )}
             </div>
             {(listing as any).owner_display_name && (
