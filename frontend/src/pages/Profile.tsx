@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query"
-import { motion } from "framer-motion"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { motion, AnimatePresence } from "framer-motion"
 import { Link } from "@tanstack/react-router"
+import { useState } from "react"
 import { useAuth } from "@/lib/auth"
+import { authedFetch } from "@/lib/api"
+import { getInitial } from "@/lib/db_constants"
 
 interface PublicProfile {
   id: string
@@ -38,6 +41,20 @@ interface Review {
   rating: number
   comment: string | null
   created_at: string
+  reviewer?: {
+    id: string | null
+    display_name: string | null
+    avatar_url: string | null
+  } | null
+}
+
+interface EligibleDeal {
+  completed_deal_id: string
+  reviewee_id: string
+  kind: string | null
+  origin_city: string | null
+  dest_city: string | null
+  completed_at: string | null
 }
 
 function RatingDots({ rating, max = 5 }: { rating: number; max?: number }) {
@@ -54,13 +71,186 @@ function RatingDots({ rating, max = 5 }: { rating: number; max?: number }) {
   )
 }
 
+// Interactive dot picker — same visual language as RatingDots, but hoverable
+// and clickable. Hover lifts to a slightly larger dot for affordance.
+function RatingInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div className="flex gap-2.5 items-center" onMouseLeave={() => setHover(0)}>
+      {[1, 2, 3, 4, 5].map((i) => {
+        const active = i <= (hover || value)
+        return (
+          <motion.button
+            key={i}
+            type="button"
+            aria-label={`Rate ${i}`}
+            onMouseEnter={() => setHover(i)}
+            onClick={() => onChange(i)}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            className="p-0.5 cursor-pointer"
+          >
+            <div
+              className="rounded-full transition-colors"
+              style={{
+                width: active ? 18 : 14,
+                height: active ? 18 : 14,
+                background: active ? "#C8956A" : "#2E2418",
+              }}
+            />
+          </motion.button>
+        )
+      })}
+    </div>
+  )
+}
+
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse bg-[#1A1208] rounded-sm ${className}`} />
+}
+
+// ─── Rate-this-person panel ──────────────────────────────────────────────────
+// Opens when the viewer has an unreviewed completed deal with this user.
+const MAX_REVIEW_COMMENT = 500
+
+function RatePanel({
+  partnerName,
+  deal,
+  onClose,
+  onSubmitted,
+}: {
+  partnerName: string
+  deal: EligibleDeal
+  onClose: () => void
+  onSubmitted: () => void
+}) {
+  const [rating, setRating] = useState(0)
+  const [comment, setComment] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const qc = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await authedFetch("/api/reviews", {
+        method: "POST",
+        body: JSON.stringify({
+          completed_deal_id: deal.completed_deal_id,
+          reviewee_id: deal.reviewee_id,
+          rating,
+          comment: comment.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail ?? "Failed to submit review")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-reviews", deal.reviewee_id] })
+      qc.invalidateQueries({ queryKey: ["review-eligible", deal.reviewee_id] })
+      onSubmitted()
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
+  async function handleSubmit() {
+    if (rating === 0) {
+      setError("Please select a rating")
+      return
+    }
+    setError(null)
+    mutation.mutate()
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden"
+    >
+      <div className="mt-4 p-5 bg-[#0E0B08] border border-[#2E2418] rounded-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3
+            className="text-[11px] tracking-[0.2em] text-[#C8956A]"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            RATE {partnerName.toUpperCase()}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-[#3A2E20] hover:text-[#8C7B68] text-xs transition-colors"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {deal.origin_city && deal.dest_city && (
+          <p
+            className="text-[10px] text-[#3A2E20] tracking-wider mb-4"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {deal.kind?.toUpperCase()} · {deal.origin_city} → {deal.dest_city}
+          </p>
+        )}
+
+        <div className="mb-4">
+          <RatingInput value={rating} onChange={setRating} />
+        </div>
+
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Share your experience (optional)…"
+          rows={3}
+          maxLength={MAX_REVIEW_COMMENT}
+          className="w-full bg-[#111008] border border-[#2E2418] rounded-md px-4 py-2.5 text-[13px] text-[#F4EDE4] placeholder-[#3A2E20] resize-none focus:outline-none focus:border-[#C8956A]/40 transition-colors"
+        />
+        <div className="flex items-center justify-between mt-1.5">
+          <span
+            className="text-[9px] text-[#3A2E20] tabular-nums"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {comment.length}/{MAX_REVIEW_COMMENT}
+          </span>
+          {error && (
+            <span
+              className="text-[10px] text-[#C8956A]"
+              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            >
+              {error.toUpperCase()}
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={handleSubmit}
+            disabled={mutation.isPending || rating === 0}
+            className="flex-1 px-4 py-2.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-40 disabled:cursor-not-allowed text-[#0E0B08] text-[11px] font-bold tracking-widest rounded-full transition-colors"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            {mutation.isPending ? "…" : "SUBMIT REVIEW"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] text-[11px] tracking-widest rounded-full transition-colors"
+            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
 }
 
 export function ProfilePage({ userId }: { userId: string }) {
   const { user } = useAuth()
   const isOwnProfile = user?.id === userId
+  const [rateOpen, setRateOpen] = useState(false)
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", userId],
@@ -69,6 +259,19 @@ export function ProfilePage({ userId }: { userId: string }) {
       if (!res.ok) throw new Error("Profile not found")
       return res.json() as Promise<PublicProfile>
     },
+  })
+
+  // Eligible unreviewed deal between the viewer and this user — drives the
+  // "Rate {name}" button. Only meaningful on someone else's profile.
+  const { data: eligibleDeal } = useQuery({
+    queryKey: ["review-eligible", userId],
+    queryFn: async () => {
+      const res = await authedFetch(`/api/reviews/eligible/with?partner_id=${userId}`)
+      if (!res.ok) return null
+      const data = await res.json()
+      return (data ?? null) as EligibleDeal | null
+    },
+    enabled: !!user && !isOwnProfile,
   })
 
   const { data: listings } = useQuery({
@@ -181,7 +384,7 @@ export function ProfilePage({ userId }: { userId: string }) {
                   >
                     {profile?.display_name ?? "Traveler"}
                   </h1>
-                  {isOwnProfile && (
+                  {isOwnProfile ? (
                     <Link to="/settings">
                       <motion.button
                         whileHover={{ borderColor: "rgba(200,149,106,0.6)" }}
@@ -191,7 +394,16 @@ export function ProfilePage({ userId }: { userId: string }) {
                         EDIT PROFILE
                       </motion.button>
                     </Link>
-                  )}
+                  ) : eligibleDeal ? (
+                    <motion.button
+                      onClick={() => setRateOpen((v) => !v)}
+                      whileHover={{ borderColor: "rgba(200,149,106,0.6)" }}
+                      className="px-5 py-2 text-[10px] border border-[#C8956A]/40 bg-[#C8956A]/5 text-[#C8956A] hover:bg-[#C8956A]/10 rounded-sm transition-colors tracking-[0.15em]"
+                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    >
+                      RATE {profile?.display_name?.toUpperCase() ?? "USER"}
+                    </motion.button>
+                  ) : null}
                 </div>
 
                 <div
@@ -226,6 +438,20 @@ export function ProfilePage({ userId }: { userId: string }) {
                   <p className="text-[#8C7B68] text-sm leading-relaxed max-w-[50ch] mt-4">
                     {profile.bio}
                   </p>
+                )}
+
+                {eligibleDeal && (
+                  <AnimatePresence initial={false}>
+                    {rateOpen && (
+                      <RatePanel
+                        key="rate-panel"
+                        partnerName={profile?.display_name ?? "User"}
+                        deal={eligibleDeal}
+                        onClose={() => setRateOpen(false)}
+                        onSubmitted={() => setRateOpen(false)}
+                      />
+                    )}
+                  </AnimatePresence>
                 )}
               </>
             )}
@@ -441,43 +667,62 @@ export function ProfilePage({ userId }: { userId: string }) {
             </p>
           ) : (
             <div className="space-y-3">
-              {reviews.map((review, i) => (
-                <motion.div
-                  key={review.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.35, delay: i * 0.05, ease: "easeOut" }}
-                  className="p-5 bg-[#0E0B08] border border-[#1A1208] rounded-sm"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-7 h-7 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center"
-                        style={{
-                          fontFamily: "'JetBrains Mono', monospace",
-                          fontSize: "11px",
-                          color: "#C8956A",
-                        }}
-                      >
-                        {review.reviewer_id.charAt(0).toUpperCase()}
+              {reviews.map((review, i) => {
+                const reviewerName = review.reviewer?.display_name ?? "Traveler"
+                return (
+                  <motion.div
+                    key={review.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.35, delay: i * 0.05, ease: "easeOut" }}
+                    className="p-5 bg-[#0E0B08] border border-[#1A1208] rounded-sm"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        {review.reviewer?.id ? (
+                          <Link to="/profile/$userId" params={{ userId: review.reviewer.id }}>
+                            <ReviewerAvatar name={reviewerName} url={review.reviewer?.avatar_url} />
+                          </Link>
+                        ) : (
+                          <ReviewerAvatar name={reviewerName} url={review.reviewer?.avatar_url} />
+                        )}
+                        <div className="flex flex-col gap-1">
+                          {review.reviewer?.id ? (
+                            <Link
+                              to="/profile/$userId"
+                              params={{ userId: review.reviewer.id }}
+                              className="text-[11px] text-[#8C7B68] hover:text-[#F4EDE4] transition-colors"
+                              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                            >
+                              {reviewerName}
+                            </Link>
+                          ) : (
+                            <span
+                              className="text-[11px] text-[#8C7B68]"
+                              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                            >
+                              {reviewerName}
+                            </span>
+                          )}
+                          <RatingDots rating={review.rating} />
+                        </div>
                       </div>
-                      <RatingDots rating={review.rating} />
+                      <span
+                        className="text-[9px] text-[#3A2E20] tracking-widest"
+                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        {new Date(review.created_at)
+                          .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                          .toUpperCase()}
+                      </span>
                     </div>
-                    <span
-                      className="text-[9px] text-[#3A2E20] tracking-widest"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                    >
-                      {new Date(review.created_at)
-                        .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
-                        .toUpperCase()}
-                    </span>
-                  </div>
-                  {review.comment && (
-                    <p className="text-[#8C7B68] text-sm leading-relaxed">{review.comment}</p>
-                  )}
-                </motion.div>
-              ))}
+                    {review.comment && (
+                      <p className="text-[#8C7B68] text-sm leading-relaxed">{review.comment}</p>
+                    )}
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </motion.div>

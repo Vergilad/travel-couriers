@@ -62,24 +62,12 @@ export function CityAutocomplete({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
+  // Initialize from value prop on mount only - no ongoing sync
+  // The component owns the inputValue state after mount
   React.useEffect(() => {
     setInputValue(value)
     setConfirmed(!!value)
-  }, [value])
-
-  React.useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (inputValue.length < 2) { setResults([]); setOpen(false); return }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true)
-      const r = await searchCities(inputValue)
-      setResults(r)
-      setOpen(r.length > 0)
-      setActiveIndex(-1)
-      setLoading(false)
-    }, 300)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [inputValue])
+  }, [])
 
   React.useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -94,10 +82,10 @@ export function CityAutocomplete({
   function handleChange(raw: string) {
     setInputValue(raw)
     setConfirmed(false)
-    // Typing that diverges from the committed value invalidates the parent's
-    // selection — the parent must only ever hold a city that came from a pick.
-    if (raw !== value) onClear?.()
     onChange?.(raw)
+    // Only clear the parent state when the input is explicitly emptied,
+    // not during normal typing. This allows selecting from suggestions
+    // without the field clearing immediately.
     if (!raw && onClear) onClear()
   }
 
@@ -105,11 +93,11 @@ export function CityAutocomplete({
     setInputValue(r.city)
     setConfirmed(true)
     setTouched(false)
-    onSelect(r.city, r.country)
-    onChange?.(r.city)
     setOpen(false)
     setResults([])
-    inputRef.current?.blur()
+    // Call parent callbacks after updating local state
+    onSelect(r.city, r.country)
+    onChange?.(r.city)
   }
 
   function handleBlur() {

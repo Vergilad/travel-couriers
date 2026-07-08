@@ -293,6 +293,7 @@ export type Database = {
       reviews: {
         Row: {
           comment: string | null
+          completed_deal_id: string | null
           created_at: string | null
           id: string
           listing_id: string | null
@@ -302,6 +303,7 @@ export type Database = {
         }
         Insert: {
           comment?: string | null
+          completed_deal_id?: string | null
           created_at?: string | null
           id?: string
           listing_id?: string | null
@@ -311,6 +313,7 @@ export type Database = {
         }
         Update: {
           comment?: string | null
+          completed_deal_id?: string | null
           created_at?: string | null
           id?: string
           listing_id?: string | null
@@ -319,6 +322,13 @@ export type Database = {
           reviewer_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reviews_completed_deal_id_fkey"
+            columns: ["completed_deal_id"]
+            isOneToOne: false
+            referencedRelation: "completed_deals"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reviews_listing_id_fkey"
             columns: ["listing_id"]

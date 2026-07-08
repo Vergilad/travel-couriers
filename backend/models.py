@@ -102,14 +102,24 @@ class MessageCreate(BaseModel):
 
 
 class ReviewCreate(BaseModel):
-    listing_id: str
+    completed_deal_id: str
     reviewee_id: str
     rating: int
-    comment: str
+    comment: str = ""
+
+    @field_validator("rating")
+    @classmethod
+    def validate_rating(cls, v):
+        if not (1 <= v <= 5):
+            raise ValueError("Rating must be between 1 and 5")
+        return v
 
     @field_validator("comment")
     @classmethod
     def validate_comment(cls, v):
+        # Allow empty (no comment) but still cap length. Normalize empty to "".
+        if v is None:
+            return ""
         if len(v) > MAX_REVIEW_COMMENT:
             raise ValueError(f"Comment cannot exceed {MAX_REVIEW_COMMENT} characters")
         return v
