@@ -29,37 +29,82 @@ const MAX_KG = 3_000
 const MAX_TITLE = 80
 const MAX_DESCRIPTION = 500
 
+// ── Shared input style ────────────────────────────────────────────────────────
+const baseInputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "2px",
+  color: "var(--text)",
+  fontFamily: "'JetBrains Mono', monospace",
+  fontSize: "12px",
+  outline: "none",
+  transition: "border-color 0.15s",
+  colorScheme: "dark",
+}
+
+function onFocusBlue(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  e.target.style.borderColor = "var(--accent)"
+}
+function onBlurBorder(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  e.target.style.borderColor = "var(--border)"
+}
+
+// ── Form field components ─────────────────────────────────────────────────────
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <label
+      className="block font-mono text-[10px] tracking-[0.18em] mb-1.5 uppercase"
+      style={{ color: "var(--text-muted)" }}
+    >
+      {children}
+      {required && <span className="ml-1" style={{ color: "var(--destructive)" }}>*</span>}
+    </label>
+  )
+}
+
 function TerminalInput({
   label, type = "text", value, onChange, placeholder, required, min, max, step, maxLength,
 }: {
   label: string; type?: string; value: string; onChange: (v: string) => void;
   placeholder?: string; required?: boolean; min?: number; max?: number; step?: string; maxLength?: number;
 }) {
-  const atLimit = maxLength && value.length >= maxLength
+  const atLimit = !!(maxLength && value.length >= maxLength)
   return (
     <div>
-      <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-        {label}{required && <span className="text-[#C8956A] ml-1">*</span>}
-      </label>
+      <FieldLabel required={required}>{label}</FieldLabel>
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C8956A]/40 select-none pointer-events-none text-[11px]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>›</span>
+        <span
+          className="absolute left-3 top-1/2 -translate-y-1/2 select-none pointer-events-none font-mono text-[11px]"
+          style={{ color: "var(--text-faint)" }}
+        >
+          ›
+        </span>
         <input
           type={type}
           value={value}
-          onChange={(e) => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
+          onChange={e => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
           placeholder={placeholder}
           required={required}
           min={min}
           max={max}
           step={step}
           maxLength={maxLength}
-          className={`w-full bg-[#111008] border focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 pl-8 ${maxLength ? "pr-16" : "pr-4"} text-[12px] transition-colors ${atLimit ? "border-[#C47B6B]/60 focus:border-[#C47B6B]/60" : "border-[#2E2418] focus:border-[#C8956A]/60"}`}
-          style={{ fontFamily: "'JetBrains Mono', monospace", colorScheme: "dark" }}
+          onFocus={onFocusBlue}
+          onBlur={e => {
+            e.target.style.borderColor = atLimit ? "var(--destructive)" : "var(--border)"
+          }}
+          style={{
+            ...baseInputStyle,
+            padding: "10px 12px 10px 28px",
+            paddingRight: maxLength ? "52px" : "12px",
+            borderColor: atLimit ? "var(--destructive)" : "var(--border)",
+          }}
         />
         {maxLength && (
           <span
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] tracking-wider tabular-nums pointer-events-none"
-            style={{ fontFamily: "'JetBrains Mono', monospace", color: atLimit ? "#C47B6B" : "#3A2E20" }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[9px] tracking-wider tabular-nums pointer-events-none"
+            style={{ color: atLimit ? "var(--destructive)" : "var(--text-faint)" }}
           >
             {value.length}/{maxLength}
           </span>
@@ -72,23 +117,30 @@ function TerminalInput({
 function TerminalTextarea({ label, value, onChange, placeholder, maxLength }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number
 }) {
-  const atLimit = maxLength && value.length >= maxLength
+  const atLimit = !!(maxLength && value.length >= maxLength)
   return (
     <div>
-      <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{label}</label>
+      <FieldLabel>{label}</FieldLabel>
       <textarea
         value={value}
-        onChange={(e) => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
+        onChange={e => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
         rows={4}
-        className={`w-full bg-[#111008] border focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 px-4 text-[12px] transition-colors resize-none leading-relaxed ${atLimit ? "border-[#C47B6B]/60 focus:border-[#C47B6B]/60" : "border-[#2E2418] focus:border-[#C8956A]/60"}`}
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        onFocus={onFocusBlue}
+        onBlur={onBlurBorder}
+        style={{
+          ...baseInputStyle,
+          padding: "10px 12px",
+          resize: "none",
+          lineHeight: "1.6",
+          borderColor: atLimit ? "var(--destructive)" : "var(--border)",
+        }}
       />
       {maxLength && (
         <p
-          className="mt-1.5 text-right text-[9px] tracking-wider tabular-nums"
-          style={{ fontFamily: "'JetBrains Mono', monospace", color: atLimit ? "#C47B6B" : "#3A2E20" }}
+          className="mt-1.5 text-right font-mono text-[9px] tracking-wider tabular-nums"
+          style={{ color: atLimit ? "var(--destructive)" : "var(--text-faint)" }}
         >
           {value.length}/{maxLength}
         </p>
@@ -97,6 +149,7 @@ function TerminalTextarea({ label, value, onChange, placeholder, maxLength }: {
   )
 }
 
+// ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ checked, onChange, label, sublabel }: {
   checked: boolean; onChange: (v: boolean) => void; label: string; sublabel?: string
 }) {
@@ -104,19 +157,50 @@ function Toggle({ checked, onChange, label, sublabel }: {
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`flex items-center gap-4 w-full p-4 rounded-sm border transition-all text-left ${checked ? "border-[#C8956A]/40 bg-[#C8956A]/5" : "border-[#2E2418] hover:border-[#2E2418]/80"}`}
+      className="flex items-center gap-4 w-full p-4 rounded-sm text-left transition-all"
+      style={{
+        border: `1px solid ${checked ? "rgba(37,99,235,0.4)" : "var(--border)"}`,
+        background: checked ? "rgba(37,99,235,0.06)" : "transparent",
+      }}
     >
-      <div className={`w-9 h-5 rounded-full flex items-center transition-all shrink-0 ${checked ? "bg-[#C8956A]" : "bg-[#1F1810] border border-[#2E2418]"}`}>
-        <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mx-0.5 ${checked ? "translate-x-4" : "translate-x-0"}`} />
+      {/* Track */}
+      <div
+        className="flex items-center shrink-0 transition-all"
+        style={{
+          width: 36, height: 20, borderRadius: 10,
+          background: checked ? "var(--accent)" : "var(--surface-raised)",
+          border: checked ? "none" : "1px solid var(--border)",
+        }}
+      >
+        <div
+          className="rounded-full bg-white shadow transition-transform"
+          style={{
+            width: 14, height: 14, margin: "0 3px",
+            transform: checked ? "translateX(16px)" : "translateX(0)",
+          }}
+        />
       </div>
       <div>
-        <p className="text-[12px] text-[#F4EDE4]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{label}</p>
-        {sublabel && <p className="text-[11px] text-[#8C7B68] mt-0.5">{sublabel}</p>}
+        <p className="font-mono text-[12px]" style={{ color: "var(--text)" }}>{label}</p>
+        {sublabel && <p className="font-mono text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{sublabel}</p>}
       </div>
     </button>
   )
 }
 
+// ── Section heading ───────────────────────────────────────────────────────────
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2
+      className="font-mono text-[10px] tracking-[0.2em] mb-5 uppercase flex items-center gap-2"
+      style={{ color: "var(--accent)" }}
+    >
+      <span className="opacity-50">—</span> {children}
+    </h2>
+  )
+}
+
+// ── Page meta ─────────────────────────────────────────────────────────────────
 const FLEXIBILITY_OPTIONS: { value: DateFlexibility; label: string; desc: string }[] = [
   { value: "exact", label: "EXACT", desc: "Specific date only" },
   { value: "week", label: "±1 WEEK", desc: "Roughly that week" },
@@ -131,16 +215,17 @@ const KIND_META: Record<Kind, { headline: string; sub: string; gate: string }> =
   },
   delivery: {
     headline: "Send a Delivery",
-    sub: "You have an item that needs to reach another city and you're not traveling. Post it for a courier already going that way to carry.",
+    sub: "You have an item that needs to reach another city. Post it for a courier already going that way to carry.",
     gate: "GATE: DELIVERY REQUEST",
   },
   request: {
     headline: "Request a Pickup",
-    sub: "Want something bought in another city and brought to you? Ask a traveler passing through to pick it up for you.",
+    sub: "Want something bought in another city and brought to you? Ask a traveler passing through to pick it up.",
     gate: "GATE: BUY-AND-BRING",
   },
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export function CreateListing({ kind }: { kind: Kind }) {
   const { user, loading } = useAuth()
   const navigate = useNavigate()
@@ -155,12 +240,11 @@ export function CreateListing({ kind }: { kind: Kind }) {
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [clientError, setClientError] = React.useState<string | null>(null)
-  // Cities must be picked from the autocomplete list, not free-typed.
   const [originConfirmed, setOriginConfirmed] = React.useState(false)
   const [destConfirmed, setDestConfirmed] = React.useState(false)
 
   function set(field: keyof FormData) {
-    return (value: string | boolean) => setForm((prev) => ({ ...prev, [field]: value }))
+    return (value: string | boolean) => setForm(prev => ({ ...prev, [field]: value }))
   }
 
   function validateClient(): string | null {
@@ -178,7 +262,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
     const ce = validateClient()
     if (ce) { setClientError(ce); return }
     setClientError(null)
-
     if (!user) {
       navigate({ to: "/auth", search: { mode: "signin", redirect: `/${kind}s/new` } })
       return
@@ -194,9 +277,6 @@ export function CreateListing({ kind }: { kind: Kind }) {
         dest_city: form.dest_city,
         dest_country: form.dest_country,
         currency: form.currency || "USD",
-        // When the user picked "no specific date", leave flexibility at exact
-        // and omit the dates entirely so the backend stores NULLs — those
-        // listings then surface under every time filter.
         date_flexibility: form.no_date ? "exact" : form.date_flexibility,
       }
       if (form.description) body.description = form.description
@@ -204,11 +284,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
       if (!form.no_date && form.arrive_date) body.arrive_date = form.arrive_date
       if (form.price) body.price = Math.min(Number(form.price), MAX_PRICE)
       if (form.capacity_kg) body.capacity_kg = Math.min(Number(form.capacity_kg), MAX_KG)
-
-      const res = await authedFetch("/api/listings", {
-        method: "POST",
-        body: JSON.stringify(body),
-      })
+      const res = await authedFetch("/api/listings", { method: "POST", body: JSON.stringify(body) })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.detail ?? data.error ?? `Server error ${res.status}`)
@@ -222,27 +298,43 @@ export function CreateListing({ kind }: { kind: Kind }) {
     }
   }
 
+  // ── Auth guards ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0E0B08] flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-[#C8956A]/20 border-t-[#C8956A] animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
+        <motion.div
+          className="w-5 h-5 rounded-full"
+          style={{ border: "2px solid rgba(37,99,235,0.15)", borderTopColor: "var(--accent)" }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+        />
       </div>
     )
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#0E0B08] flex items-center justify-center px-6">
+      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "var(--bg)" }}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-md">
-          <div className="w-16 h-16 rounded-full border border-[#C8956A]/30 bg-[#C8956A]/10 flex items-center justify-center mx-auto mb-6">
-            <svg className="w-7 h-7 text-[#C8956A]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div
+            className="w-16 h-16 rounded-sm flex items-center justify-center mx-auto mb-6"
+            style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.25)" }}
+          >
+            <svg className="w-7 h-7" style={{ color: "var(--accent)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
             </svg>
           </div>
-          <h2 className="text-[#F4EDE4] text-2xl mb-3" style={{ fontFamily: "'DM Serif Display', serif" }}>Sign in required</h2>
-          <p className="text-[#8C7B68] text-sm leading-relaxed mb-8">You must be signed in to post a {kind}.</p>
+          <h2 className="text-2xl font-bold mb-3" style={{ color: "var(--text)" }}>Sign in required</h2>
+          <p className="text-sm leading-relaxed mb-8" style={{ color: "var(--text-muted)" }}>
+            You must be signed in to post a {kind}.
+          </p>
           <Link to="/auth" search={{ mode: "signin", redirect: `/${kind}s/new` }}>
-            <button className="px-8 py-3 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-xs rounded-full transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <button
+              className="px-8 py-3 font-mono font-bold tracking-widest text-xs rounded-sm transition-colors"
+              style={{ background: "var(--accent)", color: "#fff" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
+            >
               SIGN IN TO CONTINUE
             </button>
           </Link>
@@ -254,30 +346,43 @@ export function CreateListing({ kind }: { kind: Kind }) {
   const hasDateFlexibility = kind === "trip" && !form.no_date && form.depart_date
 
   return (
-    <div className="min-h-screen bg-[#0E0B08] pt-16">
-      <div className="border-b border-[#1E1810]">
+    <div className="min-h-screen pt-16" style={{ background: "var(--bg)" }}>
+
+      {/* ── Header ── */}
+      <div style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="max-w-[860px] mx-auto px-6 py-8">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
-            <span className="text-[10px] tracking-[0.2em] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{meta.gate}</span>
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: "var(--accent)" }}
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+            />
+            <span className="font-mono text-[10px] tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>
+              {meta.gate}
+            </span>
           </div>
-          <h1 className="text-3xl md:text-4xl text-[#F4EDE4] mb-2" style={{ fontFamily: "'DM Serif Display', serif" }}>{meta.headline}</h1>
-          <p className="text-[#8C7B68] text-sm leading-relaxed">{meta.sub}</p>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2" style={{ color: "var(--text)", letterSpacing: "-0.03em" }}>
+            {meta.headline}
+          </h1>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>{meta.sub}</p>
         </div>
       </div>
 
+      {/* ── Form ── */}
       <div className="max-w-[860px] mx-auto px-6 py-10">
         <form onSubmit={handleSubmit} className="space-y-10">
 
+          {/* Route */}
           <div>
-            <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Route</h2>
+            <SectionHeading>Route</SectionHeading>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <CityAutocomplete
                 label="Origin city"
                 value={form.origin_city}
                 onSelect={(city, country) => { setForm(p => ({ ...p, origin_city: city, origin_country: country })); setOriginConfirmed(true) }}
                 onClear={() => { setForm(p => ({ ...p, origin_city: "", origin_country: "" })); setOriginConfirmed(false) }}
-                placeholder="London, Tokyo…"
+                placeholder="Moscow, Istanbul…"
                 required
               />
               <CityAutocomplete
@@ -285,68 +390,53 @@ export function CreateListing({ kind }: { kind: Kind }) {
                 value={form.dest_city}
                 onSelect={(city, country) => { setForm(p => ({ ...p, dest_city: city, dest_country: country })); setDestConfirmed(true) }}
                 onClear={() => { setForm(p => ({ ...p, dest_city: "", dest_country: "" })); setDestConfirmed(false) }}
-                placeholder="Dubai, New York…"
+                placeholder="Dubai, London…"
                 required
               />
             </div>
             {form.origin_country && form.dest_country && (
-              <p className="mt-2 text-[11px] text-[#8C7B68]/70" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              <p className="mt-2 font-mono text-[11px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
                 {form.origin_country} → {form.dest_country}
               </p>
             )}
           </div>
 
+          {/* Travel dates (trip) */}
           {kind === "trip" && (
             <div>
-              <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Travel dates</h2>
+              <SectionHeading>Travel dates</SectionHeading>
               <div className="mb-5">
-                <button
-                  type="button"
-                  onClick={() => setForm(p => ({ ...p, no_date: !p.no_date, depart_date: !p.no_date ? "" : p.depart_date, arrive_date: !p.no_date ? "" : p.arrive_date }))}
-                  className={`flex items-center gap-4 w-full p-4 rounded-sm border transition-all text-left ${form.no_date ? "border-[#C8956A]/40 bg-[#C8956A]/5" : "border-[#2E2418] hover:border-[#2E2418]/80"}`}
-                >
-                  <div className={`w-9 h-5 rounded-full flex items-center transition-all shrink-0 ${form.no_date ? "bg-[#C8956A]" : "bg-[#1F1810] border border-[#2E2418]"}`}>
-                    <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mx-0.5 ${form.no_date ? "translate-x-4" : "translate-x-0"}`} />
-                  </div>
-                  <div>
-                    <p className="text-[12px] text-[#F4EDE4]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>No specific date</p>
-                    <p className="text-[11px] text-[#8C7B68] mt-0.5">Show this listing under every time filter.</p>
-                  </div>
-                </button>
+                <Toggle
+                  checked={form.no_date}
+                  onChange={v => setForm(p => ({ ...p, no_date: v, depart_date: v ? "" : p.depart_date, arrive_date: v ? "" : p.arrive_date }))}
+                  label="No specific date"
+                  sublabel="Show this listing under every time filter."
+                />
               </div>
               {!form.no_date && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-                    <TerminalInput
-                      label="Departure date"
-                      type="date"
-                      value={form.depart_date}
-                      onChange={set("depart_date")}
-                    />
-                    <TerminalInput
-                      label="Arrival date"
-                      type="date"
-                      value={form.arrive_date}
-                      onChange={set("arrive_date")}
-                    />
+                    <TerminalInput label="Departure date" type="date" value={form.depart_date} onChange={set("depart_date")} />
+                    <TerminalInput label="Arrival date" type="date" value={form.arrive_date} onChange={set("arrive_date")} />
                   </div>
                   {hasDateFlexibility && (
                     <div>
-                      <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-2 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                        Date flexibility
-                      </label>
+                      <FieldLabel>Date flexibility</FieldLabel>
                       <div className="grid grid-cols-3 gap-2">
                         {FLEXIBILITY_OPTIONS.map(opt => (
                           <button
                             key={opt.value}
                             type="button"
                             onClick={() => set("date_flexibility")(opt.value)}
-                            className={`py-2.5 px-3 rounded-sm border text-center transition-all ${form.date_flexibility === opt.value
-                              ? "border-[#C8956A]/50 bg-[#C8956A]/10 text-[#C8956A]"
-                              : "border-[#2E2418] text-[#8C7B68] hover:border-[#2E2418]/80 hover:text-[#F4EDE4]"}`}
+                            className="py-2.5 px-3 rounded-sm text-center transition-all"
+                            style={{
+                              border: `1px solid ${form.date_flexibility === opt.value ? "rgba(37,99,235,0.5)" : "var(--border)"}`,
+                              background: form.date_flexibility === opt.value ? "rgba(37,99,235,0.08)" : "transparent",
+                              color: form.date_flexibility === opt.value ? "var(--accent)" : "var(--text-muted)",
+                            }}
                           >
-                            <p className="text-[10px] tracking-widest font-bold" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{opt.label}</p>
-                            <p className="text-[10px] mt-0.5 opacity-70">{opt.desc}</p>
+                            <p className="font-mono text-[10px] tracking-widest font-bold">{opt.label}</p>
+                            <p className="font-mono text-[10px] mt-0.5 opacity-70">{opt.desc}</p>
                           </button>
                         ))}
                       </div>
@@ -357,23 +447,17 @@ export function CreateListing({ kind }: { kind: Kind }) {
             </div>
           )}
 
+          {/* Timing (delivery / request) */}
           {(kind === "delivery" || kind === "request") && (
             <div>
-              <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Timing</h2>
+              <SectionHeading>Timing</SectionHeading>
               <div className="mb-5">
-                <button
-                  type="button"
-                  onClick={() => setForm(p => ({ ...p, no_date: !p.no_date, arrive_date: !p.no_date ? "" : p.arrive_date }))}
-                  className={`flex items-center gap-4 w-full p-4 rounded-sm border transition-all text-left ${form.no_date ? "border-[#C8956A]/40 bg-[#C8956A]/5" : "border-[#2E2418] hover:border-[#2E2418]/80"}`}
-                >
-                  <div className={`w-9 h-5 rounded-full flex items-center transition-all shrink-0 ${form.no_date ? "bg-[#C8956A]" : "bg-[#1F1810] border border-[#2E2418]"}`}>
-                    <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform mx-0.5 ${form.no_date ? "translate-x-4" : "translate-x-0"}`} />
-                  </div>
-                  <div>
-                    <p className="text-[12px] text-[#F4EDE4]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>No specific date</p>
-                    <p className="text-[11px] text-[#8C7B68] mt-0.5">Show this listing under every time filter.</p>
-                  </div>
-                </button>
+                <Toggle
+                  checked={form.no_date}
+                  onChange={v => setForm(p => ({ ...p, no_date: v, arrive_date: v ? "" : p.arrive_date }))}
+                  label="No specific date"
+                  sublabel="Show this listing under every time filter."
+                />
               </div>
               {!form.no_date && (
                 <>
@@ -383,23 +467,20 @@ export function CreateListing({ kind }: { kind: Kind }) {
                     value={form.arrive_date}
                     onChange={set("arrive_date")}
                   />
-                  <p className="mt-2 text-[11px] text-[#8C7B68]/70" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    Couriers whose trip arrives before this date will match your {kind === "delivery" ? "delivery" : "request"}.
+                  <p className="mt-2 font-mono text-[11px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
+                    Couriers whose trip arrives before this date will match your {kind}.
                   </p>
                 </>
               )}
             </div>
           )}
 
+          {/* Listing details */}
           <div>
-            <h2 className="text-[10px] tracking-[0.2em] text-[#C8956A] mb-5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>— Listing Details</h2>
+            <SectionHeading>Listing details</SectionHeading>
             <div className="space-y-5">
               <TerminalInput
-                label={
-                  kind === "trip" ? "Trip summary"
-                  : kind === "request" ? "What do you want bought?"
-                  : "What needs delivering?"
-                }
+                label={kind === "trip" ? "Trip summary" : kind === "request" ? "What do you want bought?" : "What needs delivering?"}
                 value={form.title}
                 onChange={set("title")}
                 placeholder={
@@ -429,18 +510,21 @@ export function CreateListing({ kind }: { kind: Kind }) {
                   step="0.01"
                 />
                 <div>
-                  <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>Currency</label>
+                  <FieldLabel>Currency</FieldLabel>
                   <select
                     value={form.currency}
-                    onChange={(e) => set("currency")(e.target.value)}
-                    className="w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] rounded-sm py-3 px-4 text-[12px] transition-colors"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    onChange={e => set("currency")(e.target.value)}
+                    onFocus={onFocusBlue}
+                    onBlur={onBlurBorder}
+                    style={{ ...baseInputStyle, padding: "10px 12px" }}
                   >
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
                     <option value="GBP">GBP</option>
                     <option value="AED">AED</option>
-                    <option value="JPY">JPY</option>
+                    <option value="RUB">RUB</option>
+                    <option value="CNY">CNY</option>
+                    <option value="TRY">TRY</option>
                   </select>
                 </div>
                 {kind === "trip" && (
@@ -457,22 +541,27 @@ export function CreateListing({ kind }: { kind: Kind }) {
                 )}
               </div>
               {form.price && Number(form.price) > MAX_PRICE && (
-                <p className="text-[11px] text-[#C47B6B]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>! Max price is ${MAX_PRICE.toLocaleString()}</p>
+                <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max price is ${MAX_PRICE.toLocaleString()}</p>
               )}
               {form.capacity_kg && Number(form.capacity_kg) > MAX_KG && (
-                <p className="text-[11px] text-[#C47B6B]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>! Max capacity is {MAX_KG.toLocaleString()} kg</p>
+                <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max capacity is {MAX_KG.toLocaleString()} kg</p>
               )}
             </div>
           </div>
 
+          {/* Error banner */}
           <AnimatePresence>
             {(clientError || error) && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="flex items-start gap-2 rounded-sm border border-[#C47B6B]/40 bg-[#C47B6B]/10 px-4 py-3 text-[12px] text-[#E8A090]"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="flex items-start gap-2 rounded-sm px-4 py-3 font-mono text-[12px]"
+                style={{
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "var(--destructive)",
+                }}
               >
                 <span className="mt-0.5 shrink-0">!</span>
                 <span>{clientError ?? error}</span>
@@ -480,24 +569,46 @@ export function CreateListing({ kind }: { kind: Kind }) {
             )}
           </AnimatePresence>
 
-          <div className="flex items-center justify-between pt-6 border-t border-[#1E1810]">
+          {/* Footer */}
+          <div
+            className="flex items-center justify-between pt-6"
+            style={{ borderTop: "1px solid var(--border)" }}
+          >
             <Link to="/browse">
-              <button type="button" className="text-[11px] text-[#8C7B68] hover:text-[#F4EDE4] tracking-widest transition-colors" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+              <button
+                type="button"
+                className="font-mono text-[11px] tracking-widest transition-colors"
+                style={{ color: "var(--text-muted)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
+              >
                 ← CANCEL
               </button>
             </Link>
             <button
               type="submit"
               disabled={submitting}
-              className="px-8 py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-[11px] rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="flex items-center gap-2 font-mono font-bold tracking-widest text-[11px] rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: "var(--accent)",
+                color: "#fff",
+                padding: "12px 32px",
+              }}
+              onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = "var(--accent-dim)" }}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
             >
               {submitting && (
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-[#0E0B08]/30 border-t-[#0E0B08] animate-spin" />
+                <motion.div
+                  className="w-3.5 h-3.5 rounded-full"
+                  style={{ border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff" }}
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+                />
               )}
               {submitting ? "POSTING..." : "POST LISTING"}
             </button>
           </div>
+
         </form>
       </div>
     </div>

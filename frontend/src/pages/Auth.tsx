@@ -1,5 +1,6 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { Waypoints } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { router } from "@/router"
 
@@ -10,22 +11,199 @@ interface AuthPageProps {
   redirect?: string
 }
 
-// ── Spinner ──────────────────────────────────────────────────────────────────
-function Spinner() {
+const springConfig = { type: "spring" as const, stiffness: 380, damping: 28 }
+
+// ── Network graph data ────────────────────────────────────────────────────────
+// Fixed node positions (% of SVG viewport). Entry node is the user — center.
+const NODES = [
+  { id: "a", cx: 16,  cy: 20,  label: "LONDON"       },
+  { id: "b", cx: 84,  cy: 16,  label: "MOSCOW"       },
+  { id: "c", cx: 10,  cy: 70,  label: "ISTANBUL"     },
+  { id: "d", cx: 86,  cy: 74,  label: "BEIJING"      },
+  { id: "e", cx: 52,  cy: 88,  label: "DUBAI"        },
+  { id: "entry", cx: 50, cy: 44, label: null         }, // the user
+]
+
+const EDGES = [
+  { from: "a", to: "entry", delay: 0,    dur: 2.8 },
+  { from: "b", to: "entry", delay: 0.9,  dur: 3.2 },
+  { from: "c", to: "entry", delay: 1.6,  dur: 2.5 },
+  { from: "d", to: "entry", delay: 0.4,  dur: 3.6 },
+  { from: "e", to: "entry", delay: 1.2,  dur: 2.9 },
+  { from: "a", to: "b",     delay: 2.1,  dur: 4.0 },
+  { from: "c", to: "e",     delay: 0.7,  dur: 3.4 },
+]
+
+function getNode(id: string) {
+  return NODES.find((n) => n.id === id)!
+}
+
+// ── Animated route network ────────────────────────────────────────────────────
+function RouteNetwork({ mode }: { mode: Mode }) {
   return (
-    <svg
-      className="animate-spin h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
+    <div className="absolute inset-0 w-full h-full">
+      {/* Dot grid */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+
+      {/* Ambient glow — shifts between modes */}
+      <motion.div
+        key={mode}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+        className="absolute pointer-events-none"
+        style={{
+          inset: 0,
+          background:
+            mode === "signup"
+              ? "radial-gradient(ellipse at 50% 44%, rgba(59,130,246,0.12) 0%, transparent 65%)"
+              : "radial-gradient(ellipse at 50% 44%, rgba(59,130,246,0.07) 0%, transparent 60%)",
+        }}
+      />
+
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid meet"
+        className="absolute inset-0 w-full h-full"
+        style={{ overflow: "visible" }}
+      >
+        {/* Edges */}
+        {EDGES.map((edge) => {
+          const from = getNode(edge.from)
+          const to   = getNode(edge.to)
+          const isSpoke = edge.to === "entry" || edge.from === "entry"
+          return (
+            <g key={`${edge.from}-${edge.to}`}>
+              {/* Static dashed line */}
+              <line
+                x1={`${from.cx}%`} y1={`${from.cy}%`}
+                x2={`${to.cx}%`}   y2={`${to.cy}%`}
+                stroke={isSpoke ? "#27272a" : "#1c1c1e"}
+                strokeWidth={isSpoke ? "0.4" : "0.25"}
+                strokeDasharray="1.2 1.8"
+              />
+
+              {/* Traveling dot */}
+              <motion.circle
+                r="0.9"
+                fill="#3b82f6"
+                style={{ filter: "drop-shadow(0 0 2px #3b82f6)" }}
+                initial={{
+                  cx: `${from.cx}%`,
+                  cy: `${from.cy}%`,
+                  opacity: 0,
+                }}
+                animate={{
+                  cx: [`${from.cx}%`, `${to.cx}%`],
+                  cy: [`${from.cy}%`, `${to.cy}%`],
+                  opacity: [0, 1, 1, 0],
+                }}
+                transition={{
+                  duration: edge.dur,
+                  delay: edge.delay,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  times: [0, 0.08, 0.92, 1],
+                }}
+              />
+            </g>
+          )
+        })}
+
+        {/* Peripheral nodes */}
+        {NODES.filter((n) => n.id !== "entry").map((node) => (
+          <g key={node.id}>
+            <circle
+              cx={`${node.cx}%`}
+              cy={`${node.cy}%`}
+              r="1.4"
+              fill="#111113"
+              stroke="#3f3f46"
+              strokeWidth="0.35"
+            />
+            <circle
+              cx={`${node.cx}%`}
+              cy={`${node.cy}%`}
+              r="0.6"
+              fill="#52525b"
+            />
+            {node.label && (
+              <text
+                x={`${node.cx}%`}
+                y={`${node.cy + 3.5}%`}
+                textAnchor="middle"
+                fontSize="2.2"
+                fill="#3f3f46"
+                fontFamily="'JetBrains Mono', monospace"
+                letterSpacing="0.08em"
+              >
+                {node.label}
+              </text>
+            )}
+          </g>
+        ))}
+
+        {/* Entry node — the user */}
+        {(() => {
+          const n = getNode("entry")
+          return (
+            <g>
+              {/* Outer pulse ring */}
+              <motion.circle
+                cx={`${n.cx}%`}
+                cy={`${n.cy}%`}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="0.3"
+                initial={{ r: 4, opacity: 0.6 }}
+                animate={{ r: [4, 7], opacity: [0.6, 0] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
+              />
+              {/* Mid ring */}
+              <motion.circle
+                cx={`${n.cx}%`}
+                cy={`${n.cy}%`}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="0.4"
+                initial={{ r: 3, opacity: 0.5 }}
+                animate={{ r: [3, 5.5], opacity: [0.5, 0] }}
+                transition={{ duration: 2.4, delay: 0.5, repeat: Infinity, ease: "easeOut" }}
+              />
+              {/* Solid filled circle */}
+              <circle
+                cx={`${n.cx}%`}
+                cy={`${n.cy}%`}
+                r="2.4"
+                fill="#1d4ed8"
+                stroke="#3b82f6"
+                strokeWidth="0.4"
+              />
+              {/* Inner bright dot */}
+              <motion.circle
+                cx={`${n.cx}%`}
+                cy={`${n.cy}%`}
+                r="0.9"
+                fill="#93c5fd"
+                animate={{ opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </g>
+          )
+        })()}
+      </svg>
+    </div>
   )
 }
 
-// ── Styled input ─────────────────────────────────────────────────────────────
-function TerminalInput({
+// ── Input field ───────────────────────────────────────────────────────────────
+function Field({
   label,
   type,
   value,
@@ -40,18 +218,30 @@ function TerminalInput({
   placeholder?: string
   autoComplete?: string
 }) {
+  const [focused, setFocused] = React.useState(false)
   return (
-    <div className="group">
+    <div>
       <label
-        className="block text-[10px] tracking-[0.2em] text-[#8C7B68] mb-2 uppercase"
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        className="block mb-2 text-[10px] tracking-[0.18em] uppercase"
+        style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
       >
         {label}
       </label>
-      <div className="relative">
+      <div
+        className="relative flex items-center rounded-sm transition-all duration-150"
+        style={{
+          background: "var(--surface-raised)",
+          border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
+          boxShadow: focused ? "0 0 0 3px rgba(59,130,246,0.1)" : "none",
+        }}
+      >
         <span
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C8956A]/60 select-none pointer-events-none"
-          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px" }}
+          className="absolute left-3.5 select-none pointer-events-none text-[11px]"
+          style={{
+            fontFamily: "var(--font-mono)",
+            color: focused ? "var(--accent)" : "var(--text-faint)",
+            transition: "color 0.15s",
+          }}
         >
           ›
         </span>
@@ -59,10 +249,15 @@ function TerminalInput({
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           autoComplete={autoComplete}
-          className="w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm py-3 pl-8 pr-4 text-sm transition-colors"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className="w-full bg-transparent py-3 pl-8 pr-4 text-sm outline-none"
+          style={{
+            fontFamily: "var(--font-mono)",
+            color: "var(--text)",
+          }}
         />
       </div>
     </div>
@@ -73,32 +268,55 @@ function TerminalInput({
 function ErrorBlock({ message }: { message: string }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }}
+      initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      className="flex items-start gap-2 rounded-sm border border-[#C47B6B]/40 bg-[#C47B6B]/10 px-4 py-3 text-sm text-[#E8A090]"
-      style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}
+      exit={{ opacity: 0 }}
+      className="flex items-start gap-2.5 rounded-sm px-4 py-3 text-[12px]"
+      style={{
+        fontFamily: "var(--font-mono)",
+        border: "1px solid rgba(239,68,68,0.3)",
+        background: "rgba(239,68,68,0.07)",
+        color: "#fca5a5",
+      }}
     >
-      <span className="mt-0.5 shrink-0">!</span>
+      <span className="shrink-0 mt-px">!</span>
       <span>{message}</span>
     </motion.div>
   )
 }
 
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  )
+}
+
 // ── Google button ─────────────────────────────────────────────────────────────
 function GoogleButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = React.useState(false)
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={loading}
-      className="w-full flex items-center justify-center gap-3 py-3 rounded-sm border border-[#2E2418] hover:border-[#C8956A]/40 bg-[#111008] hover:bg-[#1A1208] text-[#F4EDE4] text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="w-full flex items-center justify-center gap-3 py-3 rounded-sm text-[11px] tracking-widest transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{
+        fontFamily: "var(--font-mono)",
+        background: hovered ? "var(--surface-raised)" : "transparent",
+        border: `1px solid ${hovered ? "var(--text-faint)" : "var(--border)"}`,
+        color: "var(--text-muted)",
+      }}
     >
       {loading ? (
         <Spinner />
       ) : (
-        <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden>
+        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden>
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -112,19 +330,13 @@ function GoogleButton({ loading, onClick }: { loading: boolean; onClick: () => v
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPageProps) {
-  const [mode, setMode] = React.useState<Mode>(initialMode)
-  const [email, setEmail] = React.useState("")
-  const [password, setPassword] = React.useState("")
-  const [loading, setLoading] = React.useState(false)
+  const [mode, setMode]               = React.useState<Mode>(initialMode)
+  const [email, setEmail]             = React.useState("")
+  const [password, setPassword]       = React.useState("")
+  const [loading, setLoading]         = React.useState(false)
   const [googleLoading, setGoogleLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState(false)
-
-  function clearForm() {
-    setError(null)
-    setEmail("")
-    setPassword("")
-  }
+  const [error, setError]             = React.useState<string | null>(null)
+  const [success, setSuccess]         = React.useState(false)
 
   function switchMode(m: Mode) {
     setMode(m)
@@ -136,7 +348,6 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
     e.preventDefault()
     setError(null)
     setLoading(true)
-
     try {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -146,10 +357,9 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
         setSuccess(true)
-        clearForm()
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong")
+      setError(err instanceof Error ? err.message : "Something went wrong. Try again.")
     } finally {
       setLoading(false)
     }
@@ -165,7 +375,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
       })
       if (error) throw error
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed")
+      setError(err instanceof Error ? err.message : "Google sign-in failed.")
       setGoogleLoading(false)
     }
   }
@@ -178,218 +388,256 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
       const { error } = await supabase.auth.resend({ type: "signup", email })
       if (error) throw error
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Resend failed")
+      setError(err instanceof Error ? err.message : "Resend failed.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#0E0B08] flex">
-      {/* ── Left panel — decorative departure board ── */}
-      <div className="hidden lg:flex lg:w-[52%] xl:w-[58%] relative flex-col justify-between overflow-hidden border-r border-[#1E1810]">
-        {/* Background gradient */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse at 30% 40%, rgba(200,149,106,0.07) 0%, transparent 60%), #0A0806",
-          }}
-        />
+    <div
+      className="min-h-screen flex"
+      style={{ background: "var(--bg)" }}
+    >
+      {/* ── LEFT — animated network ── */}
+      <div
+        className="hidden lg:flex lg:w-[52%] xl:w-[55%] relative flex-col overflow-hidden"
+        style={{ borderRight: "1px solid var(--border)" }}
+      >
+        <RouteNetwork mode={mode} />
 
-        {/* Decorative grid lines */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.04]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(200,149,106,1) 1px, transparent 1px), linear-gradient(90deg, rgba(200,149,106,1) 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-
-        {/* Scanlines */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.03]"
-          style={{
-            backgroundImage: "linear-gradient(rgba(212,168,85,1) 1px, transparent 1px)",
-            backgroundSize: "100% 2px",
-          }}
-        />
-
-        {/* Content */}
-        <div className="relative z-10 p-12 xl:p-16 flex flex-col h-full">
-          {/* Logo / brand */}
-          <div
-            className="flex items-center gap-3 text-[#C8956A] text-sm tracking-widest"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        {/* Top-left brand mark */}
+        <div className="relative z-10 p-10 xl:p-14 flex items-center gap-2.5">
+          <Waypoints className="w-4 h-4" style={{ color: "var(--accent)" }} />
+          <span
+            className="text-[12px] font-bold tracking-[0.14em]"
+            style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
           >
-            <div className="w-2 h-2 rounded-full bg-[#C8956A] animate-pulse" />
-            TRAVEL COURIERS
-          </div>
+            PEREGRI
+          </span>
+        </div>
 
-          {/* Big headline */}
-          <div className="flex-1 flex flex-col justify-center">
-            <p
-              className="text-[10px] tracking-[0.25em] text-[#8C7B68] mb-6"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        {/* Bottom context copy */}
+        <div className="relative z-10 mt-auto p-10 xl:p-14">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={mode}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={springConfig}
             >
-              {mode === "signin" ? "GATE: RETURNING TRAVELER" : "GATE: NEW PASSENGER"}
-            </p>
-            <h1
-              className="leading-[0.88] text-[#F4EDE4] mb-8"
-              style={{
-                fontFamily: "'DM Serif Display', serif",
-                fontSize: "clamp(3.5rem, 5.5vw, 6.5rem)",
-              }}
-            >
-              {mode === "signin" ? (
-                <>
-                  WELCOME
-                  <br />
-                  <span style={{ WebkitTextStroke: "1px #C8956A", color: "transparent" }}>
-                    BACK.
-                  </span>
-                </>
-              ) : (
-                <>
-                  BOARD
-                  <br />
-                  <span style={{ WebkitTextStroke: "1px #C8956A", color: "transparent" }}>
-                    THE
-                  </span>
-                  <br />
-                  NETWORK.
-                </>
-              )}
-            </h1>
+              <p
+                className="text-[10px] tracking-[0.22em] mb-4"
+                style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
+              >
+                {mode === "signin" ? "// RETURNING NODE" : "// JOINING NETWORK"}
+              </p>
+              <h2
+                className="text-4xl xl:text-5xl font-bold tracking-tighter mb-4 leading-[1.0]"
+                style={{ color: "var(--text)" }}
+              >
+                {mode === "signin" ? (
+                  <>
+                    WELCOME<br />
+                    <span style={{ color: "var(--accent)" }}>BACK.</span>
+                  </>
+                ) : (
+                  <>
+                    JOIN THE<br />
+                    <span style={{ color: "var(--accent)" }}>NETWORK.</span>
+                  </>
+                )}
+              </h2>
+              <p
+                className="text-sm leading-relaxed max-w-[34ch]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {mode === "signin"
+                  ? "Your routes and messages are waiting."
+                  : "Become a node. Connect travelers with deliveries across any border."}
+              </p>
+            </motion.div>
+          </AnimatePresence>
 
-            <p className="text-[#8C7B68] text-sm leading-relaxed max-w-[36ch]">
-              {mode === "signin"
-                ? "Your routes, earnings and messages are waiting. Sign in to continue."
-                : "Join thousands of travelers already turning their trips into deliveries."}
-            </p>
-          </div>
-
-          {/* Bottom strip */}
+          {/* Live connection indicator */}
           <div
-            className="text-[10px] text-[#3A2E20] tracking-widest"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="flex items-center gap-2 mt-8"
+            style={{ fontFamily: "var(--font-mono)" }}
           >
-            SOLARI-TRX AUTHENTICATION TERMINAL · SECURE CONNECTION
+            <motion.div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: "var(--accent)" }}
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+            <span
+              className="text-[10px] tracking-widest"
+              style={{ color: "var(--text-faint)" }}
+            >
+              NETWORK ACTIVE
+            </span>
           </div>
         </div>
       </div>
 
-      {/* ── Right panel — form ── */}
-      <div className="w-full lg:w-[48%] xl:w-[42%] flex flex-col justify-center px-8 py-16 md:px-12 xl:px-16 relative">
-        {/* Subtle top accent line */}
-        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#C8956A]/30 to-transparent" />
+      {/* ── RIGHT — form ── */}
+      <div
+        className="w-full lg:w-[48%] xl:w-[45%] flex flex-col justify-center px-8 py-16 sm:px-12 xl:px-16 relative"
+      >
+        {/* Top accent line */}
+        <div
+          className="absolute top-0 left-0 right-0 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, var(--accent), transparent)", opacity: 0.3 }}
+        />
 
-        <div className="max-w-[400px] w-full mx-auto">
-          {/* Mobile logo */}
-          <div
-            className="flex items-center gap-2 text-[#C8956A] text-xs tracking-widest mb-10 lg:hidden"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-[#C8956A] animate-pulse" />
-            TRAVEL COURIERS
+        <div className="max-w-[380px] w-full mx-auto">
+
+          {/* Mobile brand */}
+          <div className="flex items-center gap-2 mb-10 lg:hidden">
+            <Waypoints className="w-4 h-4" style={{ color: "var(--accent)" }} />
+            <span
+              className="text-[12px] font-bold tracking-[0.14em]"
+              style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
+            >
+              PEREGRI
+            </span>
           </div>
 
-          {/* Mode toggle tabs */}
+          {/* Mode tabs */}
           <div
-            className="flex border border-[#2E2418] rounded-sm mb-8 overflow-hidden"
+            className="flex rounded-sm mb-8 p-0.5"
+            style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
             role="tablist"
           >
             {(["signin", "signup"] as Mode[]).map((m) => (
-              <button
+              <motion.button
                 key={m}
                 role="tab"
                 aria-selected={mode === m}
                 onClick={() => switchMode(m)}
-                className={`flex-1 py-2.5 text-[11px] tracking-[0.15em] transition-all ${
-                  mode === m
-                    ? "bg-[#C8956A] text-[#0E0B08] font-bold"
-                    : "text-[#8C7B68] hover:text-[#F4EDE4] hover:bg-[#1A1208]"
-                }`}
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="flex-1 py-2.5 text-[11px] tracking-[0.14em] rounded-sm transition-colors relative"
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  color: mode === m ? "#fff" : "var(--text-muted)",
+                  background: mode === m ? "var(--accent)" : "transparent",
+                  fontWeight: mode === m ? 700 : 400,
+                }}
+                whileTap={{ scale: 0.98 }}
+                transition={springConfig}
               >
                 {m === "signin" ? "SIGN IN" : "SIGN UP"}
-              </button>
+              </motion.button>
             ))}
           </div>
 
+          {/* Form / success */}
           <AnimatePresence mode="wait">
             {success ? (
               /* ── Success state ── */
               <motion.div
                 key="success"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={springConfig}
                 className="text-center py-8"
               >
-                <div className="w-16 h-16 rounded-full border border-[#7EB89A]/40 bg-[#7EB89A]/10 flex items-center justify-center mx-auto mb-6">
-                  <svg viewBox="0 0 24 24" className="w-7 h-7 text-[#7EB89A]" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
+                {/* Animated node check */}
+                <div className="relative w-16 h-16 mx-auto mb-6">
+                  <motion.div
+                    className="absolute inset-0 rounded-full"
+                    style={{ border: "1px solid var(--accent)", opacity: 0.3 }}
+                    animate={{ scale: [1, 1.5], opacity: [0.3, 0] }}
+                    transition={{ duration: 1.8, repeat: Infinity }}
+                  />
+                  <div
+                    className="absolute inset-0 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.3)" }}
+                  >
+                    <motion.svg
+                      viewBox="0 0 24 24"
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="var(--accent)"
+                      strokeWidth={2.5}
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: 1 }}
+                      transition={{ duration: 0.5, delay: 0.1 }}
+                    >
+                      <motion.path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4.5 12.75l6 6 9-13.5"
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.5, delay: 0.1 }}
+                      />
+                    </motion.svg>
+                  </div>
                 </div>
-                <h2
-                  className="text-[#F4EDE4] text-xl mb-3"
-                  style={{ fontFamily: "'DM Serif Display', serif" }}
+
+                <h3
+                  className="text-xl font-bold tracking-tight mb-3"
+                  style={{ color: "var(--text)" }}
                 >
-                  Check your email
-                </h2>
-                <p className="text-[#8C7B68] text-sm leading-relaxed mb-8">
-                  We sent a confirmation link to{" "}
-                  <span className="text-[#C8956A]">{email || "your email"}</span>. Click it to
-                  activate your account.
+                  Node created.
+                </h3>
+                <p className="text-sm leading-relaxed mb-8" style={{ color: "var(--text-muted)" }}>
+                  Check your inbox for a confirmation link.<br />
+                  <span style={{ color: "var(--text-faint)" }}>{email}</span>
                 </p>
+
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={handleResend}
                     disabled={loading}
-                    className="w-full py-3 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] hover:text-[#F4EDE4] text-xs tracking-widest rounded-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    className="w-full py-3 text-[11px] tracking-widest rounded-sm transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-muted)",
+                    }}
                   >
                     {loading ? <Spinner /> : null}
                     RESEND EMAIL
                   </button>
                   <button
                     onClick={() => { setSuccess(false); switchMode("signin") }}
-                    className="text-[#8C7B68] hover:text-[#C8956A] text-xs tracking-wider transition-colors"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    className="text-[11px] tracking-wider transition-colors"
+                    style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
+                    onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--accent)"}
+                    onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
                   >
                     ← BACK TO SIGN IN
                   </button>
                 </div>
+
                 <AnimatePresence>
-                  {error && (
-                    <div className="mt-4">
-                      <ErrorBlock message={error} />
-                    </div>
-                  )}
+                  {error && <div className="mt-4"><ErrorBlock message={error} /></div>}
                 </AnimatePresence>
               </motion.div>
+
             ) : (
-              /* ── Form state ── */
+              /* ── Form ── */
               <motion.form
                 key={mode}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.22 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
                 onSubmit={handleSubmit}
                 className="flex flex-col gap-5"
               >
-                <TerminalInput
+                <Field
                   label="Email address"
                   type="email"
                   value={email}
                   onChange={setEmail}
                   placeholder="you@example.com"
-                  autoComplete={mode === "signin" ? "email" : "email"}
+                  autoComplete="email"
                 />
-                <TerminalInput
+                <Field
                   label={mode === "signin" ? "Password" : "Create a password"}
                   type="password"
                   value={password}
@@ -403,35 +651,43 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 </AnimatePresence>
 
                 {/* Submit */}
-                <button
+                <motion.button
                   type="submit"
                   disabled={loading || !email || !password}
-                  className="w-full py-3.5 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold tracking-widest text-xs rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  className="w-full py-3.5 text-[11px] font-bold tracking-widest rounded-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    background: "var(--accent)",
+                    color: "#fff",
+                    boxShadow: "0 0 20px rgba(59,130,246,0.2)",
+                  }}
+                  whileHover={{ boxShadow: "0 0 28px rgba(59,130,246,0.4)" }}
+                  whileTap={{ scale: 0.99 }}
+                  transition={springConfig}
                 >
-                  {loading ? <Spinner /> : null}
-                  {mode === "signin" ? "SIGN IN" : "CREATE ACCOUNT"}
-                </button>
+                  {loading && <Spinner />}
+                  {mode === "signin" ? "SIGN IN" : "JOIN NETWORK"}
+                </motion.button>
 
-                {/* Divider */}
-                <div className="relative flex items-center gap-3 my-1">
-                  <div className="flex-1 h-px bg-[#2E2418]" />
+                {/* OR divider */}
+                <div className="relative flex items-center gap-3">
+                  <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
                   <span
-                    className="text-[10px] text-[#3A2E20] tracking-widest"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                    className="text-[10px] tracking-widest"
+                    style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
                   >
                     OR
                   </span>
-                  <div className="flex-1 h-px bg-[#2E2418]" />
+                  <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
                 </div>
 
                 {/* Google */}
                 <GoogleButton loading={googleLoading} onClick={handleGoogle} />
 
-                {/* Switch mode link */}
+                {/* Switch mode */}
                 <p
-                  className="text-center text-[11px] text-[#8C7B68] tracking-wider mt-2"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  className="text-center text-[11px] tracking-wide mt-1"
+                  style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
                 >
                   {mode === "signin" ? (
                     <>
@@ -439,7 +695,10 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                       <button
                         type="button"
                         onClick={() => switchMode("signup")}
-                        className="text-[#C8956A] hover:text-[#D4A855] transition-colors underline-offset-2 hover:underline"
+                        className="transition-colors"
+                        style={{ color: "var(--accent)" }}
+                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "underline"}
+                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "none"}
                       >
                         SIGN UP FREE
                       </button>
@@ -450,7 +709,10 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                       <button
                         type="button"
                         onClick={() => switchMode("signin")}
-                        className="text-[#C8956A] hover:text-[#D4A855] transition-colors underline-offset-2 hover:underline"
+                        className="transition-colors"
+                        style={{ color: "var(--accent)" }}
+                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "underline"}
+                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "none"}
                       >
                         SIGN IN
                       </button>

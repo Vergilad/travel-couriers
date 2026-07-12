@@ -103,7 +103,15 @@ async def list_threads(user=Depends(get_current_user)):
 
             msgs = thread_messages.get(tid, [])
             last_msg = msgs[-1] if msgs else None
-            unread_count = sum(1 for m in msgs if m["sender_id"] != user.id and m["read_at"] is None)
+            # Exclude system messages (sender_id is None) — they are not "from
+            # the other party" and the SQL mark-read query won't touch them
+            # either (NULL != user.id is NULL/unknown in SQL, not True).
+            unread_count = sum(
+                1 for m in msgs
+                if m["sender_id"] is not None
+                and m["sender_id"] != user.id
+                and m["read_at"] is None
+            )
 
             listing_title = listing.get("title") or f"{listing.get('origin_city', '?')} → {listing.get('dest_city', '?')}"
 

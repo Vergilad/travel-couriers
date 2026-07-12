@@ -9,19 +9,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Travel-Couriers design tokens — plan.md §10 */
+/* Peregri design tokens */
 :root {
-  --bg:             #0E0B08;
-  --surface:        #171109;
-  --surface-raised: #1F1810;
-  --border:         #2E2418;
-  --accent:         #C8956A;   /* warm terracotta, like sand at golden hour */
-  --accent-dim:     #7A5438;
-  --text:           #F4EDE4;   /* warm cream, not cold white */
-  --text-muted:     #8C7B68;
-  --text-faint:     #2A1F14;
-  --success:        #7EB89A;   /* muted seafoam — ocean */
-  --destructive:    #C47B6B;   /* muted coral */
+  --bg:             #09090b;
+  --surface:        #0a0a0c;
+  --surface-raised: #111113;
+  --border:         #27272a;
+  --accent:         #2563eb;   /* blue-600 — matches landing GraphButton */
+  --accent-dim:     #1d4ed8;
+  --text:           #e4e4e7;   /* zinc-200 */
+  --text-muted:     #71717a;   /* zinc-500 */
+  --text-faint:     #3f3f46;   /* zinc-700 */
+  --success:        #22c55e;
+  --destructive:    #ef4444;
 
   /* Spacing scale: 4 / 8 / 16 / 24 / 40 / 64 / 96 / 128 */
   --space-1: 4px;
@@ -33,7 +33,7 @@
   --space-7: 96px;
   --space-8: 128px;
 
-  /* shadcn semantic tokens (dark-only) */
+  /* shadcn semantic tokens */
   --background: var(--bg);
   --foreground: var(--text);
   --card: var(--surface);
@@ -41,16 +41,16 @@
   --popover: var(--surface-raised);
   --popover-foreground: var(--text);
   --primary: var(--accent);
-  --primary-foreground: #0D0B09;
+  --primary-foreground: #ffffff;
   --secondary: var(--surface-raised);
   --secondary-foreground: var(--text);
   --muted: var(--surface);
   --muted-foreground: var(--text-muted);
-  --accent-foreground: #0D0B09;
+  --accent-foreground: #ffffff;
   --destructive-foreground: var(--text);
-  --input: var(--surface);
+  --input: var(--surface-raised);
   --ring: var(--accent-dim);
-  --radius: 0.375rem;
+  --radius: 0.25rem;
 
   --chart-1: var(--accent);
   --chart-2: var(--accent-dim);
@@ -61,7 +61,7 @@
   --sidebar: var(--surface);
   --sidebar-foreground: var(--text);
   --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: #0D0B09;
+  --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: var(--surface-raised);
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border);
@@ -70,7 +70,7 @@
 
 @theme inline {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "DM Serif Display", ui-serif, Georgia, serif;
+  --font-heading: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --color-bg: var(--bg);
@@ -114,14 +114,13 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 
-  /* Max 8px radius on content; buttons/inputs at 6px via --radius */
-  --radius-sm: calc(var(--radius) * 0.85);
+  --radius-sm: 2px;
   --radius-md: var(--radius);
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.5rem;
-  --radius-3xl: 0.5rem;
-  --radius-4xl: 0.5rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.375rem;
+  --radius-3xl: 0.375rem;
+  --radius-4xl: 0.375rem;
 }
 
 @layer base {
@@ -137,36 +136,37 @@
   }
 
   body {
-    @apply bg-bg text-text;
+    background-color: var(--bg);
+    color: var(--text);
     font-weight: 300;
     line-height: 1.7;
   }
 
   h1, h2 {
-    font-family: var(--font-heading);
-    font-weight: 400;
-    letter-spacing: -0.01em;
-    font-style: italic;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-style: normal;
     text-transform: none;
   }
 
   h1 {
     font-size: clamp(3rem, 7vw, 6rem);
-    line-height: 1.05;
+    line-height: 1.0;
   }
 
   h2 {
     font-size: clamp(1.75rem, 4vw, 2.5rem);
-    line-height: 1.15;
+    line-height: 1.1;
   }
 }
 
 @layer utilities {
-    .font-heading {
-    font-family: var(--font-heading);
-    font-weight: 400;
-    font-style: italic;
-    letter-spacing: -0.01em;
+  .font-heading {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-style: normal;
+    letter-spacing: -0.03em;
   }
 
   .font-data {
@@ -177,10 +177,10 @@
   }
 
   .font-label {
-    font-family: var(--font-sans);
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
 }

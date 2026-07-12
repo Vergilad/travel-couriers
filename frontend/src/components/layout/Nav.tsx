@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useLocation } from "@tanstack/react-router"
-import { Menu, X } from "lucide-react"
+import { Menu, X, Waypoints } from "lucide-react"
 import {
   animate,
   motion,
@@ -10,12 +10,17 @@ import {
   useMotionValueEvent,
 } from "framer-motion"
 
-import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
 import { getInitial } from "@/lib/db_constants"
 
-// ─── Slide-in user drawer ────────────────────────────────────────────────────
+const springConfig = { type: "spring" as const, stiffness: 400, damping: 30 }
 
+// ─── Logomark ─────────────────────────────────────────────────────────────────
+function Logomark({ className = "w-5 h-5" }: { className?: string }) {
+  return <Waypoints className={className} />
+}
+
+// ─── Slide-in user drawer ─────────────────────────────────────────────────────
 function UserDrawer({
   user,
   unreadCount,
@@ -40,52 +45,71 @@ function UserDrawer({
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
             onClick={onClose}
           />
 
-          {/* Drawer panel */}
           <motion.div
             key="drawer"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "tween", duration: 0.22, ease: "easeOut" }}
-            className="fixed top-0 right-0 bottom-0 z-[70] w-[270px] bg-[#100D08] border-l border-[#2E2418] flex flex-col shadow-2xl"
+            className="fixed top-0 right-0 bottom-0 z-[70] w-[270px] flex flex-col shadow-2xl"
+            style={{
+              background: "var(--surface)",
+              borderLeft: "1px solid var(--border)",
+            }}
           >
-            {/* Close button */}
-            <div className="flex items-center justify-end px-5 py-4 border-b border-[#1E1810]">
+            {/* Close */}
+            <div
+              className="flex items-center justify-end px-5 py-4"
+              style={{ borderBottom: "1px solid var(--border)" }}
+            >
               <button
                 onClick={onClose}
-                className="flex size-8 items-center justify-center rounded-full text-[#8C7B68] hover:text-[#F4EDE4] hover:bg-[#1F1810] transition-colors"
+                className="flex size-8 items-center justify-center rounded-sm transition-colors"
+                style={{ color: "var(--text-muted)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text)"; (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)" }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent" }}
               >
                 <X className="size-4" />
               </button>
             </div>
 
             {/* User info */}
-            <div className="px-6 py-5 border-b border-[#1E1810] flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center shrink-0 overflow-hidden">
+            <div
+              className="px-6 py-5 flex items-center gap-3"
+              style={{ borderBottom: "1px solid var(--border)" }}
+            >
+              <div
+                className="w-9 h-9 rounded-sm flex items-center justify-center shrink-0 overflow-hidden"
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
+              >
                 {user.avatarUrl ? (
                   <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[#C8956A] text-base" style={{ fontFamily: "'DM Serif Display', serif" }}>
+                  <span
+                    className="text-sm font-bold"
+                    style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}
+                  >
                     {getInitial(user.displayName)}
                   </span>
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-[14px] text-[#F4EDE4] truncate">{user.displayName}</p>
+                <p className="text-[14px] truncate" style={{ color: "var(--text)" }}>
+                  {user.displayName}
+                </p>
                 <p
-                  className="text-[10px] text-[#8C7B68] tracking-widest mt-0.5"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  className="text-[10px] tracking-widest mt-0.5"
+                  style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
                 >
                   TRAVELER
                 </p>
@@ -99,11 +123,25 @@ function UserDrawer({
                   key={item.to}
                   to={item.to}
                   onClick={onClose}
-                  className="flex items-center justify-between px-6 py-3.5 text-[14px] text-[#8C7B68] hover:text-[#F4EDE4] hover:bg-[#1A1208] transition-colors"
+                  className="flex items-center justify-between px-6 py-3.5 text-[14px] transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                  onMouseEnter={(e) => {
+                    const el = e.currentTarget as HTMLElement
+                    el.style.color = "var(--text)"
+                    el.style.background = "var(--surface-raised)"
+                  }}
+                  onMouseLeave={(e) => {
+                    const el = e.currentTarget as HTMLElement
+                    el.style.color = "var(--text-muted)"
+                    el.style.background = "transparent"
+                  }}
                 >
                   {item.label}
                   {"badge" in item && item.badge > 0 && (
-                    <span className="flex size-5 items-center justify-center rounded-full bg-[#C8956A] text-[#0E0B08] text-[10px] font-bold">
+                    <span
+                      className="flex size-5 items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                    >
                       {item.badge}
                     </span>
                   )}
@@ -112,10 +150,11 @@ function UserDrawer({
             </nav>
 
             {/* Sign out */}
-            <div className="px-6 py-5 border-t border-[#1E1810]">
+            <div className="px-6 py-5" style={{ borderTop: "1px solid var(--border)" }}>
               <button
                 onClick={() => { onClose(); signOut() }}
-                className="w-full text-left text-[14px] text-[#C47B6B] hover:text-[#E08070] transition-colors"
+                className="w-full text-left text-[14px] transition-colors"
+                style={{ color: "var(--destructive)" }}
               >
                 Sign out
               </button>
@@ -127,8 +166,7 @@ function UserDrawer({
   )
 }
 
-// ─── Nav ─────────────────────────────────────────────────────────────────────
-
+// ─── Nav ──────────────────────────────────────────────────────────────────────
 export function Nav() {
   const { user, unreadCount, loading, signOut } = useAuth()
   const location = useLocation()
@@ -137,16 +175,16 @@ export function Nav() {
   const [mobileOpen, setMobileOpen] = React.useState(false)
   const [drawerOpen, setDrawerOpen] = React.useState(false)
   const { scrollY } = useScroll()
-  const navBg = useMotionValue("rgba(14, 11, 8, 0)")
+  const navBg = useMotionValue("rgba(9, 9, 11, 0)")
 
   useMotionValueEvent(scrollY, "change", (latest) => {
-    setScrolled(latest > 80)
+    setScrolled(latest > 60)
   })
 
   const solid = !isLanding || scrolled
 
   React.useEffect(() => {
-    animate(navBg, solid ? "rgba(14, 11, 8, 0.7)" : "rgba(14, 11, 8, 0)", { duration: 0.3 })
+    animate(navBg, solid ? "rgba(9, 9, 11, 0.85)" : "rgba(9, 9, 11, 0)", { duration: 0.3 })
   }, [solid, navBg])
 
   React.useEffect(() => {
@@ -161,55 +199,46 @@ export function Nav() {
           backgroundColor: navBg,
           backdropFilter: solid ? "blur(16px)" : "none",
           WebkitBackdropFilter: solid ? "blur(16px)" : "none",
-          borderBottom: solid ? "1px solid rgba(46, 36, 24, 0.6)" : "1px solid transparent",
+          borderBottom: solid ? "1px solid rgba(39, 39, 42, 0.6)" : "1px solid transparent",
         }}
         className="fixed inset-x-0 top-0 z-50 h-16"
       >
         <nav className="mx-auto flex h-full max-w-[1200px] items-center justify-between px-6">
-          <Link to="/" className="font-heading text-[18px] leading-none text-text">
-            Travel Couriers
+          {/* Brand */}
+          <Link to="/" className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-sm">
+            <Logomark className="w-5 h-5 text-[var(--accent)]" />
+            <span
+              className="text-[15px] font-bold tracking-[0.12em]"
+              style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
+            >
+              PEREGRI
+            </span>
           </Link>
 
-          <div className="hidden items-center gap-8 md:flex">
-            {[
-              { to: "/browse", label: "Browse" },
-              { href: "/#how-it-works", label: "How it works" },
-            ].map((link) =>
-              "href" in link ? (
-                <motion.a
-                  key={link.label}
-                  href={link.href}
-                  className="group relative text-[14px] font-normal text-text-muted"
-                  whileHover={{ y: -1 }}
-                >
-                  {link.label}
-                  <span className="absolute -bottom-1 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
-                </motion.a>
-              ) : (
-                <motion.div key={link.label} whileHover={{ y: -1 }}>
-                  <Link to={link.to} className="group relative text-[14px] font-normal text-text-muted">
-                    {link.label}
-                    <span className="absolute -bottom-1 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
-                  </Link>
-                </motion.div>
-              )
-            )}
-          </div>
-
-          <div className="hidden items-center gap-3 md:flex">
+          {/* Desktop right */}
+          <div className="hidden items-center gap-2 md:flex">
             {!loading && (
               user ? (
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="relative flex size-9 items-center justify-center rounded-full bg-surface-raised text-sm text-text hover:bg-[#2E2418] transition-colors"
+                  className="relative flex size-9 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
                 >
                   {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full rounded-full object-cover" />
+                    <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full rounded-sm object-cover" />
                   ) : (
-                    <span>{getInitial(user.displayName)}</span>
+                    <span
+                      className="text-xs font-bold"
+                      style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
+                    >
+                      {getInitial(user.displayName)}
+                    </span>
                   )}
                   {unreadCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-[#C8956A] text-[10px] font-bold text-[#0E0B08]">
+                    <span
+                      className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                    >
                       {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                   )}
@@ -217,25 +246,41 @@ export function Nav() {
               ) : (
                 <>
                   <Link
-                    to="/auth"
-                    search={{
-                      redirect: window.location.pathname,
-                      mode: "signin",
-                    }}
+                    to="/browse"
+                    className="px-4 py-2 text-[12px] font-bold tracking-widest transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
+                    onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text)"}
+                    onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
                   >
-                    <Button variant="ghost">Sign in</Button>
+                    BROWSE
                   </Link>
-                  <Link to="/trips/new">
-                    <Button>Post a trip</Button>
-                  </Link>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={springConfig}>
+                    <Link
+                      to="/auth"
+                      search={{ redirect: "/", mode: "signup" as any }}
+                      className="inline-flex items-center px-5 py-2 text-[11px] font-bold tracking-widest rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-dim)]"
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        background: "var(--accent)",
+                        color: "#fff",
+                        boxShadow: "0 0 16px rgba(59,130,246,0.25)",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(59,130,246,0.45)"}
+                      onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(59,130,246,0.25)"}
+                    >
+                      SIGN UP
+                    </Link>
+                  </motion.div>
                 </>
               )
             )}
           </div>
 
+          {/* Mobile hamburger */}
           <button
             type="button"
-            className="flex size-10 items-center justify-center text-text md:hidden"
+            className="flex size-10 items-center justify-center rounded-sm md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            style={{ color: "var(--text)" }}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             onClick={() => setMobileOpen((o) => !o)}
           >
@@ -244,7 +289,7 @@ export function Nav() {
         </nav>
       </motion.header>
 
-      {/* User drawer (desktop) */}
+      {/* User drawer */}
       {user && (
         <UserDrawer
           user={user}
@@ -255,49 +300,98 @@ export function Nav() {
         />
       )}
 
-      {/* Mobile full-screen menu */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-bg/95 backdrop-blur-sm md:hidden">
-          <div className="flex min-h-screen flex-col gap-6 px-6 pb-8 pt-24">
-            <Link to="/browse" className="text-[18px] text-text">Browse</Link>
-            <a href="/#how-it-works" className="text-[18px] text-text">How it works</a>
-            {user && (
-              <>
-                <Link to="/my-listings" className="text-[18px] text-text">My Listings</Link>
-                <div className="flex items-center gap-3">
-                  <Link to="/messages" className="text-[18px] text-text">Messages</Link>
-                  {unreadCount > 0 && (
-                    <span className="flex size-5 items-center justify-center rounded-full bg-[#C8956A] text-[#0E0B08] text-[10px] font-bold">
-                      {unreadCount}
-                    </span>
-                  )}
-                </div>
-                <Link to="/settings" className="text-[18px] text-text">Settings</Link>
-              </>
-            )}
-            <div className="mt-auto flex flex-col gap-3">
+      {/* Mobile menu */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-x-0 top-16 z-40 md:hidden"
+            style={{
+              background: "rgba(9, 9, 11, 0.97)",
+              backdropFilter: "blur(16px)",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <div className="flex flex-col gap-0 px-6 py-4">
+              <Link
+                to="/browse"
+                className="py-4 text-[15px] transition-colors"
+                style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
+                onClick={() => setMobileOpen(false)}
+              >
+                Browse
+              </Link>
               {user ? (
-                <button onClick={signOut} className="text-left text-[#C47B6B] text-[14px]">Sign out</button>
-              ) : (
                 <>
                   <Link
-                    to="/auth"
-                    search={{
-                      redirect: window.location.pathname,
-                      mode: "signin",
-                    }}
+                    to="/my-listings"
+                    className="py-4 text-[15px] transition-colors"
+                    style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
+                    onClick={() => setMobileOpen(false)}
                   >
-                    <Button variant="ghost" className="w-full">Sign in</Button>
+                    My Listings
                   </Link>
-                  <Link to="/trips/new">
-                    <Button className="w-full">Post a trip</Button>
+                  <Link
+                    to="/messages"
+                    className="py-4 text-[15px] flex items-center gap-3 transition-colors"
+                    style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Messages
+                    {unreadCount > 0 && (
+                      <span
+                        className="flex size-5 items-center justify-center rounded-full text-[10px] font-bold"
+                        style={{ background: "var(--accent)", color: "#fff" }}
+                      >
+                        {unreadCount}
+                      </span>
+                    )}
                   </Link>
+                  <Link
+                    to="/settings"
+                    className="py-4 text-[15px] transition-colors"
+                    style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    onClick={() => { setMobileOpen(false); signOut() }}
+                    className="py-4 text-left text-[15px] transition-colors"
+                    style={{ color: "var(--destructive)" }}
+                  >
+                    Sign out
+                  </button>
                 </>
+              ) : (
+                <div className="flex flex-col gap-3 pt-4">
+                  <Link
+                    to="/auth"
+                    search={{ redirect: "/", mode: "signin" as any }}
+                    className="py-3 text-center text-[12px] font-bold tracking-widest rounded-sm border transition-colors"
+                    style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", borderColor: "var(--border)" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    SIGN IN
+                  </Link>
+                  <Link
+                    to="/auth"
+                    search={{ redirect: "/", mode: "signup" as any }}
+                    className="py-3 text-center text-[12px] font-bold tracking-widest rounded-sm transition-colors"
+                    style={{ fontFamily: "var(--font-mono)", background: "var(--accent)", color: "#fff" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    SIGN UP
+                  </Link>
+                </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

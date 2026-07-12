@@ -4,7 +4,6 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
-import { getInitial } from "@/lib/db_constants"
 
 interface PublicProfile {
   id: string
@@ -57,6 +56,17 @@ interface EligibleDeal {
   completed_at: string | null
 }
 
+// Kind badge colours — consistent with Browse / ListingDetail
+const KIND_COLORS: Record<string, { bg: string; text: string }> = {
+  trip:     { bg: "rgba(147,197,253,0.1)",  text: "#93c5fd" },
+  request:  { bg: "rgba(134,239,172,0.1)",  text: "#86efac" },
+  delivery: { bg: "rgba(216,180,254,0.1)",  text: "#d8b4fe" },
+}
+
+function kindStyle(kind: string) {
+  return KIND_COLORS[kind?.toLowerCase()] ?? { bg: "rgba(255,255,255,0.05)", text: "var(--text-muted)" }
+}
+
 function RatingDots({ rating, max = 5 }: { rating: number; max?: number }) {
   return (
     <div className="flex gap-1.5 items-center">
@@ -64,15 +74,13 @@ function RatingDots({ rating, max = 5 }: { rating: number; max?: number }) {
         <div
           key={i}
           className="w-2 h-2 rounded-full transition-colors"
-          style={{ background: i < rating ? "#C8956A" : "#2E2418" }}
+          style={{ background: i < rating ? "var(--accent)" : "var(--border)" }}
         />
       ))}
     </div>
   )
 }
 
-// Interactive dot picker — same visual language as RatingDots, but hoverable
-// and clickable. Hover lifts to a slightly larger dot for affordance.
 function RatingInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0)
   return (
@@ -91,11 +99,11 @@ function RatingInput({ value, onChange }: { value: number; onChange: (v: number)
             className="p-0.5 cursor-pointer"
           >
             <div
-              className="rounded-full transition-colors"
+              className="rounded-full transition-all"
               style={{
                 width: active ? 18 : 14,
                 height: active ? 18 : 14,
-                background: active ? "#C8956A" : "#2E2418",
+                background: active ? "var(--accent)" : "var(--border)",
               }}
             />
           </motion.button>
@@ -106,11 +114,35 @@ function RatingInput({ value, onChange }: { value: number; onChange: (v: number)
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-[#1A1208] rounded-sm ${className}`} />
+  return (
+    <div
+      className={`animate-pulse rounded-sm ${className}`}
+      style={{ background: "var(--surface-raised)" }}
+    />
+  )
+}
+
+function ReviewerAvatar({ name, url }: { name: string; url?: string | null }) {
+  return (
+    <div
+      className="w-7 h-7 rounded-sm overflow-hidden flex items-center justify-center shrink-0"
+      style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
+    >
+      {url ? (
+        <img src={url} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        <span
+          className="text-[11px] font-bold"
+          style={{ color: "var(--accent)", fontFamily: "'DM Sans', sans-serif" }}
+        >
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </div>
+  )
 }
 
 // ─── Rate-this-person panel ──────────────────────────────────────────────────
-// Opens when the viewer has an unreviewed completed deal with this user.
 const MAX_REVIEW_COMMENT = 500
 
 function RatePanel({
@@ -127,6 +159,7 @@ function RatePanel({
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [focused, setFocused] = useState(false)
   const qc = useQueryClient()
 
   const mutation = useMutation({
@@ -155,10 +188,7 @@ function RatePanel({
   })
 
   async function handleSubmit() {
-    if (rating === 0) {
-      setError("Please select a rating")
-      return
-    }
+    if (rating === 0) { setError("Please select a rating"); return }
     setError(null)
     mutation.mutate()
   }
@@ -170,17 +200,23 @@ function RatePanel({
       exit={{ opacity: 0, height: 0 }}
       className="overflow-hidden"
     >
-      <div className="mt-4 p-5 bg-[#0E0B08] border border-[#2E2418] rounded-sm">
+      <div
+        className="mt-4 p-5 rounded-sm"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
         <div className="flex items-center justify-between mb-4">
           <h3
-            className="text-[11px] tracking-[0.2em] text-[#C8956A]"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="text-[11px] tracking-[0.2em]"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
           >
             RATE {partnerName.toUpperCase()}
           </h3>
           <button
             onClick={onClose}
-            className="text-[#3A2E20] hover:text-[#8C7B68] text-xs transition-colors"
+            className="text-xs transition-colors"
+            style={{ color: "var(--text-faint)" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--text-muted)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}
             aria-label="Close"
           >
             ✕
@@ -189,8 +225,8 @@ function RatePanel({
 
         {deal.origin_city && deal.dest_city && (
           <p
-            className="text-[10px] text-[#3A2E20] tracking-wider mb-4"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="text-[10px] tracking-wider mb-4"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
           >
             {deal.kind?.toUpperCase()} · {deal.origin_city} → {deal.dest_city}
           </p>
@@ -206,19 +242,28 @@ function RatePanel({
           placeholder="Share your experience (optional)…"
           rows={3}
           maxLength={MAX_REVIEW_COMMENT}
-          className="w-full bg-[#111008] border border-[#2E2418] rounded-md px-4 py-2.5 text-[13px] text-[#F4EDE4] placeholder-[#3A2E20] resize-none focus:outline-none focus:border-[#C8956A]/40 transition-colors"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className="w-full rounded-sm px-4 py-2.5 text-[13px] resize-none focus:outline-none transition-colors"
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            background: "var(--surface-raised)",
+            border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
+            color: "var(--text)",
+            caretColor: "var(--accent)",
+          }}
         />
         <div className="flex items-center justify-between mt-1.5">
           <span
-            className="text-[9px] text-[#3A2E20] tabular-nums"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="text-[9px] tabular-nums"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
           >
             {comment.length}/{MAX_REVIEW_COMMENT}
           </span>
           {error && (
             <span
-              className="text-[10px] text-[#C8956A]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[10px]"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}
             >
               {error.toUpperCase()}
             </span>
@@ -229,15 +274,33 @@ function RatePanel({
           <button
             onClick={handleSubmit}
             disabled={mutation.isPending || rating === 0}
-            className="flex-1 px-4 py-2.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-40 disabled:cursor-not-allowed text-[#0E0B08] text-[11px] font-bold tracking-widest rounded-full transition-colors"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              background: "var(--accent)",
+              color: "#ffffff",
+            }}
+            onMouseEnter={e => { if (!mutation.isPending && rating > 0) e.currentTarget.style.background = "var(--accent-dim)" }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--accent)" }}
           >
             {mutation.isPending ? "…" : "SUBMIT REVIEW"}
           </button>
           <button
             onClick={onClose}
-            className="px-5 py-2.5 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] text-[11px] tracking-widest rounded-full transition-colors"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm transition-colors"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "var(--accent)"
+              e.currentTarget.style.color = "var(--text)"
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "var(--border)"
+              e.currentTarget.style.color = "var(--text-muted)"
+            }}
           >
             CANCEL
           </button>
@@ -261,8 +324,6 @@ export function ProfilePage({ userId }: { userId: string }) {
     },
   })
 
-  // Eligible unreviewed deal between the viewer and this user — drives the
-  // "Rate {name}" button. Only meaningful on someone else's profile.
   const { data: eligibleDeal } = useQuery({
     queryKey: ["review-eligible", userId],
     queryFn: async () => {
@@ -309,7 +370,7 @@ export function ProfilePage({ userId }: { userId: string }) {
       ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
       : null
 
-  const initial = ((profile?.display_name ?? "T").charAt(0)).toUpperCase()
+  const initial = ((profile?.display_name ?? "P").charAt(0)).toUpperCase()
 
   const memberSince = profile
     ? new Date(profile.created_at).toLocaleDateString("en-GB", {
@@ -319,7 +380,7 @@ export function ProfilePage({ userId }: { userId: string }) {
     : ""
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       {/* ── Hero ── */}
       <section className="relative pt-24 pb-12 px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto">
         {/* Ambient top glow */}
@@ -327,7 +388,7 @@ export function ProfilePage({ userId }: { userId: string }) {
           className="absolute top-0 left-0 right-0 h-64 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse at 30% 0%, rgba(200,149,106,0.07) 0%, transparent 70%)",
+              "radial-gradient(ellipse at 30% 0%, rgba(37,99,235,0.07) 0%, transparent 70%)",
           }}
         />
 
@@ -340,31 +401,39 @@ export function ProfilePage({ userId }: { userId: string }) {
           {/* Avatar */}
           <div className="relative shrink-0">
             {profileLoading ? (
-              <Skeleton className="w-32 h-32 md:w-40 md:h-40 rounded-full" />
+              <Skeleton className="w-32 h-32 md:w-40 md:h-40 rounded-sm" />
             ) : profile?.avatar_url ? (
               <img
                 src={profile.avatar_url}
                 alt={profile.display_name ?? ""}
-                className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border border-[#2E2418]"
+                className="w-32 h-32 md:w-40 md:h-40 rounded-sm object-cover"
+                style={{ border: "1px solid var(--border)" }}
               />
             ) : (
               <div
-                className="w-32 h-32 md:w-40 md:h-40 rounded-full border border-[#2E2418] flex items-center justify-center"
+                className="w-32 h-32 md:w-40 md:h-40 rounded-sm flex items-center justify-center"
                 style={{
-                  background:
-                    "radial-gradient(circle at 30% 30%, #1E1608 0%, #0E0B08 100%)",
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
                 }}
               >
                 <span
-                  className="text-6xl md:text-7xl text-[#C8956A] leading-none"
-                  style={{ fontFamily: "'DM Serif Display', serif" }}
+                  className="text-6xl md:text-7xl font-bold leading-none"
+                  style={{ color: "var(--accent)", fontFamily: "'DM Sans', sans-serif" }}
                 >
                   {initial}
                 </span>
               </div>
             )}
-            <div className="absolute bottom-2 right-2 w-4 h-4 rounded-full bg-[#0E0B08] border border-[#1E1608] flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-[#7EB89A] opacity-80" />
+            {/* Online indicator */}
+            <div
+              className="absolute bottom-2 right-2 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)" }}
+            >
+              <div
+                className="w-2 h-2 rounded-sm"
+                style={{ background: "var(--success)", opacity: 0.8 }}
+              />
             </div>
           </div>
 
@@ -379,17 +448,28 @@ export function ProfilePage({ userId }: { userId: string }) {
               <>
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
                   <h1
-                    className="text-4xl md:text-5xl text-[#F4EDE4] italic leading-tight"
-                    style={{ fontFamily: "'DM Serif Display', serif" }}
+                    className="text-4xl md:text-5xl font-bold leading-tight"
+                    style={{ color: "var(--text)", fontFamily: "'DM Sans', sans-serif" }}
                   >
                     {profile?.display_name ?? "Traveler"}
                   </h1>
                   {isOwnProfile ? (
                     <Link to="/settings">
                       <motion.button
-                        whileHover={{ borderColor: "rgba(200,149,106,0.6)" }}
-                        className="px-5 py-2 text-[10px] border border-[#2E2418] text-[#C8956A] hover:bg-[#C8956A]/5 rounded-sm transition-colors tracking-[0.15em]"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em] transition-colors"
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          border: "1px solid var(--border)",
+                          color: "var(--accent)",
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "var(--accent)"
+                          e.currentTarget.style.background = "rgba(37,99,235,0.06)"
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "var(--border)"
+                          e.currentTarget.style.background = "transparent"
+                        }}
                       >
                         EDIT PROFILE
                       </motion.button>
@@ -397,9 +477,19 @@ export function ProfilePage({ userId }: { userId: string }) {
                   ) : eligibleDeal ? (
                     <motion.button
                       onClick={() => setRateOpen((v) => !v)}
-                      whileHover={{ borderColor: "rgba(200,149,106,0.6)" }}
-                      className="px-5 py-2 text-[10px] border border-[#C8956A]/40 bg-[#C8956A]/5 text-[#C8956A] hover:bg-[#C8956A]/10 rounded-sm transition-colors tracking-[0.15em]"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em] transition-colors"
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        border: "1px solid rgba(37,99,235,0.4)",
+                        background: "rgba(37,99,235,0.06)",
+                        color: "var(--accent)",
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(37,99,235,0.12)"
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = "rgba(37,99,235,0.06)"
+                      }}
                     >
                       RATE {profile?.display_name?.toUpperCase() ?? "USER"}
                     </motion.button>
@@ -407,15 +497,15 @@ export function ProfilePage({ userId }: { userId: string }) {
                 </div>
 
                 <div
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#8C7B68] tracking-widest mb-3"
-                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tracking-widest mb-3"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
                 >
                   {(profile?.city || profile?.country) && (
                     <>
                       <span>
                         {[profile.city, profile.country].filter(Boolean).join(", ")}
                       </span>
-                      <span className="text-[#2E2418]">·</span>
+                      <span style={{ color: "var(--text-faint)" }}>·</span>
                     </>
                   )}
                   <span>MEMBER SINCE {memberSince.toUpperCase()}</span>
@@ -425,8 +515,8 @@ export function ProfilePage({ userId }: { userId: string }) {
                   <div className="flex items-center gap-3 mb-3">
                     <RatingDots rating={Math.round(avgRating)} />
                     <span
-                      className="text-[10px] text-[#8C7B68] tracking-wider"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      className="text-[10px] tracking-wider"
+                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
                     >
                       {avgRating.toFixed(1)} · {reviews!.length} REVIEW
                       {reviews!.length !== 1 ? "S" : ""}
@@ -435,7 +525,10 @@ export function ProfilePage({ userId }: { userId: string }) {
                 )}
 
                 {profile?.bio && (
-                  <p className="text-[#8C7B68] text-sm leading-relaxed max-w-[50ch] mt-4">
+                  <p
+                    className="text-sm leading-relaxed max-w-[50ch] mt-4"
+                    style={{ color: "var(--text-muted)" }}
+                  >
                     {profile.bio}
                   </p>
                 )}
@@ -459,7 +552,7 @@ export function ProfilePage({ userId }: { userId: string }) {
         </motion.div>
       </section>
 
-      <div className="h-px bg-[#1A1208] mx-6 md:mx-12 xl:mx-20 max-w-[1100px] md:mx-auto" />
+      <div className="h-px mx-6 md:mx-12 xl:mx-20 max-w-[1100px] md:mx-auto" style={{ background: "var(--border)" }} />
 
       {/* ── Listings ── */}
       <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto py-12">
@@ -470,17 +563,17 @@ export function ProfilePage({ userId }: { userId: string }) {
           transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 bg-[#C8956A]/40 rounded-full" />
+            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
             <h2
-              className="text-[10px] tracking-[0.22em] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[10px] tracking-[0.22em]"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
             >
               ACTIVE LISTINGS
             </h2>
             {listings && listings.length > 0 && (
               <span
-                className="text-[10px] text-[#3A2E20] tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="text-[10px] tabular-nums"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
               >
                 {listings.length}
               </span>
@@ -489,49 +582,60 @@ export function ProfilePage({ userId }: { userId: string }) {
 
           {!listings ? (
             <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : listings.length === 0 ? (
             <p
-              className="text-[#3A2E20] text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[11px] tracking-wider"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
             >
               No active listings.
             </p>
           ) : (
             <div className="space-y-1.5">
-              {listings.slice(0, 10).map((l, i) => (
-                <motion.div
-                  key={l.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                  className="flex items-center justify-between px-4 py-3.5 bg-[#0E0B08] border border-[#1A1208] hover:border-[#2E2418] rounded-sm transition-colors"
-                >
-                  <div className="flex items-center gap-5">
-                    <span
-                      className="text-[9px] text-[#C8956A]/50 tracking-widest w-14 shrink-0"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                    >
-                      {l.kind?.toUpperCase()}
-                    </span>
-                    <span className="text-sm text-[#F4EDE4]">
-                      {l.origin_city}
-                      <span className="text-[#C8956A]/50 mx-2">→</span>
-                      {l.dest_city}
-                    </span>
-                  </div>
-                  <span
-                    className="text-[9px] text-[#7EB89A] tracking-[0.15em]"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              {listings.slice(0, 10).map((l, i) => {
+                const ks = kindStyle(l.kind)
+                return (
+                  <motion.div
+                    key={l.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
+                    className="flex items-center justify-between px-4 py-3.5 rounded-sm transition-colors"
+                    style={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
                   >
-                    OPEN
-                  </span>
-                </motion.div>
-              ))}
+                    <div className="flex items-center gap-5">
+                      <span
+                        className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          background: ks.bg,
+                          color: ks.text,
+                        }}
+                      >
+                        {l.kind?.toUpperCase()}
+                      </span>
+                      <span className="text-sm" style={{ color: "var(--text)" }}>
+                        {l.origin_city}
+                        <span className="mx-2" style={{ color: "var(--text-faint)" }}>→</span>
+                        {l.dest_city}
+                      </span>
+                    </div>
+                    <span
+                      className="text-[9px] tracking-[0.15em]"
+                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--success)" }}
+                    >
+                      OPEN
+                    </span>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </motion.div>
@@ -546,17 +650,17 @@ export function ProfilePage({ userId }: { userId: string }) {
           transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 bg-[#C8956A]/40 rounded-full" />
+            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
             <h2
-              className="text-[10px] tracking-[0.22em] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[10px] tracking-[0.22em]"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
             >
               HISTORY
             </h2>
             {history && history.length > 0 && (
               <span
-                className="text-[10px] text-[#3A2E20] tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="text-[10px] tabular-nums"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
               >
                 {history.length}
               </span>
@@ -565,14 +669,12 @@ export function ProfilePage({ userId }: { userId: string }) {
 
           {!history ? (
             <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+              {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : history.length === 0 ? (
             <p
-              className="text-[#3A2E20] text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[11px] tracking-wider"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
             >
               No completed deals yet.
             </p>
@@ -580,6 +682,7 @@ export function ProfilePage({ userId }: { userId: string }) {
             <div className="space-y-1.5">
               {history.map((deal, i) => {
                 const partnerName = deal.partner?.display_name ?? "Anonymous"
+                const ks = kindStyle(deal.kind)
                 return (
                   <motion.div
                     key={deal.id}
@@ -587,39 +690,41 @@ export function ProfilePage({ userId }: { userId: string }) {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                    className="flex items-center justify-between px-4 py-3.5 bg-[#0E0B08] border border-[#1A1208] hover:border-[#2E2418] rounded-sm transition-colors"
+                    className="flex items-center justify-between px-4 py-3.5 rounded-sm transition-colors"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
                   >
                     <div className="flex items-center gap-5 min-w-0">
                       <span
-                        className="text-[9px] text-[#C8956A]/50 tracking-widest w-14 shrink-0"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          background: ks.bg,
+                          color: ks.text,
+                        }}
                       >
                         {deal.kind?.toUpperCase()}
                       </span>
-                      <span className="text-sm text-[#F4EDE4] truncate">
+                      <span className="text-sm truncate" style={{ color: "var(--text)" }}>
                         {deal.origin_city}
-                        <span className="text-[#C8956A]/50 mx-2">→</span>
+                        <span className="mx-2" style={{ color: "var(--text-faint)" }}>→</span>
                         {deal.dest_city}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center overflow-hidden">
-                          {deal.partner?.avatar_url ? (
-                            <img src={deal.partner.avatar_url} alt={partnerName} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-[8px] text-[#C8956A]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-                              {(partnerName).charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                        <ReviewerAvatar name={partnerName} url={deal.partner?.avatar_url} />
+                        <span
+                          className="text-[11px]"
+                          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
+                        >
                           {partnerName}
                         </span>
                       </div>
                       <span
-                        className="text-[9px] text-[#3A2E20] tracking-widest"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        className="text-[9px] tracking-widest"
+                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
                       >
                         {new Date(deal.completed_at)
                           .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
@@ -643,25 +748,31 @@ export function ProfilePage({ userId }: { userId: string }) {
           transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 bg-[#C8956A]/40 rounded-full" />
+            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
             <h2
-              className="text-[10px] tracking-[0.22em] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[10px] tracking-[0.22em]"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
             >
               REVIEWS
             </h2>
+            {reviews && reviews.length > 0 && (
+              <span
+                className="text-[10px] tabular-nums"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+              >
+                {reviews.length}
+              </span>
+            )}
           </div>
 
           {!reviews ? (
             <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-24 w-full" />
-              ))}
+              {[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
             </div>
           ) : reviews.length === 0 ? (
             <p
-              className="text-[#3A2E20] text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[11px] tracking-wider"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
             >
               No reviews yet.
             </p>
@@ -676,7 +787,8 @@ export function ProfilePage({ userId }: { userId: string }) {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.35, delay: i * 0.05, ease: "easeOut" }}
-                    className="p-5 bg-[#0E0B08] border border-[#1A1208] rounded-sm"
+                    className="p-5 rounded-sm"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -692,15 +804,17 @@ export function ProfilePage({ userId }: { userId: string }) {
                             <Link
                               to="/profile/$userId"
                               params={{ userId: review.reviewer.id }}
-                              className="text-[11px] text-[#8C7B68] hover:text-[#F4EDE4] transition-colors"
-                              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                              className="text-[11px] transition-colors"
+                              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
+                              onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+                              onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
                             >
                               {reviewerName}
                             </Link>
                           ) : (
                             <span
-                              className="text-[11px] text-[#8C7B68]"
-                              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                              className="text-[11px]"
+                              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
                             >
                               {reviewerName}
                             </span>
@@ -709,8 +823,8 @@ export function ProfilePage({ userId }: { userId: string }) {
                         </div>
                       </div>
                       <span
-                        className="text-[9px] text-[#3A2E20] tracking-widest"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        className="text-[9px] tracking-widest"
+                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
                       >
                         {new Date(review.created_at)
                           .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
@@ -718,7 +832,9 @@ export function ProfilePage({ userId }: { userId: string }) {
                       </span>
                     </div>
                     {review.comment && (
-                      <p className="text-[#8C7B68] text-sm leading-relaxed">{review.comment}</p>
+                      <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                        {review.comment}
+                      </p>
                     )}
                   </motion.div>
                 )

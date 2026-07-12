@@ -1,8 +1,15 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { motion } from "framer-motion"
+import {
+  motion,
+  AnimatePresence,
+  useScroll,
+  useTransform,
+  useSpring,
+  useVelocity,
+} from "framer-motion"
+import { ArrowRight, Waypoints, Star, Flag, Ban } from "lucide-react"
 
-import { Magnetic } from "@/components/landing/Magnetic"
 import { CityAutocomplete } from "@/components/CityAutocomplete"
 
 // ─── Domain semantics (single source of truth for the landing) ───────────────
@@ -11,207 +18,540 @@ import { CityAutocomplete } from "@/components/CityAutocomplete"
 // delivery → the sender who stays put. "I have an item that needs to move A→B.
 //            I need a courier to carry it."
 // request  → a buy-and-bring. "Buy item X in another city and bring it to me."
-type Role = "trip" | "delivery" | "request"
 
-interface Step {
-  n: string
-  title: string
-  body: string
-  accent?: boolean
+// ─── Route/graph motif primitives ────────────────────────────────────────────
+const springConfig = { type: "spring" as const, stiffness: 400, damping: 30 }
+const elasticConfig = { type: "spring" as const, stiffness: 300, damping: 15 }
+
+function Logomark({ className = "w-6 h-6" }: { className?: string }) {
+  return <Waypoints className={className} />
 }
 
-interface RoleCopy {
-  tab: string
-  label: string
-  headline: string
-  intro: string
-  steps: Step[]
-}
-
-const HOW: Record<Role, RoleCopy> = {
-  trip: {
-    tab: "TRIP",
-    label: "I'm traveling",
-    headline: "Fill your empty space — and your wallet",
-    intro:
-      "You're already going somewhere. By plane, car, train or ferry, at home or abroad. List the route and let people pay you to ride along with their things.",
-    steps: [
-      {
-        n: "01",
-        title: "List your route",
-        body: "Where from, where to, when, and how much room you can spare. Set your price or leave it open. Your trip — your terms.",
-      },
-      {
-        n: "02",
-        title: "Choose who you carry for",
-        body: "Senders message you. Read their profile, agree on the item and the handoff, and confirm when you're both happy. You decide who rides with you.",
-      },
-      {
-        n: "03",
-        title: "Deliver and earn",
-        body: "Hand it over at your destination. Close the deal and it's saved to your travel history — your listing stays open for more senders.",
-        accent: true,
-      },
-    ],
-  },
-  delivery: {
-    tab: "DELIVERY",
-    label: "I need it delivered",
-    headline: "Send anything, with someone already going",
-    intro:
-      "You have an item that needs to reach another city — and you're not traveling. Post it and let a courier who's already headed that way carry it for you.",
-    steps: [
-      {
-        n: "01",
-        title: "Post your item",
-        body: "Describe what needs to move, the origin and destination, your deadline and what you'll pay. You stay exactly where you are.",
-      },
-      {
-        n: "02",
-        title: "Match with a courier",
-        body: "Travelers already going your way will reach out. Agree on the item, pickup and drop-off, and confirm the match — your request then closes to other couriers.",
-      },
-      {
-        n: "03",
-        title: "Receive it, done",
-        body: "The courier delivers it at the destination. Close the deal and it's archived to your history — no logistics, no chasing.",
-        accent: true,
-      },
-    ],
-  },
-  request: {
-    tab: "REQUEST",
-    label: "Buy it for me",
-    headline: "Get something from another city",
-    intro:
-      "Saw it abroad — or just two cities over — and can't get there? Ask a traveler passing through to pick it up and bring it to you.",
-    steps: [
-      {
-        n: "01",
-        title: "Describe what you want",
-        body: "What it is, where it's sold, and where you'd like it brought. Name the reward you're willing to offer for the favor.",
-      },
-      {
-        n: "02",
-        title: "Find a shopper on the way",
-        body: "Travelers heading to that city will see it. Chat, agree on the price and handoff, and confirm the match with your courier.",
-      },
-      {
-        n: "03",
-        title: "It arrives with them",
-        body: "They buy it, bring it back, and hand it over. Close the deal and it's added to your history.",
-        accent: true,
-      },
-    ],
-  },
-}
-
-const ROLES: Role[] = ["trip", "delivery", "request"]
-
-function StepCard({ step, index }: { step: Step; index: number }) {
+// Renders as the styled child of a router `Link` (never its own interactive
+// element) so the anchor stays the single focusable/clickable control.
+function GraphButton({
+  children,
+  variant = "primary",
+  className = "",
+}: {
+  children: React.ReactNode
+  variant?: "primary" | "secondary"
+  className?: string
+}) {
+  const base =
+    "inline-flex items-center justify-center text-sm font-medium transition-colors rounded-sm h-11 px-6 gap-2"
+  const variants = {
+    primary:
+      "bg-blue-600 text-white group-hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.2)] group-hover:shadow-[0_0_25px_rgba(37,99,235,0.4)]",
+    secondary:
+      "bg-zinc-900 text-zinc-100 border border-zinc-800 group-hover:border-zinc-600 group-hover:bg-zinc-800",
+  }
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 40 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.6, delay: index * 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="flex flex-col relative cursor-default"
+    <motion.span
+      whileHover={{ scale: 1.02, y: -1 }}
+      whileTap={{ scale: 0.98, y: 1 }}
+      transition={springConfig}
+      className={`${base} ${variants[variant]} ${className}`}
     >
-      <motion.div
-        className="text-[120px] leading-none mb-6 select-none"
-        style={{
-          fontFamily: "'DM Serif Display', serif",
-          WebkitTextStroke: `1px rgba(200, 149, 106, ${step.accent ? 1 : 0.4})`,
-          color: "transparent",
-        }}
-      >
-        {step.n}
-      </motion.div>
-
-      <h3
-        className={`font-bold text-2xl mb-4 ${step.accent ? "text-[#C8956A]" : "text-[#F4EDE4]"}`}
-      >
-        {step.title}
-      </h3>
-
-      <p className="text-[#8C7B68] leading-relaxed">{step.body}</p>
-
-      <div
-        className="mt-6 h-px"
-        style={{ background: `rgba(200,149,106,${step.accent ? 0.6 : 0.2})` }}
-      />
-    </motion.div>
+      {children}
+    </motion.span>
   )
 }
 
-function HowItWorksTabs() {
-  const [role, setRole] = useState<Role>("trip")
-  const copy = HOW[role]
+function SectionDivider() {
+  return (
+    <div className="w-full flex items-center justify-center py-8 relative z-10">
+      <div className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-zinc-800 to-transparent" />
+      <div className="bg-[#09090b] px-4 relative">
+        <Logomark className="w-4 h-4 text-zinc-800" />
+      </div>
+    </div>
+  )
+}
+
+// ─── Background: node/route network texture ──────────────────────────────────
+function NetworkBackground() {
+  const { scrollY } = useScroll()
+  const y1 = useTransform(scrollY, [0, 1000], [0, 200])
+  const y2 = useTransform(scrollY, [0, 1000], [0, -200])
+
+  const lines = [
+    { x1: "10%", y1: "20%", x2: "40%", y2: "50%", delay: 0, dur: 3 },
+    { x1: "40%", y1: "50%", x2: "80%", y2: "30%", delay: 1, dur: 4 },
+    { x1: "80%", y1: "30%", x2: "90%", y2: "70%", delay: 0.5, dur: 3.5 },
+    { x1: "40%", y1: "50%", x2: "30%", y2: "80%", delay: 2, dur: 2.5 },
+    { x1: "30%", y1: "80%", x2: "60%", y2: "90%", delay: 1.5, dur: 3 },
+    { x1: "60%", y1: "90%", x2: "90%", y2: "70%", delay: 0.2, dur: 4 },
+  ]
 
   return (
-    <section id="how-it-works" className="relative z-[2] py-32 px-6 md:px-12 xl:px-20 max-w-[1800px] mx-auto">
-      <div className="text-center mb-16">
-        <motion.h2
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-5xl md:text-6xl text-[#F4EDE4] mb-6"
-          style={{ fontFamily: "'DM Serif Display', serif" }}
-        >
-          How It Works
-        </motion.h2>
-        <p className="text-[#8C7B68] max-w-2xl mx-auto text-lg">
-          Three ways to use the network — pick the one that fits you.
-        </p>
-      </div>
-
-      {/* Role tabs */}
-      <div className="flex justify-center mb-16">
-        <div className="flex gap-1.5 flex-wrap justify-center">
-          {ROLES.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRole(r)}
-              className={`px-6 py-2.5 text-[11px] tracking-[0.15em] rounded-full border transition-all ${
-                role === r
-                  ? "bg-[#C8956A] border-[#C8956A] text-[#0E0B08] font-bold"
-                  : "border-[#2E2418] text-[#8C7B68] hover:border-[#C8956A]/40 hover:text-[#F4EDE4]"
-              }`}
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              {HOW[r].tab}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Active role panel */}
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div
+        className="absolute top-0 left-0 w-full h-full opacity-[0.02]"
+        style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
+          backgroundSize: "32px 32px",
+        }}
+      />
       <motion.div
-        key={role}
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="max-w-3xl mx-auto mb-24 text-center"
-      >
-        <p className="text-[11px] tracking-[0.2em] text-[#C8956A] mb-3" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-          {copy.label.toUpperCase()}
-        </p>
-        <h3 className="text-3xl md:text-4xl text-[#F4EDE4] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
-          {copy.headline}
-        </h3>
-        <p className="text-[#8C7B68] text-base leading-relaxed max-w-2xl mx-auto">{copy.intro}</p>
-      </motion.div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 xl:gap-16">
-        {copy.steps.map((step, index) => (
-          <StepCard key={step.n} step={step} index={index} />
+        style={{ y: y1 }}
+        className="absolute -top-1/4 -right-1/4 w-[800px] h-[800px] bg-blue-600/10 blur-[120px] rounded-full mix-blend-screen"
+      />
+      <motion.div
+        style={{ y: y2 }}
+        className="absolute top-1/2 -left-1/4 w-[600px] h-[600px] bg-indigo-600/5 blur-[100px] rounded-full mix-blend-screen"
+      />
+      <svg className="absolute w-full h-full opacity-30">
+        {lines.map((line, i) => (
+          <g key={i}>
+            <circle cx={line.x1} cy={line.y1} r="3" fill="#27272A" />
+            <circle cx={line.x2} cy={line.y2} r="3" fill="#27272A" />
+            <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="#18181B" strokeWidth="1.5" strokeDasharray="4 4" />
+            <motion.circle
+              r="2.5"
+              fill="#3b82f6"
+              initial={{ cx: line.x1, cy: line.y1, opacity: 0 }}
+              animate={{ cx: [line.x1, line.x2], cy: [line.y1, line.y2], opacity: [0, 1, 1, 0] }}
+              transition={{ duration: line.dur, repeat: Infinity, ease: "easeInOut", delay: line.delay, times: [0, 0.1, 0.9, 1] }}
+              style={{ filter: "drop-shadow(0 0 4px #3b82f6)" }}
+            />
+          </g>
         ))}
+      </svg>
+    </div>
+  )
+}
+
+// ─── Hero ─────────────────────────────────────────────────────────────────────
+function Hero() {
+  return (
+    <section className="relative pt-40 pb-28 overflow-hidden bg-[#09090b]">
+      <NetworkBackground />
+      <div className="max-w-7xl mx-auto px-6 relative z-10 flex flex-col items-center text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={elasticConfig}
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border border-zinc-800 bg-zinc-900/50 mb-8 backdrop-blur-sm"
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+          <span className="font-mono text-[10px] text-zinc-300 tracking-widest font-bold">
+            PEER-TO-PEER LOGISTICS MARKETPLACE
+          </span>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 40, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ ...elasticConfig, delay: 0.1 }}
+          className="text-5xl md:text-7xl font-bold text-zinc-100 tracking-tighter max-w-4xl mb-6 leading-[1.05]"
+        >
+          MATCHING TRAVELERS <br className="hidden md:block" />
+          <span className="text-zinc-600">WITH DELIVERIES.</span>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...elasticConfig, delay: 0.2 }}
+          className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed"
+        >
+          Put your spare luggage capacity to use. Connect directly with people who need items
+          moved along your route—whether by flight, train, bus, or road.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...elasticConfig, delay: 0.3 }}
+          className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
+        >
+          <Link to="/browse" className="group w-full sm:w-auto focus-visible:outline-none">
+            <GraphButton variant="primary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
+              BROWSE <ArrowRight className="w-4 h-4" />
+            </GraphButton>
+          </Link>
+          <Link
+            to="/auth"
+            search={{ redirect: "/", mode: "signin" }}
+            className="group w-full sm:w-auto focus-visible:outline-none"
+          >
+            <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
+              SIGN IN
+            </GraphButton>
+          </Link>
+        </motion.div>
       </div>
     </section>
   )
 }
 
-// ─── Route search ────────────────────────────────────────────────────────────
+// ─── Live routes ticker (real, non-fabricated city pairs — no invented status) ─
+function LiveRoutes() {
+  const routes = [
+    "SÃO PAULO ↔ LISBON",
+    "TORONTO ↔ MANILA",
+    "PARIS ↔ DAKAR",
+    "DUBAI ↔ NAIROBI",
+    "SEOUL ↔ HO CHI MINH CITY",
+    "MADRID ↔ BOGOTÁ",
+  ]
+  const duplicatedRoutes = [...routes, ...routes, ...routes]
+
+  const { scrollY } = useScroll()
+  const scrollVelocity = useVelocity(scrollY)
+  const skew = useTransform(scrollVelocity, [-1000, 1000], [-5, 5])
+  const smoothSkew = useSpring(skew, { stiffness: 100, damping: 30 })
+
+  return (
+    <div className="w-full border-y border-zinc-800/80 bg-[#0a0a0c] overflow-hidden py-4 flex items-center relative">
+      <div className="absolute left-0 w-32 h-full bg-gradient-to-r from-[#0a0a0c] to-transparent z-10 pointer-events-none" />
+      <div className="absolute right-0 w-32 h-full bg-gradient-to-l from-[#0a0a0c] to-transparent z-10 pointer-events-none" />
+      <motion.div
+        className="flex whitespace-nowrap items-center gap-12 px-4"
+        animate={{ x: ["0%", "-33.33%"] }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        style={{ skewX: smoothSkew }}
+      >
+        {duplicatedRoutes.map((pair, i) => (
+          <div key={i} className="flex items-center gap-4 font-mono text-xs">
+            <span className="text-zinc-400 font-bold tracking-wide">{pair}</span>
+            <Logomark className="w-3 h-3 text-zinc-800 mx-6" />
+          </div>
+        ))}
+      </motion.div>
+    </div>
+  )
+}
+
+// ─── How it works: interactive node graph ────────────────────────────────────
+const GRAPH_STEPS = [
+  {
+    id: "post",
+    label: "post",
+    x: 10,
+    y: 50,
+    title: "POST A LISTING",
+    content:
+      "You're going somewhere? Post a Trip. You need something delivered to you? Post a Delivery. You want something bought and brought to you? Post a Purchase Request.",
+  },
+  {
+    id: "match",
+    label: "match",
+    x: 36,
+    y: 25,
+    title: "SOMEONE REACHES OUT",
+    content:
+      "If you posted a Delivery or Purchase Request, you contact a matching Trip along your route. If you posted a Trip, people needing deliveries or purchases along your way contact you.",
+  },
+  {
+    id: "agree",
+    label: "agree",
+    x: 64,
+    y: 75,
+    title: "YOU BOTH AGREE",
+    content:
+      "Message each other, work out the details, and decide together whether to move forward. Nothing happens without both sides agreeing—it's always your choice.",
+  },
+  {
+    id: "move",
+    label: "move",
+    x: 90,
+    y: 50,
+    title: "CLOSE THE DEAL & REVIEW",
+    content:
+      "The deal happens, you mark it as closed, and both sides leave a review. That review becomes part of each person's public track record on Peregri.",
+  },
+]
+
+function HowItWorks() {
+  const [activeIndex, setActiveIndex] = useState(0)
+  const graphRef = useRef<HTMLDivElement>(null)
+  const nodeRefs = useRef<(HTMLDivElement | null)[]>([])
+  const [centers, setCenters] = useState<{ x: number; y: number }[]>([])
+
+  useEffect(() => {
+    const measure = () => {
+      const container = graphRef.current
+      if (!container) return
+      const containerRect = container.getBoundingClientRect()
+      const next = nodeRefs.current
+        .map((el) => {
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          return { x: r.left + r.width / 2 - containerRect.left, y: r.top + r.height / 2 - containerRect.top }
+        })
+        .filter((c): c is { x: number; y: number } => c !== null)
+      setCenters(next)
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    return () => window.removeEventListener("resize", measure)
+  }, [])
+
+  return (
+    <section id="how-it-works" className="pt-32 pb-16 relative bg-[#09090b] overflow-hidden">
+      <Logomark className="absolute -right-40 top-0 w-[800px] h-[800px] text-zinc-800/[0.03] rotate-45 pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto px-6 relative z-10">
+        <div className="mb-24 text-center flex flex-col items-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Logomark className="w-4 h-4 text-blue-500" />
+            <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">MARKETPLACE LOGIC</h2>
+          </div>
+          <h3 className="text-4xl md:text-5xl font-bold text-zinc-100 tracking-tighter max-w-2xl">
+            HOW PEREGRI CONNECTS THE DOTS.
+          </h3>
+        </div>
+
+        <div className="w-full flex flex-col items-center">
+          <div ref={graphRef} className="relative w-full max-w-4xl h-[240px] md:h-[320px] mb-16 select-none">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+              {GRAPH_STEPS.map((_node, i) => {
+                if (i === 0 || !centers[i] || !centers[i - 1]) return null
+                const prev = centers[i - 1]
+                const curr = centers[i]
+                return (
+                  <g key={`line-${i}`}>
+                    <line x1={prev.x} y1={prev.y} x2={curr.x} y2={curr.y} stroke="#27272A" strokeWidth="2" strokeDasharray="6 6" />
+                    <motion.line
+                      x1={prev.x}
+                      y1={prev.y}
+                      x2={curr.x}
+                      y2={curr.y}
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      initial={{ pathLength: 0, opacity: 0 }}
+                      animate={{ opacity: activeIndex >= i ? 1 : 0, pathLength: activeIndex >= i ? 1 : 0 }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      style={{ filter: "drop-shadow(0 0 6px rgba(37,99,235,0.4))" }}
+                    />
+                    <motion.circle
+                      r="3.5"
+                      fill="#3b82f6"
+                      initial={{ cx: prev.x, cy: prev.y, opacity: 0 }}
+                      animate={{ cx: [prev.x, curr.x], cy: [prev.y, curr.y], opacity: [0, 1, 1, 0] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.6 }}
+                      style={{ filter: "drop-shadow(0 0 8px #3b82f6)" }}
+                    />
+                  </g>
+                )
+              })}
+            </svg>
+
+            {GRAPH_STEPS.map((node, i) => {
+              const isActive = activeIndex === i
+              return (
+                <motion.button
+                  key={node.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls="how-it-works-panel"
+                  className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center cursor-pointer group z-10 focus-visible:outline-none focus-visible:[&_>div]:ring-2 focus-visible:[&_>div]:ring-blue-400"
+                  style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                  onClick={() => setActiveIndex(i)}
+                  whileHover={{ scale: 1.15, y: -2 }}
+                  transition={springConfig}
+                >
+                  <div className="absolute inset-0 w-24 h-24 -left-12 -top-12 bg-transparent" />
+                  <motion.div
+                    ref={(el) => {
+                      nodeRefs.current[i] = el
+                    }}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center relative backdrop-blur-md transition-colors duration-500 ${
+                      isActive ? "bg-blue-600" : "bg-zinc-900 border-2 border-zinc-800"
+                    }`}
+                    animate={{
+                      scale: isActive ? 1.2 : 1,
+                      boxShadow: isActive ? "0 0 30px rgba(37,99,235,0.6)" : "0 0 0px rgba(37,99,235,0)",
+                    }}
+                    whileHover={{ boxShadow: !isActive ? "0 0 20px rgba(37,99,235,0.3)" : "0 0 30px rgba(37,99,235,0.6)" }}
+                    transition={springConfig}
+                  >
+                    {isActive ? (
+                      <div className="w-3 h-3 bg-white rounded-full shadow-[0_0_10px_white]" />
+                    ) : (
+                      <div className="w-2.5 h-2.5 bg-zinc-600 rounded-full group-hover:bg-zinc-400 transition-colors" />
+                    )}
+                    {isActive && (
+                      <motion.div
+                        className="absolute inset-0 rounded-full border border-blue-400"
+                        animate={{ scale: [1, 2.5], opacity: [0.8, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                      />
+                    )}
+                  </motion.div>
+                  <motion.span
+                    className={`mt-6 font-mono text-sm font-bold tracking-widest transition-colors duration-300 ${
+                      isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
+                    }`}
+                  >
+                    {node.label}
+                  </motion.span>
+                </motion.button>
+              )
+            })}
+          </div>
+
+          <div className="w-full max-w-3xl relative min-h-[220px]">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeIndex}
+                id="how-it-works-panel"
+                role="tabpanel"
+                initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -15, scale: 0.98 }}
+                transition={springConfig}
+                className="absolute inset-0 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 p-8 md:p-12 rounded-sm text-center flex flex-col items-center justify-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)]"
+              >
+                <div className="text-blue-500 font-mono text-[10px] font-bold tracking-widest mb-4 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  STEP 0{activeIndex + 1} // {GRAPH_STEPS[activeIndex].id.toUpperCase()}
+                </div>
+                <h4 className="text-2xl md:text-3xl font-bold text-zinc-100 tracking-tighter mb-6">
+                  {GRAPH_STEPS[activeIndex].title}
+                </h4>
+                <p className="text-zinc-400 text-sm md:text-base leading-relaxed max-w-2xl">
+                  {GRAPH_STEPS[activeIndex].content}
+                </p>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── Trust & safety: reviews (public) vs reports (private moderation) ────────
+function TrustSafety() {
+  const facts = [
+    {
+      label: "NOTHING IS AUTOMATIC",
+      value:
+        "A match just means someone reached out. You decide whether to actually agree to a deal—no one is ever obligated to accept.",
+    },
+    {
+      label: "REVIEWS BUILD A TRACK RECORD",
+      value:
+        "After every closed deal, both sides leave a public review. Read someone's history before you decide to work with them.",
+    },
+    {
+      label: "REPORTS STAY PRIVATE",
+      value:
+        "If something goes wrong, you can file a report our team reviews privately. Repeat or serious reports can get an account banned.",
+    },
+  ]
+
+  return (
+    <section id="trust" className="pb-24 pt-4 bg-[#0a0a0c] relative">
+      <SectionDivider />
+
+      <div className="max-w-7xl mx-auto px-6 mt-8">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={springConfig}
+            className="order-2 lg:order-1 relative aspect-square md:aspect-[4/3] rounded-sm overflow-hidden border border-zinc-800 bg-[#0c0c0e] group flex items-center justify-center"
+          >
+            <div
+              className="absolute inset-0 opacity-[0.03]"
+              style={{
+                backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)",
+                backgroundSize: "24px 24px",
+              }}
+            />
+            <div className="absolute inset-0 flex flex-col justify-center gap-4 px-6 py-8 z-10">
+              <div className="font-mono text-[10px] font-bold tracking-widest text-zinc-600 mb-1 flex items-center gap-2">
+                <Logomark className="w-3.5 h-3.5 text-blue-500" />
+                TWO SEPARATE SYSTEMS
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={springConfig}
+                className="bg-[#09090b]/70 border border-zinc-800 rounded-sm p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REVIEWS · PUBLIC</span>
+                </div>
+                <p className="text-zinc-500 text-[11px] leading-relaxed mb-3">
+                  Left by both sides after a handover. Visible on profiles, not tied to any complaint.
+                </p>
+                <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-sm px-3 py-2">
+                  <div className="flex gap-0.5 text-yellow-500">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} className="w-3 h-3 fill-current" />
+                    ))}
+                  </div>
+                  <span className="text-zinc-400 text-[11px]">"Smooth handover, right on time."</span>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ ...springConfig, delay: 0.12 }}
+                className="bg-[#09090b]/70 border border-zinc-800 rounded-sm p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Flag className="w-4 h-4 text-amber-400" />
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REPORTS · MODERATION ONLY</span>
+                </div>
+                <p className="text-zinc-500 text-[11px] leading-relaxed mb-3">
+                  A complaint filed against a user, seen only by the Peregri team — never posted publicly.
+                </p>
+                <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-sm px-3 py-2">
+                  <Ban className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <span className="text-zinc-400 text-[11px]">Repeat or serious reports can get an account banned.</span>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={springConfig}
+            className="order-1 lg:order-2"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">ACCOUNTABILITY</h2>
+            </div>
+            <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">YOUR CALL, EVERY TIME.</h3>
+            <p className="text-zinc-400 text-lg mb-10 leading-relaxed">
+              We don't run background checks or issue verification badges. What we give you is a
+              track record and a way to speak up—the decision to move forward is always yours.
+            </p>
+
+            <div className="space-y-6">
+              {facts.map((item, i) => (
+                <div key={i} className="flex gap-4">
+                  <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <div>
+                    <div className="font-mono text-sm font-bold text-zinc-100 mb-1.5">{item.label}</div>
+                    <div className="text-sm text-zinc-500 leading-relaxed">{item.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── Route search (real, functional — wired to /browse) ──────────────────────
 function RouteSearch() {
   const navigate = useNavigate()
   const [from, setFrom] = useState("")
@@ -225,25 +565,23 @@ function RouteSearch() {
   }
 
   return (
-    <section className="relative z-[2] py-24 px-6 md:px-12 xl:px-20 border-t border-[#1E1810]">
+    <section id="corridors" className="relative py-24 px-6 bg-[#09090b] border-t border-zinc-800/80">
       <div className="max-w-[900px] mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+          transition={springConfig}
           className="text-center mb-12"
         >
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
-            <span className="text-[11px] tracking-[0.2em] text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-              FIND A ROUTE
-            </span>
+            <Logomark className="w-4 h-4 text-blue-500" />
+            <span className="font-mono text-xs font-bold tracking-widest text-blue-500">FIND A ROUTE</span>
           </div>
-          <h2 className="text-4xl md:text-5xl text-[#F4EDE4] mb-4" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Where to, and where from?
+          <h2 className="text-4xl md:text-5xl font-bold text-zinc-100 tracking-tighter mb-4">
+            WHERE TO, AND WHERE FROM?
           </h2>
-          <p className="text-[#8C7B68] text-base">
+          <p className="text-zinc-400 text-base">
             Find couriers already going your way — across an ocean or across town.
           </p>
         </motion.div>
@@ -252,8 +590,8 @@ function RouteSearch() {
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.6, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="bg-[#0D0B08] border border-[#2E2418] rounded-md p-6"
+          transition={{ ...springConfig, delay: 0.1 }}
+          className="bg-zinc-900/40 border border-zinc-800 rounded-sm p-6"
         >
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-3 items-end">
             <CityAutocomplete
@@ -264,11 +602,9 @@ function RouteSearch() {
               onChange={(raw) => setFrom(raw)}
               onClear={() => setFrom("")}
             />
-
             <div className="hidden sm:flex items-end pb-3">
-              <span className="text-[#C8956A] text-xl px-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>→</span>
+              <span className="text-blue-500 text-xl px-1 font-mono">→</span>
             </div>
-
             <CityAutocomplete
               label="To"
               value={to}
@@ -277,11 +613,9 @@ function RouteSearch() {
               onChange={(raw) => setTo(raw)}
               onClear={() => setTo("")}
             />
-
             <button
               onClick={handleSearch}
-              className="px-8 py-3 bg-[#C8956A] hover:bg-[#D4A855] text-[#0E0B08] font-bold text-[11px] tracking-widest rounded-full transition-colors shadow-[0_0_20px_rgba(200,149,106,0.15)] hover:shadow-[0_0_30px_rgba(200,149,106,0.3)] whitespace-nowrap"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] font-mono tracking-widest rounded-sm transition-colors shadow-[0_0_15px_rgba(37,99,235,0.2)] hover:shadow-[0_0_25px_rgba(37,99,235,0.4)] whitespace-nowrap"
             >
               FIND COURIERS
             </button>
@@ -292,102 +626,48 @@ function RouteSearch() {
   )
 }
 
+// ─── Closing CTA ──────────────────────────────────────────────────────────────
+function FooterCTA() {
+  return (
+    <section className="py-32 relative overflow-hidden flex flex-col items-center justify-center text-center bg-[#0a0a0c]">
+      <div className="absolute inset-0 bg-blue-600/[0.02]" />
+      <div className="max-w-3xl mx-auto px-6 relative z-10">
+        <h2 className="text-5xl md:text-6xl font-bold text-zinc-100 tracking-tighter mb-8">START MOVING.</h2>
+        <p className="text-zinc-400 mb-10 max-w-xl mx-auto text-lg leading-relaxed">
+          Join the peer-to-peer logistics network. List your upcoming trip to help move items
+          along your way, or post a delivery to get an item carried across borders.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link to="/browse" className="group w-full sm:w-auto focus-visible:outline-none">
+            <GraphButton variant="primary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
+              BROWSE <ArrowRight className="w-4 h-4" />
+            </GraphButton>
+          </Link>
+          <Link
+            to="/auth"
+            search={{ redirect: "/", mode: "signin" }}
+            className="group w-full sm:w-auto focus-visible:outline-none"
+          >
+            <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
+              SIGN IN
+            </GraphButton>
+          </Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 export function LandingPage() {
   return (
-    <div className="overflow-x-hidden selection:bg-[#C8956A] selection:text-[#0E0B08]">
-      {/* ── Hero — centered ────────────────────────────────────────────────── */}
-      <section className="relative z-[2] min-h-screen flex flex-col items-center justify-center text-center px-6 max-w-[1100px] mx-auto pt-28 pb-24">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center gap-2 mb-10"
-        >
-          <div className="w-1.5 h-1.5 rounded-full bg-[#D4A855] animate-pulse" />
-          <p
-            className="text-[11px] tracking-[0.22em] text-[#8C7B68]"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
-          >
-            PEER-TO-PEER COURIER NETWORK
-          </p>
-        </motion.div>
-
-        <h1
-          className="leading-[0.92] tracking-tight mb-8"
-          style={{ fontFamily: "'DM Serif Display', serif" }}
-        >
-          <motion.span
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="block text-[clamp(3rem,8vw,7rem)] text-[#F4EDE4]"
-          >
-            Your route
-          </motion.span>
-          <motion.span
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="block text-[clamp(3rem,8vw,7rem)] italic text-[#C8956A]"
-          >
-            carries more.
-          </motion.span>
-        </h1>
-
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="text-[#8C7B68] text-lg leading-relaxed max-w-xl mb-12"
-        >
-          People are already going where you need — by plane, train, car or ferry,
-          at home or across borders. Send with them, or carry and earn.
-        </motion.p>
-
-        {/* Buttons keep the magnetic effect */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.42 }}
-          className="flex flex-wrap items-center justify-center gap-4 mb-14"
-        >
-          <Magnetic>
-            <Link to="/browse">
-              <button className="px-8 py-4 bg-[#C8956A] text-[#0E0B08] font-bold tracking-widest text-sm hover:bg-[#D4A855] transition-colors rounded-full shadow-[0_0_24px_rgba(200,149,106,0.25)] hover:shadow-[0_0_36px_rgba(200,149,106,0.45)] cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                EXPLORE ROUTES
-              </button>
-            </Link>
-          </Magnetic>
-          <Magnetic>
-            <Link to="/trips/new">
-              <button className="px-8 py-4 bg-transparent border border-[#C8956A]/50 text-[#C8956A] font-bold tracking-widest text-sm hover:bg-[#C8956A]/10 transition-colors rounded-full cursor-pointer" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                POST A TRIP
-              </button>
-            </Link>
-          </Magnetic>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] text-[#3A2E20] tracking-[0.2em]"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
-        >
-          <span>ANY MODE</span>
-          <span className="text-[#C8956A]/60">·</span>
-          <span>ANY DISTANCE</span>
-          <span className="text-[#C8956A]/60">·</span>
-          <span>PEER-TO-PEER</span>
-        </motion.div>
-      </section>
-
-      {/* ── How it works (role tabs) ───────────────────────────────────────── */}
-      <HowItWorksTabs />
-
-      {/* ── Route search ───────────────────────────────────────────────────── */}
+    <div className="min-h-screen bg-[#09090b] text-zinc-300 font-sans selection:bg-blue-900 selection:text-white overflow-x-hidden">
+      <Hero />
+      <LiveRoutes />
+      <HowItWorks />
+      <TrustSafety />
       <RouteSearch />
+      <FooterCTA />
     </div>
   )
 }

@@ -1,61 +1,90 @@
 import { Link } from "@tanstack/react-router"
 import { motion } from "framer-motion"
+import { Waypoints } from "lucide-react"
 
 const links = [
   { to: "/browse" as const, label: "Browse" },
   { to: "/auth" as const, label: "Sign in" },
-  { to: "/trips/new" as const, label: "Post a trip" },
   { href: "/#how-it-works", label: "How it works" },
 ]
 
 export function Footer() {
   return (
     <motion.footer
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.5 }}
-      className="border-t border-border bg-surface px-6 py-12"
+      transition={{ duration: 0.4 }}
+      className="px-6 py-12"
+      style={{
+        background: "var(--surface)",
+        borderTop: "1px solid var(--border)",
+      }}
     >
       <div className="mx-auto max-w-[1200px]">
-        <motion.p
-          className="mb-6 text-[15px] text-text-muted"
-          animate={{ opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 5, repeat: Infinity }}
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 mb-6">
+          <Waypoints className="w-4 h-4" style={{ color: "var(--accent)" }} />
+          <span
+            className="text-[13px] font-bold tracking-[0.12em]"
+            style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
+          >
+            PEREGRI
+          </span>
+        </div>
+
+        <p
+          className="mb-6 text-[13px] leading-relaxed max-w-sm"
+          style={{ color: "var(--text-muted)" }}
         >
-          Travel Couriers — Move things across borders.
-        </motion.p>
+          Move things across borders. A peer-to-peer logistics marketplace connecting travelers with deliveries.
+        </p>
+
+        {/* Links */}
         <div className="mb-8 flex flex-wrap gap-x-6 gap-y-2">
           {links.map((link, index) => (
             <motion.div
               key={link.label}
-              initial={{ opacity: 0, x: -8 }}
+              initial={{ opacity: 0, x: -6 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: index * 0.06 }}
-              whileHover={{ x: 4 }}
+              transition={{ delay: index * 0.05 }}
+              whileHover={{ x: 3 }}
             >
               {"href" in link ? (
                 <a
                   href={link.href}
-                  className="group relative text-[14px] text-text-muted transition-colors hover:text-accent"
+                  className="text-[13px] transition-colors"
+                  style={{ color: "var(--text-faint)" }}
+                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
+                  onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
                 >
                   {link.label}
-                  <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
                 </a>
               ) : (
                 <Link
                   to={link.to}
-                  className="group relative text-[14px] text-text-muted transition-colors hover:text-accent"
+                  className="text-[13px] transition-colors"
+                  style={{ color: "var(--text-faint)" }}
+                  onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
+                  onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
                 >
                   {link.label}
-                  <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-accent transition-all duration-200 group-hover:w-full" />
                 </Link>
               )}
             </motion.div>
           ))}
         </div>
-        <p className="text-[13px] text-text-faint">© 2026 Travel Couriers</p>
+
+        {/* Divider */}
+        <div className="w-full h-px mb-6" style={{ background: "var(--border)" }} />
+
+        <p
+          className="text-[11px] tracking-widest"
+          style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
+        >
+          © 2026 PEREGRI
+        </p>
       </div>
     </motion.footer>
   )

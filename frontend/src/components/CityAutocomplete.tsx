@@ -43,31 +43,45 @@ interface CityAutocompleteProps {
   placeholder?: string
   required?: boolean
   compact?: boolean
+  strict?: boolean
 }
 
 export function CityAutocomplete({
-  label, value, onSelect, onChange, onClear, placeholder, required, compact,
+  label, value, onSelect, onChange, onClear, placeholder, required, compact, strict = true,
 }: CityAutocompleteProps) {
   const [inputValue, setInputValue] = React.useState(value)
   const [results, setResults] = React.useState<CityResult[]>([])
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [activeIndex, setActiveIndex] = React.useState(-1)
-  // `confirmed` is true ONLY after the user picks a real result from the list.
-  // Typing (which only filters) sets it false, invalidating any stale selection
-  // in the parent so gibberish can never be submitted.
   const [confirmed, setConfirmed] = React.useState(!!value)
   const [touched, setTouched] = React.useState(false)
+  const [focused, setFocused] = React.useState(false)
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const lastEmittedRef = React.useRef(value)
 
-  // Initialize from value prop on mount only - no ongoing sync
-  // The component owns the inputValue state after mount
   React.useEffect(() => {
+    if (value === lastEmittedRef.current) return
+    lastEmittedRef.current = value
     setInputValue(value)
     setConfirmed(!!value)
-  }, [])
+  }, [value])
+
+  React.useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (inputValue.length < 2) { setResults([]); setOpen(false); return }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      const r = await searchCities(inputValue)
+      setResults(r)
+      setOpen(r.length > 0)
+      setActiveIndex(r.length > 0 ? 0 : -1)
+      setLoading(false)
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [inputValue])
 
   React.useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -82,10 +96,8 @@ export function CityAutocomplete({
   function handleChange(raw: string) {
     setInputValue(raw)
     setConfirmed(false)
+    lastEmittedRef.current = raw
     onChange?.(raw)
-    // Only clear the parent state when the input is explicitly emptied,
-    // not during normal typing. This allows selecting from suggestions
-    // without the field clearing immediately.
     if (!raw && onClear) onClear()
   }
 
@@ -95,20 +107,21 @@ export function CityAutocomplete({
     setTouched(false)
     setOpen(false)
     setResults([])
-    // Call parent callbacks after updating local state
+    lastEmittedRef.current = r.city
     onSelect(r.city, r.country)
     onChange?.(r.city)
   }
 
   function handleBlur() {
+    setFocused(false)
     setTouched(true)
-    // If the field holds unconfirmed text (not picked from the list), revert it
-    // to the last valid value — or clear it if there was none.
+    if (!strict) return
     if (!confirmed) {
       if (value) {
         setInputValue(value)
       } else {
         setInputValue("")
+        lastEmittedRef.current = ""
         onClear?.()
       }
     }
@@ -117,6 +130,7 @@ export function CityAutocomplete({
   function handleClear() {
     setInputValue("")
     setConfirmed(false)
+    lastEmittedRef.current = ""
     onChange?.("")
     onClear?.()
     setResults([])
@@ -130,20 +144,17 @@ export function CityAutocomplete({
     } else if (e.key === "ArrowUp" && open) {
       e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0))
     } else if (e.key === "Enter") {
-      // The city field must never submit its parent form by itself.
-      // Pick a highlighted row if there is one; otherwise revert any
-      // unconfirmed text (blank on a new listing) so the user has to
-      // type again AND choose from the list.
       e.preventDefault()
       if (open && activeIndex >= 0 && results[activeIndex]) {
         handleSelect(results[activeIndex])
-      } else if (!confirmed) {
-        if (value) {
-          setInputValue(value)
-        } else {
+      } else if (strict && !confirmed) {
+        if (value) { setInputValue(value) } else {
           setInputValue("")
+          lastEmittedRef.current = ""
           onClear?.()
         }
+        setOpen(false)
+      } else {
         setOpen(false)
       }
     } else if (e.key === "Escape") {
@@ -151,35 +162,57 @@ export function CityAutocomplete({
     }
   }
 
+  const isInvalid = strict && touched && !confirmed
   const py = compact ? "py-2" : "py-3"
+
+  // Derive border color based on state
+  const borderColor = isInvalid
+    ? "var(--destructive)"
+    : focused
+    ? "var(--accent)"
+    : "var(--border)"
 
   return (
     <div ref={containerRef} className="relative">
       {label && (
-        <label className="block text-[10px] tracking-[0.18em] text-[#8C7B68] mb-1.5 uppercase" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-          {label}{required && <span className="text-[#C8956A] ml-1">*</span>}
+        <label className="block font-mono text-[10px] tracking-[0.18em] mb-1.5 uppercase" style={{ color: "var(--text-muted)" }}>
+          {label}{required && <span style={{ color: "var(--destructive)" }} className="ml-1">*</span>}
         </label>
       )}
       <div className="relative group">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#C8956A]/50 select-none pointer-events-none text-[11px]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>›</span>
+        <span
+          className="absolute left-3 top-1/2 -translate-y-1/2 select-none pointer-events-none font-mono text-[11px]"
+          style={{ color: "var(--text-muted)" }}
+        >
+          ›
+        </span>
         <input
           ref={inputRef}
           type="text"
           value={inputValue}
           onChange={e => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => {
+            setFocused(true)
+            if (results.length > 0) setOpen(true)
+          }}
           onBlur={handleBlur}
-          onFocus={() => { if (results.length > 0) setOpen(true) }}
           placeholder={placeholder}
           required={required}
+          aria-label={label ?? placeholder}
           autoComplete="off"
           spellCheck={false}
-          className={`w-full bg-[#111008] border border-[#2E2418] focus:border-[#C8956A]/60 focus:outline-none text-[#F4EDE4] placeholder-[#3A2E20] rounded-sm ${py} pl-8 pr-8 text-[12px] transition-colors ${touched && !confirmed ? "border-[#C47B6B]/60" : ""}`}
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className={`w-full font-mono ${py} pl-8 pr-8 text-[12px] transition-all duration-150 rounded-sm outline-none`}
+          style={{
+            background: "var(--surface)",
+            border: `1px solid ${borderColor}`,
+            color: "var(--text)",
+            caretColor: "var(--accent)",
+          }}
         />
         {loading && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2">
-            <svg className="animate-spin h-3 w-3 text-[#C8956A]/60" viewBox="0 0 24 24" fill="none">
+            <svg className="animate-spin h-3 w-3" style={{ color: "var(--text-muted)" }} viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
@@ -188,8 +221,10 @@ export function CityAutocomplete({
         {!loading && inputValue && (
           <button
             type="button"
+            aria-label="Clear city"
             onMouseDown={e => { e.preventDefault(); handleClear() }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-[#8C7B68] hover:text-[#F4EDE4] opacity-0 group-focus-within:opacity-100 hover:opacity-100 transition-opacity"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center opacity-0 group-focus-within:opacity-100 hover:opacity-100 transition-opacity"
+            style={{ color: "var(--text-muted)" }}
             tabIndex={-1}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3">
@@ -199,11 +234,8 @@ export function CityAutocomplete({
         )}
       </div>
 
-      {touched && !confirmed && inputValue && (
-        <p
-          className="mt-1.5 text-[10px] text-[#C47B6B] tracking-wider"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
-        >
+      {isInvalid && inputValue && (
+        <p className="mt-1.5 font-mono text-[10px] tracking-wider" style={{ color: "var(--destructive)" }}>
           PICK A CITY FROM THE LIST
         </p>
       )}
@@ -215,20 +247,30 @@ export function CityAutocomplete({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.1 }}
-            className="absolute z-[100] left-0 right-0 mt-1 bg-[#171109] border border-[#2E2418] rounded-sm shadow-xl overflow-hidden"
+            className="absolute z-[100] left-0 right-0 mt-1 rounded-sm shadow-xl overflow-hidden"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+            }}
           >
             {results.map((r, i) => (
               <button
                 key={`${r.city}-${r.countryCode}-${i}`}
                 type="button"
-                onMouseDown={() => handleSelect(r)}
-                className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors border-b border-[#1A1208] last:border-0 ${i === activeIndex ? "bg-[#C8956A]/10" : "hover:bg-[#1F1810]"}`}
+                onMouseDown={e => { e.preventDefault(); handleSelect(r) }}
+                className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors"
+                style={{
+                  background: i === activeIndex ? "var(--surface-raised)" : "transparent",
+                  borderBottom: "1px solid var(--border)",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = i === activeIndex ? "var(--surface-raised)" : "transparent")}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[13px] text-[#F4EDE4] truncate">{r.city}</span>
-                  <span className="text-[11px] text-[#8C7B68] shrink-0">{r.country}</span>
+                  <span className="text-[13px] truncate" style={{ color: "var(--text)" }}>{r.city}</span>
+                  <span className="text-[11px] shrink-0" style={{ color: "var(--text-muted)" }}>{r.country}</span>
                 </div>
-                <span className="text-[10px] text-[#C8956A]/60 shrink-0 tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                <span className="font-mono text-[10px] shrink-0 tracking-widest" style={{ color: "var(--text-muted)" }}>
                   {r.countryCode}
                 </span>
               </button>

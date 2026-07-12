@@ -1,11 +1,11 @@
 import * as React from "react"
 import { useNavigate, Link } from "@tanstack/react-router"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getInitial } from "@/lib/db_constants"
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ThreadSummary {
   id: string
@@ -37,15 +37,20 @@ interface ThreadDetail {
 }
 
 interface MatchState {
-  stage: "none" | "matched" | "done"
+  stage: "none" | "waiting" | "in_transit" | "handed_over" | "completed"
   me_confirmed: boolean
   other_confirmed: boolean
   both_confirmed: boolean
   listing_kind: string | null
   listing_status: string | null
+  courier_id: string | null
+  recipient_id: string | null
+  is_me_courier: boolean
+  handed_over: boolean
+  received: boolean
 }
 
-// ─── API helpers ─────────────────────────────────────────────────────────────
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
 function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
@@ -87,7 +92,10 @@ async function apiGetMatchState(threadId: string, token: string): Promise<MatchS
 }
 
 async function apiConfirmMatch(threadId: string, token: string): Promise<{ both_confirmed: boolean }> {
-  const res = await fetch(`/api/matches/confirm?thread_id=${threadId}`, { method: "POST", headers: authHeaders(token) })
+  const res = await fetch(`/api/matches/confirm?thread_id=${threadId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
   if (!res.ok) {
     const d = await res.json().catch(() => ({}))
     throw new Error(d.detail ?? "Failed to confirm")
@@ -95,15 +103,29 @@ async function apiConfirmMatch(threadId: string, token: string): Promise<{ both_
   return res.json()
 }
 
-async function apiCloseDeal(threadId: string, token: string): Promise<void> {
-  const res = await fetch(`/api/matches/close-deal?thread_id=${threadId}`, { method: "POST", headers: authHeaders(token) })
+async function apiHandover(threadId: string, token: string): Promise<void> {
+  const res = await fetch(`/api/matches/handover?thread_id=${threadId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
   if (!res.ok) {
     const d = await res.json().catch(() => ({}))
-    throw new Error(d.detail ?? "Failed to close deal")
+    throw new Error(d.detail ?? "Failed to mark as delivered")
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+async function apiReceived(threadId: string, token: string): Promise<void> {
+  const res = await fetch(`/api/matches/received?thread_id=${threadId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}))
+    throw new Error(d.detail ?? "Failed to confirm receipt")
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string): string {
   const date = new Date(iso)
@@ -115,18 +137,40 @@ function formatTime(iso: string): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" })
 }
 
+// Kind colours consistent with Browse / Profile
+const KIND_COLOR: Record<string, string> = {
+  trip: "#93c5fd",
+  request: "#86efac",
+  delivery: "#d8b4fe",
+}
+
+function kindColor(kind: string | null | undefined) {
+  return KIND_COLOR[(kind ?? "").toLowerCase()] ?? "var(--text-faint)"
+}
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
 function UserAvatar({ name, url, size }: { name: string | null; url?: string | null; size: number }) {
   return (
     <div
-      className="rounded-full bg-[#1A1208] border border-[#2E2418] flex items-center justify-center shrink-0 overflow-hidden"
-      style={{ width: size, height: size }}
+      className="rounded-sm flex items-center justify-center shrink-0 overflow-hidden"
+      style={{
+        width: size,
+        height: size,
+        background: "var(--surface-raised)",
+        border: "1px solid var(--border)",
+      }}
     >
       {url ? (
         <img src={url} alt={name ?? ""} className="w-full h-full object-cover" />
       ) : (
         <span
-          className="text-[#C8956A]"
-          style={{ fontFamily: "'DM Serif Display', serif", fontSize: size * 0.45 }}
+          className="font-bold"
+          style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: size * 0.42,
+            color: "var(--accent)",
+          }}
         >
           {getInitial(name ?? "?")}
         </span>
@@ -150,37 +194,62 @@ function ThreadItem({
 }) {
   const other = thread.other_participant
   const name = other.display_name ?? "Anonymous"
-  const preview = thread.last_message
-    ? thread.last_message.sender_id === currentUserId
-      ? `You: ${thread.last_message.body}`
-      : thread.last_message.body
+  const lastMsg = thread.last_message
+  const preview = lastMsg
+    ? lastMsg.sender_id === null
+      ? lastMsg.body
+      : lastMsg.sender_id === currentUserId
+        ? `You: ${lastMsg.body}`
+        : lastMsg.body
     : "No messages yet"
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex items-center gap-3 px-4 py-3.5 border-b border-[#1A1208] transition-colors ${
-        selected ? "bg-[#1A1208]" : "hover:bg-[#111008]"
-      }`}
+      className="w-full text-left flex items-center gap-3 px-4 py-3.5 transition-colors relative"
+      style={{
+        background: selected ? "var(--surface-raised)" : "transparent",
+        borderBottom: "1px solid var(--border)",
+        ...(selected ? { borderLeft: "2px solid var(--accent)", paddingLeft: 14 } : {}),
+      }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "var(--surface)" }}
+      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent" }}
     >
       <UserAvatar name={name} url={other.avatar_url} size={40} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5">
-          <span className={`text-[13px] truncate ${selected ? "text-[#F4EDE4]" : "text-[#D4C9BC]"}`}>
+          <span
+            className="text-[13px] truncate font-medium"
+            style={{ color: selected ? "var(--text)" : "var(--text-muted)" }}
+          >
             {name}
           </span>
-          <span className="text-[10px] text-[#8C7B68] ml-2 shrink-0" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-            {thread.last_message ? formatTime(thread.last_message.created_at) : ""}
+          <span
+            className="text-[10px] ml-2 shrink-0"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+          >
+            {lastMsg ? formatTime(lastMsg.created_at) : ""}
           </span>
         </div>
-        <div className="text-[10px] text-[#C8956A] truncate mb-0.5" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+        <div
+          className="text-[10px] truncate mb-0.5"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
+        >
           {thread.listing_title}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] text-[#8C7B68] truncate">{preview}</span>
+          <span
+            className="text-[12px] truncate"
+            style={{ color: "var(--text-faint)" }}
+          >
+            {preview}
+          </span>
           {thread.unread_count > 0 && (
-            <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full bg-[#C8956A] text-[#0E0B08] text-[9px] font-bold">
-              {thread.unread_count}
+            <span
+              className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold"
+              style={{ background: "var(--accent)", color: "#ffffff" }}
+            >
+              {thread.unread_count > 9 ? "9+" : thread.unread_count}
             </span>
           )}
         </div>
@@ -194,29 +263,47 @@ function ThreadItem({
 function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   if (msg.is_system) {
     return (
-      <div className="flex justify-center mb-3">
+      <div className="flex justify-center my-4">
         <div
-          className="px-4 py-1.5 rounded-full text-[11px] tracking-wider text-[#C8956A] bg-[#C8956A]/08 border border-[#C8956A]/20 text-center max-w-[85%]"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className="px-4 py-1.5 rounded-sm text-[11px] tracking-wider text-center max-w-[85%]"
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            color: "var(--accent)",
+            background: "rgba(37,99,235,0.08)",
+            border: "1px solid rgba(37,99,235,0.2)",
+          }}
         >
           {msg.body}
         </div>
       </div>
     )
   }
+
   return (
     <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-3`}>
       <div className={`max-w-[72%] ${isOwn ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
         <div
-          className={`px-3.5 py-2 rounded-md text-[14px] leading-relaxed ${
+          className="px-3.5 py-2 rounded-sm text-[14px] leading-relaxed"
+          style={
             isOwn
-              ? "bg-[#C8956A]/20 text-[#F4EDE4] border border-[#C8956A]/20"
-              : "bg-[#1A1208] text-[#D4C9BC] border border-[#2E2418]"
-          }`}
+              ? {
+                  background: "rgba(37,99,235,0.18)",
+                  color: "var(--text)",
+                  border: "1px solid rgba(37,99,235,0.25)",
+                }
+              : {
+                  background: "var(--surface-raised)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                }
+          }
         >
           {msg.body}
         </div>
-        <span className="text-[10px] text-[#8C7B68] px-1" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+        <span
+          className="text-[10px] px-1"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+        >
           {formatTime(msg.created_at)}
         </span>
       </div>
@@ -224,91 +311,260 @@ function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   )
 }
 
-// ─── Match bar (Stage 1 confirm + Stage 2 close-the-deal) ─────────────────────
+// ─── Progress pip ─────────────────────────────────────────────────────────────
+// Small two-step visual used in the in_transit and handed_over bars.
+
+function DeliveryProgress({ step }: { step: 1 | 2 }) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {/* Step 1: courier handover */}
+      <div
+        className="w-2 h-2 rounded-sm transition-all"
+        style={{ background: step >= 1 ? "var(--success)" : "var(--border)" }}
+        title="Courier marks delivered"
+      />
+      <div className="w-4 h-px" style={{ background: "var(--border)" }} />
+      {/* Step 2: recipient receipt */}
+      <div
+        className="w-2 h-2 rounded-sm transition-all"
+        style={{ background: step >= 2 ? "var(--success)" : "var(--border)" }}
+        title="Recipient confirms receipt"
+      />
+    </div>
+  )
+}
+
+// ─── Match bar ────────────────────────────────────────────────────────────────
 
 function MatchBar({
   match,
+  listing,
   otherName,
+  otherId,
   onConfirm,
-  onDeal,
+  onHandover,
+  onReceived,
   busy,
   justMatched,
 }: {
   match: MatchState
+  listing: ThreadDetail["listing"]
   otherName: string
+  otherId: string
   onConfirm: () => void
-  onDeal: () => void
+  onHandover: () => void
+  onReceived: () => void
   busy: boolean
   justMatched: boolean
 }) {
-  if (match.stage === "done") {
+  const kind = match.listing_kind ?? listing?.kind ?? null
+  const kColor = kindColor(kind)
+
+  const barBase: React.CSSProperties = {
+    borderBottom: "1px solid var(--border)",
+    background: "var(--surface)",
+  }
+
+  const monoSm: React.CSSProperties = {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    letterSpacing: "0.1em",
+  }
+
+  function KindBadge() {
+    if (!kind) return null
+    return (
+      <span
+        className="text-[9px] px-1.5 py-0.5 rounded-sm"
+        style={{ fontFamily: "'JetBrains Mono', monospace", color: kColor, background: `${kColor}18`, border: `1px solid ${kColor}30` }}
+      >
+        {kind.toUpperCase()}
+      </span>
+    )
+  }
+
+  function ActionBtn({
+    onClick,
+    disabled,
+    variant = "primary",
+    children,
+  }: {
+    onClick: () => void
+    disabled?: boolean
+    variant?: "primary" | "ghost" | "success"
+    children: React.ReactNode
+  }) {
+    const [hov, setHov] = React.useState(false)
+    const base: React.CSSProperties = {
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: "0.15em",
+      borderRadius: 2,
+      padding: "6px 14px",
+      transition: "background 0.15s, opacity 0.15s",
+      cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.5 : 1,
+    }
+    const variants: Record<string, React.CSSProperties> = {
+      primary: {
+        background: hov && !disabled ? "var(--accent-dim)" : "var(--accent)",
+        color: "#fff",
+        border: "none",
+      },
+      ghost: {
+        background: hov && !disabled ? "rgba(37,99,235,0.14)" : "rgba(37,99,235,0.07)",
+        color: "var(--accent)",
+        border: "1px solid rgba(37,99,235,0.35)",
+      },
+      success: {
+        background: hov && !disabled ? "rgba(34,197,94,0.85)" : "var(--success)",
+        color: "#000",
+        border: "none",
+      },
+    }
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        style={{ ...base, ...variants[variant] }}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+      >
+        {children}
+      </button>
+    )
+  }
+
+  // ── Completed ───────────────────────────────────────────────────────────────
+  if (match.stage === "completed") {
     return (
       <div
-        className="px-5 py-2.5 border-b border-[#1E1810] text-center text-[11px] tracking-widest text-[#7EB89A] bg-[#7EB89A]/05"
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        className="px-5 py-2.5 shrink-0 flex items-center justify-between gap-3"
+        style={{ ...barBase, background: "rgba(34,197,94,0.04)" }}
       >
-        ✓ DEAL ARCHIVED
+        <div className="flex items-center gap-2.5">
+          <DeliveryProgress step={2} />
+          <span style={{ ...monoSm, color: "var(--success)" }}>
+            ✓ DELIVERY CONFIRMED
+          </span>
+          <KindBadge />
+        </div>
+        <Link
+          to="/profile/$userId"
+          params={{ userId: otherId }}
+          className="text-[10px] tracking-widest transition-colors shrink-0"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
+          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+        >
+          LEAVE A REVIEW →
+        </Link>
       </div>
     )
   }
 
-  if (match.both_confirmed) {
+  // ── Handed over — recipient's turn ──────────────────────────────────────────
+  if (match.stage === "handed_over") {
+    if (!match.is_me_courier) {
+      // Recipient: big call-to-action
+      return (
+        <motion.div
+          initial={{ boxShadow: "0 0 0px rgba(34,197,94,0)" }}
+          animate={{ boxShadow: ["0 0 0px rgba(34,197,94,0)", "0 0 18px rgba(34,197,94,0.25)", "0 0 0px rgba(34,197,94,0)"] }}
+          transition={{ duration: 1.1, delay: 0.2 }}
+          className="px-5 py-2.5 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+          style={barBase}
+        >
+          <div className="flex items-center gap-2.5">
+            <DeliveryProgress step={1} />
+            <span style={{ ...monoSm, color: "var(--text-muted)" }}>
+              {otherName.toUpperCase()} MARKED AS DELIVERED
+            </span>
+            <KindBadge />
+          </div>
+          <ActionBtn onClick={onReceived} disabled={busy} variant="success">
+            {busy ? "…" : "CONFIRM RECEIPT ✓"}
+          </ActionBtn>
+        </motion.div>
+      )
+    }
+    // Courier: waiting
     return (
-      <div className="px-5 py-2.5 border-b border-[#1E1810] bg-[#1A1208] flex flex-col sm:flex-row items-center justify-between gap-2">
-        <span
-          className="text-[11px] tracking-wider text-[#7EB89A] flex items-center gap-2"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
-        >
-          <motion.span
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="inline-block"
-          >
-            ✓
-          </motion.span>
-          MATCHED — agree on the details, then close the deal
+      <div className="px-5 py-2.5 shrink-0 flex items-center gap-3" style={barBase}>
+        <DeliveryProgress step={1} />
+        <span style={{ ...monoSm, color: "var(--text-muted)" }}>
+          <span className="animate-pulse">●</span>
+          {" "}MARKED AS DELIVERED — WAITING FOR RECEIPT CONFIRMATION
         </span>
-        <button
-          onClick={onDeal}
-          disabled={busy}
-          className="px-4 py-1.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-60 text-[#0E0B08] text-[10px] font-bold tracking-widest rounded-full transition-colors shrink-0"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
-        >
-          {busy ? "…" : "CLOSE THE DEAL"}
-        </button>
       </div>
     )
   }
 
+  // ── In transit (both agreed, nothing handed over yet) ───────────────────────
+  if (match.stage === "in_transit") {
+    return (
+      <motion.div
+        initial={justMatched ? { boxShadow: "0 0 0px rgba(37,99,235,0)" } : false}
+        animate={justMatched ? { boxShadow: ["0 0 0px rgba(37,99,235,0)", "0 0 20px rgba(37,99,235,0.3)", "0 0 0px rgba(37,99,235,0)"] } : {}}
+        transition={{ duration: 0.9 }}
+        className="px-5 py-2.5 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+        style={barBase}
+      >
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <DeliveryProgress step={0 as never} />
+          <span style={{ ...monoSm, color: "var(--text-muted)" }}>
+            {match.is_me_courier ? "ARRANGE PICKUP — MARK DELIVERED WHEN DONE" : "ARRANGEMENT CONFIRMED — AWAITING HANDOVER"}
+          </span>
+          <KindBadge />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {match.is_me_courier ? (
+            <ActionBtn onClick={onHandover} disabled={busy} variant="ghost">
+              {busy ? "…" : "MARK AS DELIVERED"}
+            </ActionBtn>
+          ) : (
+            // Recipient can also confirm receipt directly (e.g. courier is present)
+            <ActionBtn onClick={onReceived} disabled={busy} variant="ghost">
+              {busy ? "…" : "CONFIRM RECEIPT"}
+            </ActionBtn>
+          )}
+        </div>
+      </motion.div>
+    )
+  }
+
+  // ── Waiting for other to confirm ────────────────────────────────────────────
   if (match.me_confirmed && !match.both_confirmed) {
     return (
       <div
-        className="px-5 py-2.5 border-b border-[#1E1810] text-center text-[11px] tracking-wider text-[#8C7B68]"
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+        className="px-5 py-2.5 shrink-0 text-center text-[11px] tracking-wider"
+        style={{ ...barBase, color: "var(--text-muted)" }}
       >
-        WAITING FOR {otherName.toUpperCase()} TO CONFIRM…
+        <span style={monoSm}>
+          <span className="animate-pulse">●</span>
+          {" "}WAITING FOR {otherName.toUpperCase()} TO CONFIRM…
+        </span>
       </div>
     )
   }
 
+  // ── None — invite to confirm ─────────────────────────────────────────────
   return (
-    <motion.div
-      initial={justMatched ? { scale: [1, 1.02, 1], boxShadow: ["0 0 0px rgba(200,149,106,0)", "0 0 24px rgba(200,149,106,0.35)", "0 0 0px rgba(200,149,106,0)"] } : false}
-      transition={{ duration: 0.9 }}
-      className="px-5 py-2.5 border-b border-[#1E1810] bg-[#1A1208] flex items-center justify-between gap-3"
+    <div
+      className="px-5 py-2.5 shrink-0 flex items-center justify-between gap-3"
+      style={barBase}
     >
-      <span className="text-[11px] tracking-wider text-[#8C7B68]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-        CONFIRM TO CONNECT
-      </span>
-      <button
-        onClick={onConfirm}
-        disabled={busy}
-        className="px-4 py-1.5 border border-[#C8956A]/40 hover:bg-[#C8956A]/10 text-[#C8956A] text-[10px] font-bold tracking-widest rounded-full transition-colors shrink-0 disabled:opacity-60"
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
-      >
-        {busy ? "…" : "CONFIRM MATCH"}
-      </button>
-    </motion.div>
+      <div className="flex items-center gap-3">
+        <span style={{ ...monoSm, color: "var(--text-muted)" }}>
+          CONFIRM ARRANGEMENT
+        </span>
+        <KindBadge />
+      </div>
+      <ActionBtn onClick={onConfirm} disabled={busy} variant="ghost">
+        {busy ? "…" : "CONFIRM"}
+      </ActionBtn>
+    </div>
   )
 }
 
@@ -321,7 +577,8 @@ function ConversationPanel({
   match,
   onSend,
   onConfirm,
-  onDeal,
+  onHandover,
+  onReceived,
   onBack,
 }: {
   thread: ThreadDetail
@@ -330,13 +587,15 @@ function ConversationPanel({
   match: MatchState | null
   onSend: (body: string) => Promise<void>
   onConfirm: () => Promise<void>
-  onDeal: () => Promise<void>
+  onHandover: () => Promise<void>
+  onReceived: () => Promise<void>
   onBack: () => void
 }) {
   const [input, setInput] = React.useState("")
   const [sending, setSending] = React.useState(false)
   const [matchBusy, setMatchBusy] = React.useState(false)
   const [justMatched, setJustMatched] = React.useState(false)
+  const [inputFocused, setInputFocused] = React.useState(false)
   const prevBoth = React.useRef<boolean>(match?.both_confirmed ?? false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const other = thread.other_participant
@@ -349,7 +608,6 @@ function ConversationPanel({
     el.scrollTop = el.scrollHeight
   }, [messages.length])
 
-  // Fire the "just matched" glow once when both_confirmed flips true.
   React.useEffect(() => {
     const nowBoth = match?.both_confirmed ?? false
     if (nowBoth && !prevBoth.current) setJustMatched(true)
@@ -373,9 +631,14 @@ function ConversationPanel({
     try { await onConfirm() } finally { setMatchBusy(false) }
   }
 
-  async function handleDeal() {
+  async function handleHandover() {
     setMatchBusy(true)
-    try { await onDeal() } finally { setMatchBusy(false) }
+    try { await onHandover() } finally { setMatchBusy(false) }
+  }
+
+  async function handleReceived() {
+    setMatchBusy(true)
+    try { await onReceived() } finally { setMatchBusy(false) }
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -385,16 +648,21 @@ function ConversationPanel({
     }
   }
 
-  const dealDone = match?.stage === "done"
+  const isCompleted = match?.stage === "completed"
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ background: "var(--bg)" }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-[#1E1810] shrink-0">
+      <div
+        className="flex items-center gap-3 px-5 py-3.5 shrink-0"
+        style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}
+      >
         <button
           onClick={onBack}
-          className="lg:hidden text-[#8C7B68] hover:text-[#F4EDE4] mr-1 text-[11px] tracking-widest transition-colors"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className="lg:hidden mr-1 text-[11px] tracking-widest transition-colors"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
         >
           ←
         </button>
@@ -402,27 +670,50 @@ function ConversationPanel({
           <UserAvatar name={other.display_name} url={other.avatar_url} size={36} />
         </Link>
         <div className="flex-1 min-w-0">
-          <Link to="/profile/$userId" params={{ userId: other.id }} className="text-[14px] text-[#F4EDE4] hover:text-[#C8956A] transition-colors">
+          <Link
+            to="/profile/$userId"
+            params={{ userId: other.id }}
+            className="text-[14px] font-medium transition-colors"
+            style={{ color: "var(--text)" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--text)")}
+          >
             {other.display_name ?? "Anonymous"}
           </Link>
           {listingLabel && (
             <div
-              className="text-[10px] text-[#C8956A] truncate"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[10px] truncate"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
             >
               {listingLabel}
             </div>
           )}
         </div>
+        {listing?.kind && (
+          <span
+            className="text-[9px] px-2 py-0.5 rounded-sm shrink-0"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              color: kindColor(listing.kind),
+              background: `${kindColor(listing.kind)}18`,
+              border: `1px solid ${kindColor(listing.kind)}30`,
+            }}
+          >
+            {listing.kind.toUpperCase()}
+          </span>
+        )}
       </div>
 
-      {/* Match bar (hidden once deal is archived) */}
-      {match && !dealDone && (
+      {/* Match bar */}
+      {match && (
         <MatchBar
           match={match}
+          listing={listing}
           otherName={other.display_name ?? "the other party"}
+          otherId={other.id}
           onConfirm={handleConfirm}
-          onDeal={handleDeal}
+          onHandover={handleHandover}
+          onReceived={handleReceived}
           busy={matchBusy}
           justMatched={justMatched}
         />
@@ -433,80 +724,140 @@ function ConversationPanel({
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p
-              className="text-[11px] text-[#3A2E20] tracking-widest"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              className="text-[11px] tracking-widest"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
             >
               NO MESSAGES YET — SAY HELLO
             </p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <MessageRow key={msg.id} msg={msg} isOwn={msg.sender_id === currentUserId} />
-          ))
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <MessageRow msg={msg} isOwn={msg.sender_id === currentUserId} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
       </div>
 
-      {/* Input — disabled once deal is done */}
-      <div className="shrink-0 px-5 py-4 border-t border-[#1E1810] flex gap-3 items-end">
+      {/* Input */}
+      <div
+        className="shrink-0 px-5 py-4 flex gap-3 items-end"
+        style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}
+      >
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={dealDone ? "This conversation is closed." : "Type a message…"}
-          disabled={dealDone}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          placeholder={isCompleted ? "This conversation is archived — read only." : "Type a message… (Enter to send)"}
+          disabled={isCompleted}
           rows={1}
-          className="flex-1 bg-[#111008] border border-[#2E2418] rounded-md px-4 py-2.5 text-[14px] text-[#F4EDE4] placeholder-[#3A2E20] resize-none focus:outline-none focus:border-[#C8956A]/40 transition-colors disabled:opacity-50"
-          style={{ minHeight: 42, maxHeight: 120 }}
+          className="flex-1 rounded-sm px-4 py-2.5 text-[14px] resize-none focus:outline-none transition-colors disabled:opacity-50"
+          style={{
+            minHeight: 42,
+            maxHeight: 120,
+            background: "var(--surface-raised)",
+            border: `1px solid ${inputFocused ? "var(--accent)" : "var(--border)"}`,
+            color: "var(--text)",
+            caretColor: "var(--accent)",
+          }}
         />
         <button
           onClick={handleSend}
-          disabled={!input.trim() || sending || dealDone}
-          className="px-5 py-2.5 bg-[#C8956A] hover:bg-[#D4A855] disabled:opacity-40 disabled:cursor-not-allowed text-[#0E0B08] text-[11px] font-bold tracking-widest rounded-full transition-colors shrink-0"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          disabled={!input.trim() || sending || isCompleted}
+          className="px-5 py-2.5 text-[11px] font-bold tracking-widest rounded-sm transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            background: "var(--accent)",
+            color: "#ffffff",
+          }}
+          onMouseEnter={e => { if (input.trim() && !sending && !isCompleted) e.currentTarget.style.background = "var(--accent-dim)" }}
+          onMouseLeave={e => { e.currentTarget.style.background = "var(--accent)" }}
         >
-          SEND
+          {sending ? "…" : "SEND"}
         </button>
       </div>
     </div>
   )
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
+// ─── Empty / placeholder states ───────────────────────────────────────────────
 
-function EmptyState({ noThreads }: { noThreads: boolean }) {
+function EmptyConversation({ noThreads }: { noThreads: boolean }) {
   const navigate = useNavigate()
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 px-8 text-center">
+    <div
+      className="flex flex-col items-center justify-center h-full gap-5 px-8 text-center"
+      style={{ background: "var(--bg)" }}
+    >
       {noThreads ? (
         <>
-          <div
-            className="text-5xl text-[#2E2418]"
-            style={{ fontFamily: "'DM Serif Display', serif" }}
-          >
-            ✉
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ opacity: 0.15 }}>
+            <circle cx="8" cy="24" r="4" stroke="var(--accent)" strokeWidth="1.5" />
+            <circle cx="40" cy="24" r="4" stroke="var(--accent)" strokeWidth="1.5" />
+            <circle cx="24" cy="8" r="4" stroke="var(--accent)" strokeWidth="1.5" />
+            <line x1="12" y1="24" x2="36" y2="24" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
+            <line x1="24" y1="12" x2="24" y2="20" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
+            <line x1="8" y1="20" x2="24" y2="12" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
+          </svg>
+          <div>
+            <p
+              className="text-[11px] tracking-[0.2em] mb-2"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+            >
+              NO CONVERSATIONS YET
+            </p>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              Browse listings and contact someone to start a thread.
+            </p>
           </div>
-          <p className="text-[#F4EDE4] text-lg" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            No conversations yet
-          </p>
-          <p className="text-[#8C7B68] text-sm">
-            Browse listings and contact someone to start messaging.
-          </p>
           <button
             onClick={() => navigate({ to: "/browse" })}
-            className="mt-2 px-6 py-2.5 border border-[#2E2418] hover:border-[#C8956A]/40 text-[#8C7B68] hover:text-[#F4EDE4] text-[11px] tracking-widest rounded-full transition-colors"
-            style={{ fontFamily: "'JetBrains Mono', monospace" }}
+            className="mt-1 px-6 py-2.5 text-[11px] tracking-widest rounded-sm transition-colors"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "var(--accent)"
+              e.currentTarget.style.color = "var(--accent)"
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "var(--border)"
+              e.currentTarget.style.color = "var(--text-muted)"
+            }}
           >
-            BROWSE LISTINGS
+            BROWSE LISTINGS →
           </button>
         </>
       ) : (
         <p
-          className="text-[11px] text-[#3A2E20] tracking-widest"
-          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+          className="text-[11px] tracking-widest"
+          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
         >
           SELECT A CONVERSATION
         </p>
       )}
+    </div>
+  )
+}
+
+function PanelSpinner() {
+  return (
+    <div className="flex items-center justify-center h-full" style={{ background: "var(--bg)" }}>
+      <div
+        className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+        style={{ borderColor: "var(--border)", borderTopColor: "var(--accent)" }}
+      />
     </div>
   )
 }
@@ -526,7 +877,12 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const navigate = useNavigate()
 
-  // Load thread list
+  // ── Load thread list ────────────────────────────────────────────────────────
+  function loadThreads() {
+    if (!token) return
+    apiFetchThreads(token).then(setThreads).catch(() => {})
+  }
+
   React.useEffect(() => {
     if (!token) return
     setThreadsLoading(true)
@@ -536,7 +892,13 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
       .finally(() => setThreadsLoading(false))
   }, [token])
 
-  // Load selected thread
+  React.useEffect(() => {
+    if (!token) return
+    const id = setInterval(loadThreads, 60_000)
+    return () => clearInterval(id)
+  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load selected thread ────────────────────────────────────────────────────
   React.useEffect(() => {
     if (!selectedId || !token) return
     setDetailLoading(true)
@@ -545,67 +907,112 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
       .then((detail) => {
         setThreadDetail(detail)
         setMessages(detail.messages)
-        // Mark as read
         apiMarkRead(selectedId, token).then(() => {
           setThreads((prev) =>
             prev.map((t) => (t.id === selectedId ? { ...t, unread_count: 0 } : t))
           )
         })
-        // Load match state for this thread
         apiGetMatchState(selectedId, token).then(setMatch).catch(() => setMatch(null))
       })
       .catch(() => {})
       .finally(() => setDetailLoading(false))
   }, [selectedId, token])
 
-  // Supabase realtime — subscribe to new messages in selected thread
+  // ── Realtime: new messages ──────────────────────────────────────────────────
   React.useEffect(() => {
     if (!selectedId || !supabase) return
     const channel = supabase
       .channel(`messages:${selectedId}`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "messages", filter: `thread_id=eq.${selectedId}` }, (payload: { new: Message }) => {
-          const msg = payload.new
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev
-            return [...prev, msg]
-          })
-          // If message is from other user, mark as read immediately
-          if (msg.sender_id !== user?.id && token) {
-            apiMarkRead(selectedId, token)
-          }
-          // Update thread list last message
-          setThreads((prev) =>
-            prev.map((t) =>
-              t.id === selectedId
-                ? { ...t, last_message: { id: msg.id, body: msg.body, created_at: msg.created_at, sender_id: msg.sender_id }, unread_count: 0 }
-                : t
-            )
-          )
+      .on("postgres_changes" as any, {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `thread_id=eq.${selectedId}`,
+      }, (payload: { new: Message }) => {
+        const msg = payload.new
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [...prev, msg]
+        })
+        if (msg.sender_id !== user?.id && token) {
+          apiMarkRead(selectedId, token)
         }
-      )
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === selectedId
+              ? {
+                  ...t,
+                  last_message: { id: msg.id, body: msg.body, created_at: msg.created_at, sender_id: msg.sender_id },
+                  unread_count: 0,
+                }
+              : t
+          )
+        )
+      })
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [selectedId, token, user?.id])
 
-  // Realtime — refresh match state when a confirmation is inserted in this thread
+  // ── Realtime: match confirmation updates ────────────────────────────────────
   React.useEffect(() => {
     if (!selectedId || !supabase || !token) return
     const channel = supabase
       .channel(`matches:${selectedId}`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "match_confirmations", filter: `thread_id=eq.${selectedId}` }, () => {
+      .on("postgres_changes" as any, {
+        event: "INSERT",
+        schema: "public",
+        table: "match_confirmations",
+        filter: `thread_id=eq.${selectedId}`,
+      }, () => {
         apiGetMatchState(selectedId, token).then(setMatch).catch(() => {})
       })
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [selectedId, token])
+
+  // ── Realtime: delivery_confirmations updates ────────────────────────────────
+  React.useEffect(() => {
+    if (!selectedId || !supabase || !token) return
+    const channel = supabase
+      .channel(`delivery:${selectedId}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on("postgres_changes" as any, {
+        event: "UPDATE",
+        schema: "public",
+        table: "delivery_confirmations",
+        filter: `thread_id=eq.${selectedId}`,
+      }, () => {
+        apiGetMatchState(selectedId, token).then(setMatch).catch(() => {})
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [selectedId, token])
+
+  // ── Realtime: new threads ───────────────────────────────────────────────────
+  React.useEffect(() => {
+    if (!user?.id || !supabase || !token) return
+    const channel = supabase
+      .channel(`new-threads:${user.id}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on("postgres_changes" as any, {
+        event: "INSERT",
+        schema: "public",
+        table: "thread_participants",
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        setTimeout(loadThreads, 400)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id, token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
   function selectThread(id: string) {
     setSelectedId(id)
@@ -636,64 +1043,98 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   async function handleConfirm() {
     if (!selectedId || !token) return
     const res = await apiConfirmMatch(selectedId, token)
-    // Refresh full match state (the system message arrives via the messages
-    // realtime channel and renders as a system bubble automatically).
     const updated = await apiGetMatchState(selectedId, token).catch(() => null)
     if (updated) setMatch(updated)
     if (res.both_confirmed) {
-      // Both confirmed: pull the system message the backend just inserted.
       apiFetchThread(selectedId, token)
         .then((detail) => setMessages(detail.messages))
         .catch(() => {})
     }
   }
 
-  async function handleDeal() {
+  async function handleHandover() {
     if (!selectedId || !token) return
-    await apiCloseDeal(selectedId, token)
-    setMatch({ stage: "done", me_confirmed: true, other_confirmed: true, both_confirmed: true, listing_kind: null, listing_status: "completed" })
-    // For non-trip deals the listing/thread is deleted server-side; drop it
-    // from the list after a short beat so the user sees the "archived" state.
-    setTimeout(() => {
-      setThreads((prev) => prev.filter((t) => t.id !== selectedId))
-    }, 2500)
+    await apiHandover(selectedId, token)
+    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
+    if (updated) setMatch(updated)
+    // Pull the new system message
+    apiFetchThread(selectedId, token)
+      .then((detail) => setMessages(detail.messages))
+      .catch(() => {})
   }
 
-  const showConversation = !!selectedId && !!threadDetail
+  async function handleReceived() {
+    if (!selectedId || !token) return
+    await apiReceived(selectedId, token)
+    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
+    if (updated) setMatch(updated)
+    // Pull the completion system message — thread stays visible
+    apiFetchThread(selectedId, token)
+      .then((detail) => setMessages(detail.messages))
+      .catch(() => {})
+  }
+
+  // ── Layout ──────────────────────────────────────────────────────────────────
+
   const showMobileList = !selectedId
+  const showConversation = !!selectedId && !!threadDetail
+  const totalUnread = threads.reduce((s, t) => s + t.unread_count, 0)
 
   return (
-    <div className="h-screen bg-[#0E0B08] pt-16 flex flex-col overflow-hidden">
+    <div
+      className="h-screen pt-16 flex flex-col overflow-hidden"
+      style={{ background: "var(--bg)" }}
+    >
       <div className="flex flex-1 overflow-hidden">
-        {/* Thread list — hidden on mobile when thread selected */}
+        {/* ── Thread list ─────────────────────────────────────────────────── */}
         <div
-          className={`${showMobileList ? "flex" : "hidden"} lg:flex flex-col w-full lg:w-[320px] shrink-0 border-r border-[#1E1810] overflow-y-auto`}
+          className={`${showMobileList ? "flex" : "hidden"} lg:flex flex-col w-full lg:w-[300px] shrink-0 overflow-y-auto`}
+          style={{ borderRight: "1px solid var(--border)", background: "var(--surface)" }}
         >
-          <div className="px-5 py-4 border-b border-[#1E1810] shrink-0">
-            <h1
-              className="text-[11px] tracking-[0.2em] text-[#8C7B68]"
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              MESSAGES
-            </h1>
+          <div
+            className="px-5 py-4 shrink-0 flex items-center justify-between"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
+              <h1
+                className="text-[11px] tracking-[0.2em]"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
+              >
+                MESSAGES
+              </h1>
+            </div>
+            {totalUnread > 0 && (
+              <span
+                className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
+            )}
           </div>
 
           {threadsLoading ? (
-            <div className="flex items-center justify-center flex-1 gap-2">
-              <div className="w-4 h-4 rounded-full border border-[#C8956A]/20 border-t-[#C8956A] animate-spin" />
+            <div className="flex items-center justify-center flex-1">
+              <div
+                className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: "var(--border)", borderTopColor: "var(--accent)" }}
+              />
             </div>
           ) : threads.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 px-6 text-center">
               <p
-                className="text-[11px] text-[#3A2E20] tracking-widest"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="text-[11px] tracking-widest"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
               >
                 NO CONVERSATIONS YET
               </p>
               <button
                 onClick={() => navigate({ to: "/browse" })}
-                className="text-[11px] text-[#C8956A] hover:text-[#D4A855] tracking-widest transition-colors"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                className="text-[11px] tracking-widest transition-colors"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
+                onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
               >
                 BROWSE LISTINGS →
               </button>
@@ -711,12 +1152,10 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
           )}
         </div>
 
-        {/* Conversation panel */}
+        {/* ── Conversation panel ──────────────────────────────────────────── */}
         <div className={`${showMobileList ? "hidden" : "flex"} lg:flex flex-col flex-1 overflow-hidden`}>
           {detailLoading ? (
-            <div className="flex items-center justify-center flex-1 gap-2">
-              <div className="w-5 h-5 rounded-full border border-[#C8956A]/20 border-t-[#C8956A] animate-spin" />
-            </div>
+            <PanelSpinner />
           ) : showConversation ? (
             <ConversationPanel
               thread={threadDetail}
@@ -725,11 +1164,12 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
               match={match}
               onSend={handleSend}
               onConfirm={handleConfirm}
-              onDeal={handleDeal}
+              onHandover={handleHandover}
+              onReceived={handleReceived}
               onBack={handleBack}
             />
           ) : (
-            <EmptyState noThreads={threads.length === 0} />
+            <EmptyConversation noThreads={threads.length === 0} />
           )}
         </div>
       </div>

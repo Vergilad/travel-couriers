@@ -22,8 +22,8 @@ import { useAuth } from "@/lib/auth"
 
 function FullPageSpinner() {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-[#0E0B08] z-50">
-      <div className="w-6 h-6 rounded-full border-2 border-[#C8956A]/20 border-t-[#C8956A] animate-spin" />
+    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "var(--bg)" }}>
+      <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(59,130,246,0.2)", borderTopColor: "var(--accent)" }} />
     </div>
   )
 }
