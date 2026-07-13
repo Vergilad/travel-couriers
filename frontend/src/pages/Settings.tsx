@@ -222,6 +222,7 @@ export function SettingsPage() {
 
   // Danger zone
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
 
   // Load existing profile data
   React.useEffect(() => {
@@ -773,12 +774,14 @@ export function SettingsPage() {
               <p className="text-sm mb-6 leading-relaxed" style={{ color: "var(--text-muted)" }}>
                 This will permanently delete your account. All your listings, messages and reviews will be lost.
               </p>
+              {deleteError && (
+                <p className="text-sm mb-4" style={{ color: "var(--destructive)" }}>{deleteError}</p>
+              )}
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => {
-                    console.log("TODO: delete account for user", user?.id)
-                    setShowDeleteConfirm(false)
+                    setDeleteError("Account deletion isn't available yet — contact support to close your account.")
                   }}
                   className="flex-1 py-2.5 text-white text-[10px] tracking-[0.15em] rounded-sm transition-colors"
                   style={{
@@ -792,7 +795,7 @@ export function SettingsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowDeleteConfirm(false)}
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteError(null) }}
                   className="flex-1 py-2.5 text-[10px] tracking-[0.15em] rounded-sm transition-colors"
                   style={{
                     fontFamily: "'JetBrains Mono', monospace",

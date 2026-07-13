@@ -27,14 +27,20 @@ Messages
  ▼
 Match Confirmation
  │
- │ payment
+ │ handover + receipt
  ▼
-Payment
+Delivery Confirmation
  │
- │ completed
+ │ archived on completion
+ ▼
+Completed Deal
+ │
+ │ enables
  ▼
 Review
 ```
+
+Payment is a parallel, optional track (a thread may or may not involve money) rather than a required step in this chain — see `payments` below.
 
 Supporting systems such as reports, notifications and roles exist independently.
 
@@ -143,13 +149,17 @@ Messages
 Match Confirmations
  │
  ▼
-Payments
+Delivery Confirmations
+ │
+ ▼
+Completed Deals
  │
  ▼
 Reviews
 
+Payments (parallel, optional — tied to a Thread)
 Reports
-Notifications
+Notification Log
 ```
 
 ---
@@ -292,19 +302,24 @@ Open
 
 ↓
 
-Conversation
+Conversation (thread + messages)
 
 ↓
 
-Agreement
+Both parties confirm (match_confirmations)
 
 ↓
 
-Matched
+Courier marks handover (delivery_confirmations.handed_over_at)
 
 ↓
 
-Completed
+Recipient confirms receipt (delivery_confirmations.received_at)
+→ snapshot written to completed_deals
+
+↓
+
+Completed  (skipped for `trip` listings, which stay open for other senders)
 ```
 
 Cancelled listings remain stored for historical purposes.
@@ -376,8 +391,9 @@ Editing messages is intentionally unsupported.
 |----------|---------|----------------|
 | id | uuid | Message identifier |
 | thread_id | uuid | Conversation |
-| sender_id | uuid | Author |
+| sender_id | uuid | Author (NULL for system messages) |
 | body | text | Message content |
+| is_system | boolean | True for backend-generated notices (e.g. confirmation/handover events) rather than user-authored text |
 | created_at | timestamptz | Time sent |
 | read_at | timestamptz | Read receipt |
 
@@ -423,6 +439,75 @@ Composite primary key:
 
 ---
 
+# Table: delivery_confirmations
+
+## Purpose
+
+Tracks the physical handover once both participants have confirmed the
+arrangement (see `match_confirmations`). This is a separate table because
+"we agreed on terms" and "the item actually changed hands" are different
+events with different actors and different timestamps.
+
+---
+
+## Columns
+
+| Column | Type | Description |
+|----------|---------|----------------|
+| thread_id | uuid | Thread (one row per matched thread) |
+| courier_id | uuid | The participant physically carrying the item |
+| recipient_id | uuid | The participant receiving the item |
+| handed_over_at | timestamptz | Set when the courier marks handover |
+| received_at | timestamptz | Set when the recipient confirms receipt — this is the binding completion event |
+
+---
+
+Row created only once both parties confirm via `match_confirmations`. Who is
+courier vs. recipient depends on listing kind: for a `trip` listing the owner
+(traveler) is the courier; for `delivery`/`request` listings the non-owner is
+the courier.
+
+Confirming receipt (`received_at` set) is what triggers a `completed_deals`
+snapshot and marks the listing `completed` (except `trip` listings, which
+stay open for other senders).
+
+---
+
+# Table: completed_deals
+
+## Purpose
+
+An immutable snapshot taken the moment a delivery is confirmed received.
+Listings, threads and profiles can all change or be removed later, but a
+user's transaction history and eligibility to leave a review must not
+disappear — so the relevant details are denormalized here rather than
+looked up live.
+
+---
+
+## Columns
+
+| Column | Type | Description |
+|----------|---------|----------------|
+| id | uuid | Completed deal |
+| listing_id | uuid | Originating listing |
+| kind | text | Listing type at completion time |
+| origin_city / origin_country | text | Route origin |
+| dest_city / dest_country | text | Route destination |
+| depart_date / arrive_date | date | Route dates |
+| completed_at | timestamptz | When receipt was confirmed |
+| user_a / user_b | uuid | The two participants |
+| user_a_name / user_a_avatar | text | Snapshot of user_a's profile at completion time |
+| user_b_name / user_b_avatar | text | Snapshot of user_b's profile at completion time |
+
+---
+
+Drives two things: a user's profile history (who they've dealt with, where,
+when) and review eligibility — a review can only be left against a
+`completed_deal_id` the reviewer took part in and hasn't already reviewed.
+
+---
+
 # Table: payments
 
 ## Purpose
@@ -454,15 +539,17 @@ Only Stripe references are stored.
 
 ---
 
-## Typical Statuses
+## Statuses
 
 ```
-pending
-authorized
-paid
-refunded
-cancelled
+pending      — row created, checkout not yet started
+processing   — Stripe Checkout Session created, awaiting payment
+completed    — confirmed paid via the Stripe webhook
 ```
+
+`pending`/`processing`/`completed` are the only statuses the backend
+currently sets. Refunds and cancellations are not yet implemented — a
+`payments` row does not currently support either state.
 
 ---
 
@@ -470,9 +557,7 @@ cancelled
 
 ## Purpose
 
-Stores reviews after completed deliveries.
-
-Reviews are linked to successful marketplace interactions.
+Stores reviews left after a completed deal.
 
 ---
 
@@ -481,12 +566,19 @@ Reviews are linked to successful marketplace interactions.
 | Column | Type | Description |
 |----------|---------|----------------|
 | id | uuid | Review |
-| listing_id | uuid | Listing |
+| completed_deal_id | uuid | The completed deal this review is attached to |
 | reviewer_id | uuid | Author |
 | reviewee_id | uuid | Recipient |
 | rating | integer | Rating |
 | comment | text | Optional review |
 | created_at | timestamptz | Creation time |
+
+---
+
+Reviews key off `completed_deal_id` rather than `listing_id`. A listing can
+be deleted or reused (e.g. a `trip` stays open after one delivery completes),
+but the specific completed transaction being reviewed must stay identifiable
+— so the review points at the immutable `completed_deals` snapshot instead.
 
 ---
 

@@ -13,6 +13,7 @@ import { LandingPage } from "@/pages/Landing"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
+import { NotFoundPage } from "@/pages/NotFound"
 import { Inbox } from "@/pages/Inbox"
 import { Browse } from "@/pages/Browse"
 import { MyListings } from "@/pages/MyListings"
@@ -28,7 +29,7 @@ function FullPageSpinner() {
   )
 }
 
-const rootRoute = createRootRoute({ component: Layout })
+const rootRoute = createRootRoute({ component: Layout, notFoundComponent: NotFoundPage })
 
 function AuthGuard() {
   const { user, loading } = useAuth()
@@ -173,7 +174,7 @@ const routeTree = rootRoute.addChildren([
   ]),
 ])
 
-export const router = createRouter({ routeTree })
+export const router = createRouter({ routeTree, defaultNotFoundComponent: NotFoundPage })
 
 declare module "@tanstack/react-router" {
   interface Register {

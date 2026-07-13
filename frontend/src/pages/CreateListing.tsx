@@ -22,10 +22,11 @@ interface FormData {
   capacity_kg: string
   date_flexibility: DateFlexibility
   no_date: boolean
+  no_price: boolean
 }
 
 const MAX_PRICE = 10_000
-const MAX_KG = 3_000
+const MAX_CAPACITY_KG = 3_000
 const MAX_TITLE = 80
 const MAX_DESCRIPTION = 500
 
@@ -63,13 +64,32 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   )
 }
 
+// Keys that HTML5 <input type="number"> otherwise accepts even though they're
+// letters/symbols, not digits (e.g. "1e5" scientific notation, "-", "+").
+const BLOCKED_NUMERIC_KEYS = new Set(["e", "E", "+", "-"])
+
+function onKeyDownNumeric(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (BLOCKED_NUMERIC_KEYS.has(e.key)) e.preventDefault()
+}
+
+// Strip anything that isn't a digit or a single decimal point — guards against
+// pasted text like "12abc" or "1e5" slipping past the keydown guard.
+function sanitizeNumeric(raw: string): string {
+  const cleaned = raw.replace(/[^0-9.]/g, "")
+  const firstDot = cleaned.indexOf(".")
+  if (firstDot === -1) return cleaned
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "")
+}
+
 function TerminalInput({
-  label, type = "text", value, onChange, placeholder, required, min, max, step, maxLength,
+  label, type = "text", value, onChange, placeholder, required, min, max, step, maxLength, disabled,
 }: {
   label: string; type?: string; value: string; onChange: (v: string) => void;
   placeholder?: string; required?: boolean; min?: number; max?: number; step?: string; maxLength?: number;
+  disabled?: boolean;
 }) {
   const atLimit = !!(maxLength && value.length >= maxLength)
+  const isNumeric = type === "number"
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
@@ -82,10 +102,22 @@ function TerminalInput({
         </span>
         <input
           type={type}
+          inputMode={isNumeric ? "decimal" : undefined}
           value={value}
-          onChange={e => onChange(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
+          onChange={e => {
+            let v = e.target.value
+            if (isNumeric) v = sanitizeNumeric(v)
+            onChange(maxLength ? v.slice(0, maxLength) : v)
+          }}
+          onKeyDown={isNumeric ? onKeyDownNumeric : undefined}
+          onPaste={isNumeric ? e => {
+            e.preventDefault()
+            const text = sanitizeNumeric(e.clipboardData.getData("text"))
+            onChange(text)
+          } : undefined}
           placeholder={placeholder}
           required={required}
+          disabled={disabled}
           min={min}
           max={max}
           step={step}
@@ -99,6 +131,8 @@ function TerminalInput({
             padding: "10px 12px 10px 28px",
             paddingRight: maxLength ? "52px" : "12px",
             borderColor: atLimit ? "var(--destructive)" : "var(--border)",
+            opacity: disabled ? 0.4 : 1,
+            cursor: disabled ? "not-allowed" : "text",
           }}
         />
         {maxLength && (
@@ -235,7 +269,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
     title: "", description: "", origin_city: "", origin_country: "",
     dest_city: "", dest_country: "", depart_date: "", arrive_date: "",
     price: "", currency: "USD", capacity_kg: "",
-    date_flexibility: "exact", no_date: false,
+    date_flexibility: "exact", no_date: false, no_price: false,
   })
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -249,9 +283,9 @@ export function CreateListing({ kind }: { kind: Kind }) {
 
   function validateClient(): string | null {
     if (!originConfirmed || !destConfirmed) return "Please pick both cities from the list."
-    if (form.price && Number(form.price) > MAX_PRICE) return `Price cannot exceed $${MAX_PRICE.toLocaleString()}`
+    if (!form.no_price && form.price && Number(form.price) > MAX_PRICE) return `Price cannot exceed ${MAX_PRICE.toLocaleString()}`
     if (form.capacity_kg && Number(form.capacity_kg) > MAX_KG) return `Capacity cannot exceed ${MAX_KG.toLocaleString()} kg`
-    if (form.price && Number(form.price) < 0) return "Price cannot be negative"
+    if (!form.no_price && form.price && Number(form.price) < 0) return "Price cannot be negative"
     if (form.capacity_kg && Number(form.capacity_kg) <= 0) return "Capacity must be greater than 0"
     if (form.depart_date && form.arrive_date && form.arrive_date < form.depart_date) return "Arrival date cannot be before departure date"
     return null
@@ -282,7 +316,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
       if (form.description) body.description = form.description
       if (!form.no_date && form.depart_date) body.depart_date = form.depart_date
       if (!form.no_date && form.arrive_date) body.arrive_date = form.arrive_date
-      if (form.price) body.price = Math.min(Number(form.price), MAX_PRICE)
+      if (!form.no_price && form.price) body.price = Math.min(Number(form.price), MAX_PRICE)
       if (form.capacity_kg) body.capacity_kg = Math.min(Number(form.capacity_kg), MAX_KG)
       const res = await authedFetch("/api/listings", { method: "POST", body: JSON.stringify(body) })
       if (!res.ok) {
@@ -498,35 +532,47 @@ export function CreateListing({ kind }: { kind: Kind }) {
                 placeholder="Size restrictions, handling instructions, meeting preferences…"
                 maxLength={MAX_DESCRIPTION}
               />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <TerminalInput
-                  label={kind === "trip" ? "Your fee ($)" : "Offering to pay ($)"}
-                  type="number"
-                  value={form.price}
-                  onChange={set("price")}
-                  placeholder="0"
-                  min={0}
-                  max={MAX_PRICE}
-                  step="0.01"
+              <div className="mb-1">
+                <Toggle
+                  checked={form.no_price}
+                  onChange={v => setForm(p => ({ ...p, no_price: v, price: v ? "" : p.price }))}
+                  label="No price set"
+                  sublabel="Leave it open — you'll agree on a price in messages."
                 />
-                <div>
-                  <FieldLabel>Currency</FieldLabel>
-                  <select
-                    value={form.currency}
-                    onChange={e => set("currency")(e.target.value)}
-                    onFocus={onFocusBlue}
-                    onBlur={onBlurBorder}
-                    style={{ ...baseInputStyle, padding: "10px 12px" }}
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                    <option value="AED">AED</option>
-                    <option value="RUB">RUB</option>
-                    <option value="CNY">CNY</option>
-                    <option value="TRY">TRY</option>
-                  </select>
-                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                {!form.no_price && (
+                  <>
+                    <TerminalInput
+                      label={kind === "trip" ? "Your fee ($)" : "Offering to pay ($)"}
+                      type="number"
+                      value={form.price}
+                      onChange={set("price")}
+                      placeholder="0"
+                      min={0}
+                      max={MAX_PRICE}
+                      step="0.01"
+                    />
+                    <div>
+                      <FieldLabel>Currency</FieldLabel>
+                      <select
+                        value={form.currency}
+                        onChange={e => set("currency")(e.target.value)}
+                        onFocus={onFocusBlue}
+                        onBlur={onBlurBorder}
+                        style={{ ...baseInputStyle, padding: "10px 12px" }}
+                      >
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
+                        <option value="AED">AED</option>
+                        <option value="RUB">RUB</option>
+                        <option value="CNY">CNY</option>
+                        <option value="TRY">TRY</option>
+                      </select>
+                    </div>
+                  </>
+                )}
                 {kind === "trip" && (
                   <TerminalInput
                     label={`Spare capacity (kg, max ${MAX_KG.toLocaleString()})`}
@@ -540,7 +586,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
                   />
                 )}
               </div>
-              {form.price && Number(form.price) > MAX_PRICE && (
+              {!form.no_price && form.price && Number(form.price) > MAX_PRICE && (
                 <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max price is ${MAX_PRICE.toLocaleString()}</p>
               )}
               {form.capacity_kg && Number(form.capacity_kg) > MAX_KG && (
