@@ -314,7 +314,7 @@ function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
 // ─── Progress pip ─────────────────────────────────────────────────────────────
 // Small two-step visual used in the in_transit and handed_over bars.
 
-function DeliveryProgress({ step }: { step: 1 | 2 }) {
+function DeliveryProgress({ step }: { step: 0 | 1 | 2 }) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       {/* Step 1: courier handover */}
@@ -512,7 +512,7 @@ function MatchBar({
         style={barBase}
       >
         <div className="flex items-center gap-2.5 flex-wrap">
-          <DeliveryProgress step={0 as never} />
+          <DeliveryProgress step={0} />
           <span style={{ ...monoSm, color: "var(--text-muted)" }}>
             {match.is_me_courier ? "ARRANGE PICKUP — MARK DELIVERED WHEN DONE" : "ARRANGEMENT CONFIRMED — AWAITING HANDOVER"}
           </span>
@@ -1057,7 +1057,6 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     await apiHandover(selectedId, token)
     const updated = await apiGetMatchState(selectedId, token).catch(() => null)
     if (updated) setMatch(updated)
-    // Pull the new system message
     apiFetchThread(selectedId, token)
       .then((detail) => setMessages(detail.messages))
       .catch(() => {})
@@ -1068,7 +1067,6 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     await apiReceived(selectedId, token)
     const updated = await apiGetMatchState(selectedId, token).catch(() => null)
     if (updated) setMatch(updated)
-    // Pull the completion system message — thread stays visible
     apiFetchThread(selectedId, token)
       .then((detail) => setMessages(detail.messages))
       .catch(() => {})

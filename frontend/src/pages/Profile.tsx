@@ -5,6 +5,8 @@ import { useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
 
+// ─── Interfaces ───────────────────────────────────────────────────────────────
+
 interface PublicProfile {
   id: string
   display_name: string | null
@@ -56,7 +58,8 @@ interface EligibleDeal {
   completed_at: string | null
 }
 
-// Kind badge colours — consistent with Browse / ListingDetail
+// ─── Kind colours ─────────────────────────────────────────────────────────────
+
 const KIND_COLORS: Record<string, { bg: string; text: string }> = {
   trip:     { bg: "rgba(147,197,253,0.1)",  text: "#93c5fd" },
   request:  { bg: "rgba(134,239,172,0.1)",  text: "#86efac" },
@@ -67,51 +70,212 @@ function kindStyle(kind: string) {
   return KIND_COLORS[kind?.toLowerCase()] ?? { bg: "rgba(255,255,255,0.05)", text: "var(--text-muted)" }
 }
 
-function RatingDots({ rating, max = 5 }: { rating: number; max?: number }) {
+// ─── Graph Rating ─────────────────────────────────────────────────────────────
+// Pentagon graph as a rating selector / display, matching Peregri's route-graph theme.
+// Each vertex = one rating point. Active vertices light up with edges connecting them.
+
+const RATING_LABELS = ["", "POOR", "BELOW AVG", "ALRIGHT", "GOOD", "EXCELLENT"]
+
+// Pentagon vertices: start at top, go clockwise
+function pentaVerts(cx: number, cy: number, r: number) {
+  return Array.from({ length: 5 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }
+  })
+}
+
+function edgeLen(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2)
+}
+
+// Edges of the pentagon (0-indexed vertex pairs)
+const PENTA_EDGES: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]
+
+// Edge is active when BOTH its endpoints are active (i < active).
+// Rule: active > Math.max(f, t) handles all cases including closing edge [4,0]
+function isEdgeActive(f: number, t: number, active: number) {
+  return active > Math.max(f, t)
+}
+
+function GraphRating({
+  value,
+  onChange,
+  size = "lg",
+}: {
+  value: number
+  onChange?: (v: number) => void
+  size?: "sm" | "lg"
+}) {
+  const [hovered, setHovered] = useState(0)
+  const active = hovered || value
+  const interactive = Boolean(onChange)
+
+  // sm = compact read-only display, lg = large interactive selector
+  const dim = size === "lg" ? 200 : 46
+  const r   = size === "lg" ? 76  : 16
+  const cx  = dim / 2
+  const cy  = dim / 2
+  const nodeR  = size === "lg" ? 10  : 3
+  const strokeW = size === "lg" ? 2   : 1
+  // Invisible hit-zone radius (lg only) — much easier to click
+  const hitR = size === "lg" ? 22 : 0
+
+  const verts = pentaVerts(cx, cy, r)
+
+  // Vertex labels positioned slightly outside each node
+  const labelR = r + (size === "lg" ? 22 : 0)
+  const labelVerts = pentaVerts(cx, cy, labelR)
+
   return (
-    <div className="flex gap-1.5 items-center">
-      {Array.from({ length: max }).map((_, i) => (
-        <div
-          key={i}
-          className="w-2 h-2 rounded-full transition-colors"
-          style={{ background: i < rating ? "var(--accent)" : "var(--border)" }}
-        />
-      ))}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: size === "lg" ? 10 : 4 }}>
+      <svg
+        width={dim}
+        height={dim}
+        style={{ overflow: "visible" }}
+        onMouseLeave={interactive ? () => setHovered(0) : undefined}
+      >
+        {/* Background (dim) edges */}
+        {PENTA_EDGES.map(([f, t], i) => (
+          <line
+            key={`bg-${i}`}
+            x1={verts[f].x} y1={verts[f].y}
+            x2={verts[t].x} y2={verts[t].y}
+            stroke="var(--border)"
+            strokeWidth={strokeW}
+          />
+        ))}
+
+        {/* Active edges — drawn in with stroke-dashoffset */}
+        {PENTA_EDGES.map(([f, t], i) => {
+          const len = edgeLen(verts[f], verts[t])
+          const active_ = isEdgeActive(f, t, active)
+          return (
+            <motion.line
+              key={`fg-${i}`}
+              x1={verts[f].x} y1={verts[f].y}
+              x2={verts[t].x} y2={verts[t].y}
+              stroke="var(--accent)"
+              strokeWidth={strokeW + (size === "lg" ? 1 : 0)}
+              style={{ strokeDasharray: len }}
+              animate={{ strokeDashoffset: active_ ? 0 : len, opacity: active_ ? 1 : 0 }}
+              initial={false}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            />
+          )
+        })}
+
+        {/* Glow circles behind active nodes */}
+        {verts.map((v, i) => (
+          <motion.circle
+            key={`glow-${i}`}
+            cx={v.x} cy={v.y}
+            fill="var(--accent)"
+            animate={{ r: i < active ? nodeR * 3.2 : 0, opacity: i < active ? 0.15 : 0 }}
+            initial={false}
+            transition={{ duration: 0.2 }}
+          />
+        ))}
+
+        {/* Vertex nodes */}
+        {verts.map((v, i) => {
+          const vActive = i < active
+          return (
+            <motion.circle
+              key={`node-${i}`}
+              cx={v.x} cy={v.y}
+              fill={vActive ? "var(--accent)" : "var(--surface-raised)"}
+              stroke={vActive ? "var(--accent)" : "var(--border)"}
+              strokeWidth={strokeW}
+              animate={{ r: vActive ? nodeR * 1.35 : nodeR }}
+              initial={false}
+              transition={{ type: "spring", stiffness: 420, damping: 22 }}
+              style={{ cursor: interactive ? "pointer" : "default" }}
+              onMouseEnter={interactive ? () => setHovered(i + 1) : undefined}
+              onClick={interactive && onChange ? () => onChange(i + 1) : undefined}
+            />
+          )
+        })}
+
+        {/* Large invisible hit zones (lg interactive only) */}
+        {interactive && size === "lg" && verts.map((v, i) => (
+          <circle
+            key={`hit-${i}`}
+            cx={v.x} cy={v.y} r={hitR}
+            fill="transparent"
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => setHovered(i + 1)}
+            onClick={() => onChange?.(i + 1)}
+          />
+        ))}
+
+        {/* Vertex number labels (lg only) */}
+        {size === "lg" && labelVerts.map((v, i) => (
+          <text
+            key={`lbl-${i}`}
+            x={v.x} y={v.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              letterSpacing: "0.05em",
+              fill: i < active ? "var(--accent)" : "var(--text-faint)",
+              userSelect: "none",
+              transition: "fill 0.2s",
+            }}
+          >
+            {i + 1}
+          </text>
+        ))}
+      </svg>
+
+      {/* Label strip — always-visible height so layout doesn't jump */}
+      {size === "lg" && (
+        <div style={{ height: 20, display: "flex", alignItems: "center" }}>
+          <AnimatePresence mode="wait">
+            {active > 0 ? (
+              <motion.span
+                key={active}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.14 }}
+                style={{
+                  display: "block",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: "0.2em",
+                  color: "var(--accent)",
+                }}
+              >
+                {RATING_LABELS[active]}
+              </motion.span>
+            ) : (
+              <motion.span
+                key="idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14 }}
+                style={{
+                  display: "block",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 10,
+                  letterSpacing: "0.2em",
+                  color: "var(--text-faint)",
+                }}
+              >
+                {interactive ? "HOVER TO RATE" : ""}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   )
 }
 
-function RatingInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [hover, setHover] = useState(0)
-  return (
-    <div className="flex gap-2.5 items-center" onMouseLeave={() => setHover(0)}>
-      {[1, 2, 3, 4, 5].map((i) => {
-        const active = i <= (hover || value)
-        return (
-          <motion.button
-            key={i}
-            type="button"
-            aria-label={`Rate ${i}`}
-            onMouseEnter={() => setHover(i)}
-            onClick={() => onChange(i)}
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.9 }}
-            className="p-0.5 cursor-pointer"
-          >
-            <div
-              className="rounded-full transition-all"
-              style={{
-                width: active ? 18 : 14,
-                height: active ? 18 : 14,
-                background: active ? "var(--accent)" : "var(--border)",
-              }}
-            />
-          </motion.button>
-        )
-      })}
-    </div>
-  )
-}
+// ─── Small helpers ─────────────────────────────────────────────────────────────
 
 function Skeleton({ className = "" }: { className?: string }) {
   return (
@@ -142,7 +306,8 @@ function ReviewerAvatar({ name, url }: { name: string; url?: string | null }) {
   )
 }
 
-// ─── Rate-this-person panel ──────────────────────────────────────────────────
+// ─── Rate panel ───────────────────────────────────────────────────────────────
+
 const MAX_REVIEW_COMMENT = 500
 
 function RatePanel({
@@ -187,12 +352,6 @@ function RatePanel({
     onError: (e: Error) => setError(e.message),
   })
 
-  async function handleSubmit() {
-    if (rating === 0) { setError("Please select a rating"); return }
-    setError(null)
-    mutation.mutate()
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, height: 0 }}
@@ -217,7 +376,6 @@ function RatePanel({
             style={{ color: "var(--text-faint)" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--text-muted)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}
-            aria-label="Close"
           >
             ✕
           </button>
@@ -225,15 +383,16 @@ function RatePanel({
 
         {deal.origin_city && deal.dest_city && (
           <p
-            className="text-[10px] tracking-wider mb-4"
+            className="text-[10px] tracking-wider mb-5"
             style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
           >
             {deal.kind?.toUpperCase()} · {deal.origin_city} → {deal.dest_city}
           </p>
         )}
 
-        <div className="mb-4">
-          <RatingInput value={rating} onChange={setRating} />
+        {/* Graph rating selector */}
+        <div className="flex justify-center mb-5">
+          <GraphRating value={rating} onChange={setRating} size="lg" />
         </div>
 
         <textarea
@@ -244,7 +403,7 @@ function RatePanel({
           maxLength={MAX_REVIEW_COMMENT}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          className="w-full rounded-sm px-4 py-2.5 text-[13px] resize-none focus:outline-none transition-colors"
+          className="w-full rounded-sm px-4 py-2.5 text-[13px] resize-none focus:outline-none"
           style={{
             fontFamily: "'JetBrains Mono', monospace",
             background: "var(--surface-raised)",
@@ -253,7 +412,7 @@ function RatePanel({
             caretColor: "var(--accent)",
           }}
         />
-        <div className="flex items-center justify-between mt-1.5">
+        <div className="flex items-center justify-between mt-1.5 mb-4">
           <span
             className="text-[9px] tabular-nums"
             style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
@@ -270,11 +429,11 @@ function RatePanel({
           )}
         </div>
 
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2">
           <button
-            onClick={handleSubmit}
+            onClick={() => { if (rating === 0) { setError("Select a rating first"); return }; setError(null); mutation.mutate() }}
             disabled={mutation.isPending || rating === 0}
-            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               background: "var(--accent)",
@@ -287,20 +446,14 @@ function RatePanel({
           </button>
           <button
             onClick={onClose}
-            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm transition-colors"
+            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm"
             style={{
               fontFamily: "'JetBrains Mono', monospace",
               border: "1px solid var(--border)",
               color: "var(--text-muted)",
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = "var(--accent)"
-              e.currentTarget.style.color = "var(--text)"
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.color = "var(--text-muted)"
-            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text)" }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" }}
           >
             CANCEL
           </button>
@@ -310,10 +463,212 @@ function RatePanel({
   )
 }
 
+// ─── Report panel ─────────────────────────────────────────────────────────────
+
+const REPORT_REASONS = [
+  "Fraud or scam",
+  "Dangerous or illegal items",
+  "Harassment or threats",
+  "No-show / didn't deliver",
+  "Fake profile",
+  "Other",
+]
+
+const MAX_REPORT_DETAILS = 500
+
+function ReportPanel({
+  targetUserId,
+  targetName,
+  onClose,
+  onSubmitted,
+}: {
+  targetUserId: string
+  targetName: string
+  onClose: () => void
+  onSubmitted: () => void
+}) {
+  const [reason, setReason] = useState("")
+  const [details, setDetails] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [focused, setFocused] = useState(false)
+  const [reasonFocused, setReasonFocused] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await authedFetch("/api/reports", {
+        method: "POST",
+        body: JSON.stringify({
+          target_user_id: targetUserId,
+          reason,
+          details: details.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail ?? "Failed to submit report")
+      }
+      return res.json()
+    },
+    onSuccess: onSubmitted,
+    onError: (e: Error) => setError(e.message),
+  })
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden"
+    >
+      <div
+        className="mt-4 p-5 rounded-sm"
+        style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.2)" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3
+            className="text-[11px] tracking-[0.2em]"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}
+          >
+            REPORT {targetName.toUpperCase()}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-xs"
+            style={{ color: "var(--text-faint)" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "var(--text-muted)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}
+          >
+            ✕
+          </button>
+        </div>
+
+        <p
+          className="text-[11px] leading-relaxed mb-4"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Reports are reviewed by the Peregri team. We do not mediate financial disputes or
+          guarantee refunds — please only transact with people you trust.
+        </p>
+
+        {/* Reason select */}
+        <div className="mb-3">
+          <label
+            className="block text-[9px] tracking-widest mb-2"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+          >
+            REASON
+          </label>
+          <select
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            onFocus={() => setReasonFocused(true)}
+            onBlur={() => setReasonFocused(false)}
+            className="w-full rounded-sm px-3 py-2.5 text-[12px] focus:outline-none appearance-none"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              background: "var(--surface-raised)",
+              border: `1px solid ${reasonFocused ? "var(--accent)" : "var(--border)"}`,
+              color: reason ? "var(--text)" : "var(--text-faint)",
+              caretColor: "var(--accent)",
+            }}
+          >
+            <option value="" disabled>Select a reason…</option>
+            {REPORT_REASONS.map(r => (
+              <option key={r} value={r} style={{ background: "var(--surface-raised)", color: "var(--text)" }}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Details */}
+        <div className="mb-4">
+          <label
+            className="block text-[9px] tracking-widest mb-2"
+            style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+          >
+            DETAILS (OPTIONAL)
+          </label>
+          <textarea
+            value={details}
+            onChange={e => setDetails(e.target.value)}
+            placeholder="Describe what happened…"
+            rows={3}
+            maxLength={MAX_REPORT_DETAILS}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            className="w-full rounded-sm px-4 py-2.5 text-[12px] resize-none focus:outline-none"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              background: "var(--surface-raised)",
+              border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
+              color: "var(--text)",
+              caretColor: "var(--accent)",
+            }}
+          />
+          <div className="flex items-center justify-between mt-1">
+            <span
+              className="text-[9px] tabular-nums"
+              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
+            >
+              {details.length}/{MAX_REPORT_DETAILS}
+            </span>
+            {error && (
+              <span
+                className="text-[10px]"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}
+              >
+                {error.toUpperCase()}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (!reason) { setError("Select a reason"); return }
+              setError(null)
+              mutation.mutate()
+            }}
+            disabled={mutation.isPending || !reason}
+            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              background: "var(--destructive)",
+              color: "#ffffff",
+            }}
+            onMouseEnter={e => { if (!mutation.isPending && reason) e.currentTarget.style.opacity = "0.85" }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = "1" }}
+          >
+            {mutation.isPending ? "…" : "SUBMIT REPORT"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm"
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text)" }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" }}
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Profile page ─────────────────────────────────────────────────────────────
+
 export function ProfilePage({ userId }: { userId: string }) {
   const { user } = useAuth()
   const isOwnProfile = user?.id === userId
   const [rateOpen, setRateOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
 
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", userId],
@@ -383,13 +738,9 @@ export function ProfilePage({ userId }: { userId: string }) {
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       {/* ── Hero ── */}
       <section className="relative pt-24 pb-12 px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto">
-        {/* Ambient top glow */}
         <div
           className="absolute top-0 left-0 right-0 h-64 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse at 30% 0%, rgba(37,99,235,0.07) 0%, transparent 70%)",
-          }}
+          style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(37,99,235,0.07) 0%, transparent 70%)" }}
         />
 
         <motion.div
@@ -412,10 +763,7 @@ export function ProfilePage({ userId }: { userId: string }) {
             ) : (
               <div
                 className="w-32 h-32 md:w-40 md:h-40 rounded-sm flex items-center justify-center"
-                style={{
-                  background: "var(--surface-raised)",
-                  border: "1px solid var(--border)",
-                }}
+                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
               >
                 <span
                   className="text-6xl md:text-7xl font-bold leading-none"
@@ -425,15 +773,11 @@ export function ProfilePage({ userId }: { userId: string }) {
                 </span>
               </div>
             )}
-            {/* Online indicator */}
             <div
               className="absolute bottom-2 right-2 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
               style={{ background: "var(--bg)", border: "1px solid var(--border)" }}
             >
-              <div
-                className="w-2 h-2 rounded-sm"
-                style={{ background: "var(--success)", opacity: 0.8 }}
-              />
+              <div className="w-2 h-2 rounded-sm" style={{ background: "var(--success)", opacity: 0.8 }} />
             </div>
           </div>
 
@@ -446,6 +790,7 @@ export function ProfilePage({ userId }: { userId: string }) {
               </>
             ) : (
               <>
+                {/* Name + action buttons */}
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
                   <h1
                     className="text-4xl md:text-5xl font-bold leading-tight"
@@ -453,47 +798,72 @@ export function ProfilePage({ userId }: { userId: string }) {
                   >
                     {profile?.display_name ?? "Traveler"}
                   </h1>
-                  {isOwnProfile ? (
-                    <Link to="/settings">
-                      <motion.button
-                        className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em] transition-colors"
-                        style={{
-                          fontFamily: "'JetBrains Mono', monospace",
-                          border: "1px solid var(--border)",
-                          color: "var(--accent)",
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = "var(--accent)"
-                          e.currentTarget.style.background = "rgba(37,99,235,0.06)"
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = "var(--border)"
-                          e.currentTarget.style.background = "transparent"
-                        }}
-                      >
-                        EDIT PROFILE
-                      </motion.button>
-                    </Link>
-                  ) : eligibleDeal ? (
-                    <motion.button
-                      onClick={() => setRateOpen((v) => !v)}
-                      className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em] transition-colors"
-                      style={{
-                        fontFamily: "'JetBrains Mono', monospace",
-                        border: "1px solid rgba(37,99,235,0.4)",
-                        background: "rgba(37,99,235,0.06)",
-                        color: "var(--accent)",
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = "rgba(37,99,235,0.12)"
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = "rgba(37,99,235,0.06)"
-                      }}
-                    >
-                      RATE {profile?.display_name?.toUpperCase() ?? "USER"}
-                    </motion.button>
-                  ) : null}
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isOwnProfile ? (
+                      <Link to="/settings">
+                        <motion.button
+                          className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
+                          style={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            border: "1px solid var(--border)",
+                            color: "var(--accent)",
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = "var(--accent)"
+                            e.currentTarget.style.background = "rgba(37,99,235,0.06)"
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = "var(--border)"
+                            e.currentTarget.style.background = "transparent"
+                          }}
+                        >
+                          EDIT PROFILE
+                        </motion.button>
+                      </Link>
+                    ) : (
+                      <>
+                        {eligibleDeal && (
+                          <motion.button
+                            onClick={() => { setRateOpen(v => !v); setReportOpen(false) }}
+                            className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              border: "1px solid rgba(37,99,235,0.4)",
+                              background: rateOpen ? "rgba(37,99,235,0.1)" : "rgba(37,99,235,0.05)",
+                              color: "var(--accent)",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(37,99,235,0.12)" }}
+                            onMouseLeave={e => { e.currentTarget.style.background = rateOpen ? "rgba(37,99,235,0.1)" : "rgba(37,99,235,0.05)" }}
+                          >
+                            RATE {profile?.display_name?.toUpperCase() ?? "USER"}
+                          </motion.button>
+                        )}
+                        {user && (
+                          <motion.button
+                            onClick={() => { setReportOpen(v => !v); setRateOpen(false) }}
+                            className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
+                            style={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              border: `1px solid ${reportOpen ? "rgba(239,68,68,0.4)" : "var(--border)"}`,
+                              background: reportOpen ? "rgba(239,68,68,0.06)" : "transparent",
+                              color: reportOpen ? "var(--destructive)" : "var(--text-faint)",
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"
+                              e.currentTarget.style.color = "var(--destructive)"
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.borderColor = reportOpen ? "rgba(239,68,68,0.4)" : "var(--border)"
+                              e.currentTarget.style.color = reportOpen ? "var(--destructive)" : "var(--text-faint)"
+                            }}
+                          >
+                            REPORT
+                          </motion.button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div
@@ -502,24 +872,22 @@ export function ProfilePage({ userId }: { userId: string }) {
                 >
                   {(profile?.city || profile?.country) && (
                     <>
-                      <span>
-                        {[profile.city, profile.country].filter(Boolean).join(", ")}
-                      </span>
+                      <span>{[profile.city, profile.country].filter(Boolean).join(", ")}</span>
                       <span style={{ color: "var(--text-faint)" }}>·</span>
                     </>
                   )}
                   <span>MEMBER SINCE {memberSince.toUpperCase()}</span>
                 </div>
 
+                {/* Average rating — compact graph + number */}
                 {avgRating !== null && (
                   <div className="flex items-center gap-3 mb-3">
-                    <RatingDots rating={Math.round(avgRating)} />
+                    <GraphRating value={Math.round(avgRating)} size="sm" />
                     <span
                       className="text-[10px] tracking-wider"
                       style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
                     >
-                      {avgRating.toFixed(1)} · {reviews!.length} REVIEW
-                      {reviews!.length !== 1 ? "S" : ""}
+                      {avgRating.toFixed(1)} · {reviews!.length} REVIEW{reviews!.length !== 1 ? "S" : ""}
                     </span>
                   </div>
                 )}
@@ -533,19 +901,27 @@ export function ProfilePage({ userId }: { userId: string }) {
                   </p>
                 )}
 
-                {eligibleDeal && (
-                  <AnimatePresence initial={false}>
-                    {rateOpen && (
-                      <RatePanel
-                        key="rate-panel"
-                        partnerName={profile?.display_name ?? "User"}
-                        deal={eligibleDeal}
-                        onClose={() => setRateOpen(false)}
-                        onSubmitted={() => setRateOpen(false)}
-                      />
-                    )}
-                  </AnimatePresence>
-                )}
+                {/* Panels */}
+                <AnimatePresence initial={false}>
+                  {rateOpen && eligibleDeal && (
+                    <RatePanel
+                      key="rate-panel"
+                      partnerName={profile?.display_name ?? "User"}
+                      deal={eligibleDeal}
+                      onClose={() => setRateOpen(false)}
+                      onSubmitted={() => setRateOpen(false)}
+                    />
+                  )}
+                  {reportOpen && !isOwnProfile && user && (
+                    <ReportPanel
+                      key="report-panel"
+                      targetUserId={userId}
+                      targetName={profile?.display_name ?? "this user"}
+                      onClose={() => setReportOpen(false)}
+                      onSubmitted={() => { setReportOpen(false) }}
+                    />
+                  )}
+                </AnimatePresence>
               </>
             )}
           </div>
@@ -554,7 +930,7 @@ export function ProfilePage({ userId }: { userId: string }) {
 
       <div className="h-px mx-6 md:mx-12 xl:mx-20 max-w-[1100px] md:mx-auto" style={{ background: "var(--border)" }} />
 
-      {/* ── Listings ── */}
+      {/* ── Active Listings ── */}
       <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -581,9 +957,7 @@ export function ProfilePage({ userId }: { userId: string }) {
           </div>
 
           {!listings ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
+            <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : listings.length === 0 ? (
             <p
               className="text-[11px] tracking-wider"
@@ -602,22 +976,15 @@ export function ProfilePage({ userId }: { userId: string }) {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                    className="flex items-center justify-between px-4 py-3.5 rounded-sm transition-colors"
-                    style={{
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
-                    }}
+                    className="flex items-center justify-between px-4 py-3.5 rounded-sm"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
                   >
                     <div className="flex items-center gap-5">
                       <span
                         className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
-                        style={{
-                          fontFamily: "'JetBrains Mono', monospace",
-                          background: ks.bg,
-                          color: ks.text,
-                        }}
+                        style={{ fontFamily: "'JetBrains Mono', monospace", background: ks.bg, color: ks.text }}
                       >
                         {l.kind?.toUpperCase()}
                       </span>
@@ -668,15 +1035,13 @@ export function ProfilePage({ userId }: { userId: string }) {
           </div>
 
           {!history ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
+            <div className="space-y-2">{[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : history.length === 0 ? (
             <p
               className="text-[11px] tracking-wider"
               style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}
             >
-              No completed deals yet.
+              No completed deliveries yet.
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -690,7 +1055,7 @@ export function ProfilePage({ userId }: { userId: string }) {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                    className="flex items-center justify-between px-4 py-3.5 rounded-sm transition-colors"
+                    className="flex items-center justify-between px-4 py-3.5 rounded-sm"
                     style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
                     onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
@@ -698,11 +1063,7 @@ export function ProfilePage({ userId }: { userId: string }) {
                     <div className="flex items-center gap-5 min-w-0">
                       <span
                         className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
-                        style={{
-                          fontFamily: "'JetBrains Mono', monospace",
-                          background: ks.bg,
-                          color: ks.text,
-                        }}
+                        style={{ fontFamily: "'JetBrains Mono', monospace", background: ks.bg, color: ks.text }}
                       >
                         {deal.kind?.toUpperCase()}
                       </span>
@@ -766,9 +1127,7 @@ export function ProfilePage({ userId }: { userId: string }) {
           </div>
 
           {!reviews ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
-            </div>
+            <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
           ) : reviews.length === 0 ? (
             <p
               className="text-[11px] tracking-wider"
@@ -799,12 +1158,12 @@ export function ProfilePage({ userId }: { userId: string }) {
                         ) : (
                           <ReviewerAvatar name={reviewerName} url={review.reviewer?.avatar_url} />
                         )}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-2">
                           {review.reviewer?.id ? (
                             <Link
                               to="/profile/$userId"
                               params={{ userId: review.reviewer.id }}
-                              className="text-[11px] transition-colors"
+                              className="text-[11px]"
                               style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
                               onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
                               onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
@@ -819,7 +1178,8 @@ export function ProfilePage({ userId }: { userId: string }) {
                               {reviewerName}
                             </span>
                           )}
-                          <RatingDots rating={review.rating} />
+                          {/* Graph rating display — small, read-only */}
+                          <GraphRating value={review.rating} size="sm" />
                         </div>
                       </div>
                       <span
