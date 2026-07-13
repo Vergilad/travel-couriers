@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from "framer-motion"
 import { slideInRight, staggerContainer } from "@/components/landing/motion"
 
 const routes = [
-  { from: "BAKU", to: "ISTANBUL", date: "Jul 15", price: "$25" },
-  { from: "LONDON", to: "PARIS", date: "Jul 20", price: "€40" },
-  { from: "DUBAI", to: "TBILISI", date: "Aug 01", price: "$35" },
+  { from: "MOSCOW",   to: "ISTANBUL", date: "Jul 18", price: "$30" },
+  { from: "DUBAI",    to: "LONDON",   date: "Jul 22", price: "£45" },
+  { from: "TBILISI",  to: "BEIJING",  date: "Aug 03", price: "$40" },
+  { from: "ISTANBUL", to: "DUBAI",    date: "Aug 07", price: "$28" },
+  { from: "BAKU",     to: "MOSCOW",   date: "Aug 12", price: "$22" },
 ]
 
 export function HeroRoutePanel() {
