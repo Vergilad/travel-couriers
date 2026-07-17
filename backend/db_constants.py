@@ -3,6 +3,7 @@ class Tables:
     LISTINGS = "listings"
     MESSAGES = "messages"
     COMPLETED_DEALS = "completed_deals"
+    VERIFICATION_REQUESTS = "verification_requests"
 
 
 class ProfileFields:

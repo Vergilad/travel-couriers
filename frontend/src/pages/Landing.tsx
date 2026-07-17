@@ -172,12 +172,11 @@ function Hero() {
             </GraphButton>
           </Link>
           <Link
-            to="/auth"
-            search={{ redirect: "/", mode: "signin" }}
+            to="/trips/new"
             className="group w-full sm:w-auto focus-visible:outline-none"
           >
             <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              SIGN IN
+              POST A TRIP
             </GraphButton>
           </Link>
         </motion.div>
@@ -249,9 +248,9 @@ const GRAPH_STEPS = [
     label: "agree",
     x: 64,
     y: 75,
-    title: "YOU BOTH AGREE",
+    title: "YOU BOTH AGREE & VERIFY",
     content:
-      "Message each other, work out the details, and decide together whether to move forward. Nothing happens without both sides agreeing—it's always your choice.",
+      "Message each other and agree on the details. Before the match is confirmed, both sides complete a quick identity check — a photo of your ID and a selfie, reviewed by a real person on our team. No anonymous deals.",
   },
   {
     id: "move",
@@ -260,7 +259,7 @@ const GRAPH_STEPS = [
     y: 50,
     title: "CLOSE THE DEAL & REVIEW",
     content:
-      "The deal happens, you mark it as closed, and both sides leave a review. That review becomes part of each person's public track record on Peregri.",
+      "The handover happens, you mark it as closed, and both sides leave a public review. That review becomes part of each person's permanent track record on Peregri — visible to everyone they deal with next.",
   },
 ]
 
@@ -425,23 +424,28 @@ function HowItWorks() {
   )
 }
 
-// ─── Trust & safety: reviews (public) vs reports (private moderation) ────────
+// ─── Trust & safety ───────────────────────────────────────────────────────────
 function TrustSafety() {
   const facts = [
     {
-      label: "NOTHING IS AUTOMATIC",
+      label: "VERIFIED IDENTITY, EVERY DEAL",
       value:
-        "A match just means someone reached out. You decide whether to actually agree to a deal—no one is ever obligated to accept.",
+        "Before any match can be confirmed, both sides complete identity verification. A real person on our team reviews your documents and deletes them immediately after — no anonymous arrangements, ever.",
     },
     {
-      label: "REVIEWS BUILD A TRACK RECORD",
+      label: "LEGAL GOODS ONLY — ZERO EXCEPTIONS",
       value:
-        "After every closed deal, both sides leave a public review. Read someone's history before you decide to work with them.",
+        "Peregri is strictly for lawful items. Anyone attempting to ship drugs, weapons, counterfeit goods, or any prohibited contraband is permanently banned on the spot and may be reported to the relevant authorities.",
     },
     {
-      label: "REPORTS STAY PRIVATE",
+      label: "REVIEWS BUILD YOUR REPUTATION",
       value:
-        "If something goes wrong, you can file a report our team reviews privately. Repeat or serious reports can get an account banned.",
+        "After every closed deal, both sides leave a public review. A courier's track record is visible before you ever message them — honesty compounds over time.",
+    },
+    {
+      label: "SCAMS GET YOU BANNED PERMANENTLY",
+      value:
+        "Ghosting after confirmation, fake listings, or demanding payment outside the platform are treated as fraud. Reports are reviewed privately by our team; serious or repeat offenders lose access for good.",
     },
   ]
 
@@ -468,7 +472,7 @@ function TrustSafety() {
             <div className="absolute inset-0 flex flex-col justify-center gap-4 px-6 py-8 z-10">
               <div className="font-mono text-[10px] font-bold tracking-widest text-zinc-600 mb-1 flex items-center gap-2">
                 <Logomark className="w-3.5 h-3.5 text-blue-500" />
-                TWO SEPARATE SYSTEMS
+                THREE LAYERS OF TRUST
               </div>
 
               <motion.div
@@ -479,11 +483,27 @@ function TrustSafety() {
                 className="bg-[#09090b]/70 border border-zinc-800 rounded-sm p-4"
               >
                 <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">🪪</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">IDENTITY · VERIFIED</span>
+                </div>
+                <p className="text-zinc-500 text-[11px] leading-relaxed">
+                  Both sides verify before confirming. Documents are reviewed by a human and deleted immediately — never stored or shared.
+                </p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ ...springConfig, delay: 0.08 }}
+                className="bg-[#09090b]/70 border border-zinc-800 rounded-sm p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
                   <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REVIEWS · PUBLIC</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REVIEWS · PUBLIC RECORD</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed mb-3">
-                  Left by both sides after a handover. Visible on profiles, not tied to any complaint.
+                  Left by both sides after every handover. Visible on profiles permanently.
                 </p>
                 <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-sm px-3 py-2">
                   <div className="flex gap-0.5 text-yellow-500">
@@ -499,20 +519,16 @@ function TrustSafety() {
                 initial={{ opacity: 0, x: -12 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                transition={{ ...springConfig, delay: 0.12 }}
+                transition={{ ...springConfig, delay: 0.16 }}
                 className="bg-[#09090b]/70 border border-zinc-800 rounded-sm p-4"
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Flag className="w-4 h-4 text-amber-400" />
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REPORTS · MODERATION ONLY</span>
+                  <Ban className="w-4 h-4 text-red-400" />
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">CONTRABAND · ZERO TOLERANCE</span>
                 </div>
-                <p className="text-zinc-500 text-[11px] leading-relaxed mb-3">
-                  A complaint filed against a user, seen only by the Peregri team — never posted publicly.
+                <p className="text-zinc-500 text-[11px] leading-relaxed">
+                  Prohibited items mean an instant permanent ban — and a report to the relevant authorities when warranted.
                 </p>
-                <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-sm px-3 py-2">
-                  <Ban className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span className="text-zinc-400 text-[11px]">Repeat or serious reports can get an account banned.</span>
-                </div>
               </motion.div>
             </div>
           </motion.div>
@@ -525,18 +541,17 @@ function TrustSafety() {
             className="order-1 lg:order-2"
           >
             <div className="flex items-center gap-2 mb-3">
-              <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">ACCOUNTABILITY</h2>
+              <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">TRUST & SAFETY</h2>
             </div>
-            <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">YOUR CALL, EVERY TIME.</h3>
+            <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">BUILT SO YOU CAN TRUST A STRANGER.</h3>
             <p className="text-zinc-400 text-lg mb-10 leading-relaxed">
-              We don't run background checks or issue verification badges. What we give you is a
-              track record and a way to speak up—the decision to move forward is always yours.
+              Every person on Peregri is identity-verified before they can confirm a deal. Reviews build a permanent public record. And we have absolute zero tolerance for contraband, scams, or prohibited goods — because the people trusting this network deserve better.
             </p>
 
             <div className="space-y-6">
               {facts.map((item, i) => (
                 <div key={i} className="flex gap-4">
-                  <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                   <div>
                     <div className="font-mono text-sm font-bold text-zinc-100 mb-1.5">{item.label}</div>
                     <div className="text-sm text-zinc-500 leading-relaxed">{item.value}</div>
@@ -644,12 +659,11 @@ function FooterCTA() {
             </GraphButton>
           </Link>
           <Link
-            to="/auth"
-            search={{ redirect: "/", mode: "signin" }}
+            to="/trips/new"
             className="group w-full sm:w-auto focus-visible:outline-none"
           >
             <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              SIGN IN
+              POST A TRIP
             </GraphButton>
           </Link>
         </div>

@@ -284,7 +284,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
   function validateClient(): string | null {
     if (!originConfirmed || !destConfirmed) return "Please pick both cities from the list."
     if (!form.no_price && form.price && Number(form.price) > MAX_PRICE) return `Price cannot exceed ${MAX_PRICE.toLocaleString()}`
-    if (form.capacity_kg && Number(form.capacity_kg) > MAX_KG) return `Capacity cannot exceed ${MAX_KG.toLocaleString()} kg`
+    if (form.capacity_kg && Number(form.capacity_kg) > MAX_CAPACITY_KG) return `Capacity cannot exceed ${MAX_CAPACITY_KG.toLocaleString()} kg`
     if (!form.no_price && form.price && Number(form.price) < 0) return "Price cannot be negative"
     if (form.capacity_kg && Number(form.capacity_kg) <= 0) return "Capacity must be greater than 0"
     if (form.depart_date && form.arrive_date && form.arrive_date < form.depart_date) return "Arrival date cannot be before departure date"
@@ -317,7 +317,7 @@ export function CreateListing({ kind }: { kind: Kind }) {
       if (!form.no_date && form.depart_date) body.depart_date = form.depart_date
       if (!form.no_date && form.arrive_date) body.arrive_date = form.arrive_date
       if (!form.no_price && form.price) body.price = Math.min(Number(form.price), MAX_PRICE)
-      if (form.capacity_kg) body.capacity_kg = Math.min(Number(form.capacity_kg), MAX_KG)
+      if (form.capacity_kg) body.capacity_kg = Math.min(Number(form.capacity_kg), MAX_CAPACITY_KG)
       const res = await authedFetch("/api/listings", { method: "POST", body: JSON.stringify(body) })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -575,13 +575,13 @@ export function CreateListing({ kind }: { kind: Kind }) {
                 )}
                 {kind === "trip" && (
                   <TerminalInput
-                    label={`Spare capacity (kg, max ${MAX_KG.toLocaleString()})`}
+                    label={`Spare capacity (kg, max ${MAX_CAPACITY_KG.toLocaleString()})`}
                     type="number"
                     value={form.capacity_kg}
                     onChange={set("capacity_kg")}
                     placeholder="e.g. 5"
                     min={0.1}
-                    max={MAX_KG}
+                    max={MAX_CAPACITY_KG}
                     step="0.1"
                   />
                 )}
@@ -589,8 +589,8 @@ export function CreateListing({ kind }: { kind: Kind }) {
               {!form.no_price && form.price && Number(form.price) > MAX_PRICE && (
                 <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max price is ${MAX_PRICE.toLocaleString()}</p>
               )}
-              {form.capacity_kg && Number(form.capacity_kg) > MAX_KG && (
-                <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max capacity is {MAX_KG.toLocaleString()} kg</p>
+              {form.capacity_kg && Number(form.capacity_kg) > MAX_CAPACITY_KG && (
+                <p className="font-mono text-[11px]" style={{ color: "var(--destructive)" }}>! Max capacity is {MAX_CAPACITY_KG.toLocaleString()} kg</p>
               )}
             </div>
           </div>

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from routers.auth import get_current_user
-from routers import listings, threads, messages, matches, payments, webhooks, reviews, reports, profiles
+from routers import listings, threads, messages, matches, payments, webhooks, reviews, reports, profiles, verification
 
 load_dotenv()
 
@@ -25,6 +25,7 @@ app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 app.include_router(reviews.router, prefix="/api/reviews", tags=["reviews"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(profiles.router, prefix="/api/profiles", tags=["profiles"])
+app.include_router(verification.router, prefix="/api/verification", tags=["verification"])
 
 @app.get("/health")
 async def health():

@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from db import supabase
 from routers.auth import get_current_user
@@ -134,6 +135,36 @@ async def confirm_match(thread_id: str, user=Depends(get_current_user)):
     _guard()
     try:
         _assert_participant(thread_id, user.id)
+
+        # ── Identity verification gate ────────────────────────────────────────
+        # Set SKIP_IDENTITY_VERIFICATION=true in backend/.env to bypass during
+        # local development when the Telegram bot isn't running.
+        _skip_verify = os.getenv("SKIP_IDENTITY_VERIFICATION", "").lower() in ("1", "true", "yes")
+        if not _skip_verify:
+            parts_check = (
+                supabase.table("thread_participants")
+                .select("user_id")
+                .eq("thread_id", thread_id)
+                .execute()
+            )
+            all_ids = [p["user_id"] for p in (parts_check.data or [])]
+            if all_ids:
+                prof_check = (
+                    supabase.table("profiles")
+                    .select("id, identity_verified")
+                    .in_("id", all_ids)
+                    .execute()
+                )
+                unverified = [p["id"] for p in (prof_check.data or []) if not p.get("identity_verified")]
+                if unverified:
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "code": "identity_not_verified",
+                            "you": user.id in unverified,
+                            "other": any(uid in unverified for uid in all_ids if uid != user.id),
+                        },
+                    )
 
         already = (
             supabase.table("match_confirmations")

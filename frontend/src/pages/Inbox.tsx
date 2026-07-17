@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getInitial } from "@/lib/db_constants"
+import { VerificationGate } from "@/components/VerificationGate"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,10 @@ async function apiConfirmMatch(threadId: string, token: string): Promise<{ both_
   })
   if (!res.ok) {
     const d = await res.json().catch(() => ({}))
-    throw new Error(d.detail ?? "Failed to confirm")
+    if (res.status === 403 && d.detail?.code === "identity_not_verified") {
+      throw Object.assign(new Error("identity_not_verified"), { verificationDetail: d.detail })
+    }
+    throw new Error(typeof d.detail === "string" ? d.detail : "Failed to confirm")
   }
   return res.json()
 }
@@ -875,6 +879,8 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [match, setMatch] = React.useState<MatchState | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
+  const [showVerificationGate, setShowVerificationGate] = React.useState(false)
+  const [verificationDetail, setVerificationDetail] = React.useState<{ you: boolean; other: boolean } | null>(null)
   const navigate = useNavigate()
 
   // ── Load thread list ────────────────────────────────────────────────────────
@@ -1042,13 +1048,22 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
 
   async function handleConfirm() {
     if (!selectedId || !token) return
-    const res = await apiConfirmMatch(selectedId, token)
-    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
-    if (updated) setMatch(updated)
-    if (res.both_confirmed) {
-      apiFetchThread(selectedId, token)
-        .then((detail) => setMessages(detail.messages))
-        .catch(() => {})
+    try {
+      const res = await apiConfirmMatch(selectedId, token)
+      const updated = await apiGetMatchState(selectedId, token).catch(() => null)
+      if (updated) setMatch(updated)
+      if (res.both_confirmed) {
+        apiFetchThread(selectedId, token)
+          .then((detail) => setMessages(detail.messages))
+          .catch(() => {})
+      }
+    } catch (err: unknown) {
+      const e = err as { message?: string; verificationDetail?: { you: boolean; other: boolean } }
+      if (e.message === "identity_not_verified" && e.verificationDetail) {
+        setVerificationDetail(e.verificationDetail)
+        setShowVerificationGate(true)
+      }
+      // Other errors bubble up silently — the API already shows a message
     }
   }
 
@@ -1171,6 +1186,22 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
           )}
         </div>
       </div>
+
+      {/* Identity verification gate — shown when a user tries to confirm without being verified */}
+      {showVerificationGate && (
+        <VerificationGate
+          token={token}
+          youNeedVerify={verificationDetail?.you ?? true}
+          otherNeedVerify={verificationDetail?.other ?? false}
+          onClose={() => setShowVerificationGate(false)}
+          onVerified={() => {
+            setShowVerificationGate(false)
+            if (selectedId && token) {
+              apiGetMatchState(selectedId, token).then(setMatch).catch(() => {})
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

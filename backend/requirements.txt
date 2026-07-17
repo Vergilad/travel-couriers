@@ -6,3 +6,6 @@ resend
 pydantic
 python-dotenv
 python-jose[cryptography]
+cryptography
+httpx
+python-multipart

@@ -1,6 +1,12 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from db import supabase
 from routers.auth import get_current_user
+
+def _run(fn):
+    """Run a synchronous supabase call in a thread so it doesn't block the event loop."""
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, fn)
 
 router = APIRouter()
 
@@ -48,48 +54,47 @@ async def create_or_get_thread(listing_id: str, user=Depends(get_current_user)):
 async def list_threads(user=Depends(get_current_user)):
     _guard()
     try:
-        # 1. Thread IDs for current user
+        # Round 1: get thread IDs the user belongs to
         participations = supabase.table("thread_participants").select("thread_id").eq("user_id", user.id).execute()
         if not participations.data:
             return []
         thread_ids = [p["thread_id"] for p in participations.data]
 
-        # 2. Threads
-        threads_res = supabase.table("threads").select("*").in_("id", thread_ids).execute()
+        # Round 2: threads + all participants + messages — all independent, run in parallel
+        threads_res, all_parts_res, msgs_res = await asyncio.gather(
+            _run(lambda: supabase.table("threads").select("*").in_("id", thread_ids).execute()),
+            _run(lambda: supabase.table("thread_participants").select("thread_id, user_id").in_("thread_id", thread_ids).execute()),
+            _run(lambda: supabase.table("messages").select("id, thread_id, sender_id, body, read_at, created_at, is_system").in_("thread_id", thread_ids).order("created_at").execute()),
+        )
         if not threads_res.data:
             return []
         threads = threads_res.data
 
-        # 3. All participants for these threads (batch)
-        all_parts = supabase.table("thread_participants").select("thread_id, user_id").in_("thread_id", thread_ids).execute()
         thread_to_users: dict[str, list[str]] = {}
         other_user_ids: set[str] = set()
-        for p in (all_parts.data or []):
+        for p in (all_parts_res.data or []):
             tid, uid = p["thread_id"], p["user_id"]
             thread_to_users.setdefault(tid, []).append(uid)
             if uid != user.id:
                 other_user_ids.add(uid)
 
-        # 4. Profiles of other participants (batch)
-        profiles_map: dict[str, dict] = {}
-        if other_user_ids:
-            prof_res = supabase.table("profiles").select("id, display_name, avatar_url").in_("id", list(other_user_ids)).execute()
-            for p in (prof_res.data or []):
-                profiles_map[p["id"]] = p
-
-        # 5. Listings (batch)
-        listing_ids = [t["listing_id"] for t in threads if t.get("listing_id")]
-        listings_map: dict[str, dict] = {}
-        if listing_ids:
-            list_res = supabase.table("listings").select("id, title, origin_city, dest_city").in_("id", listing_ids).execute()
-            for l in (list_res.data or []):
-                listings_map[l["id"]] = l
-
-        # 6. All messages for these threads (batch — avoid N+1)
-        msgs_res = supabase.table("messages").select("id, thread_id, sender_id, body, read_at, created_at, is_system").in_("thread_id", thread_ids).order("created_at").execute()
         thread_messages: dict[str, list] = {}
         for m in (msgs_res.data or []):
             thread_messages.setdefault(m["thread_id"], []).append(m)
+
+        # Round 3: profiles + listings — independent, run in parallel
+        listing_ids = [t["listing_id"] for t in threads if t.get("listing_id")]
+        prof_task = _run(lambda: supabase.table("profiles").select("id, display_name, avatar_url").in_("id", list(other_user_ids)).execute()) if other_user_ids else asyncio.sleep(0)
+        list_task = _run(lambda: supabase.table("listings").select("id, title, origin_city, dest_city").in_("id", listing_ids).execute()) if listing_ids else asyncio.sleep(0)
+        prof_res, list_res = await asyncio.gather(prof_task, list_task)
+
+        profiles_map: dict[str, dict] = {}
+        for p in (getattr(prof_res, "data", None) or []):
+            profiles_map[p["id"]] = p
+
+        listings_map: dict[str, dict] = {}
+        for l in (getattr(list_res, "data", None) or []):
+            listings_map[l["id"]] = l
 
         # Assemble
         result = []
@@ -138,38 +143,31 @@ async def list_threads(user=Depends(get_current_user)):
 async def get_thread(thread_id: str, user=Depends(get_current_user)):
     _guard()
     try:
-        # Verify participant
-        check = supabase.table("thread_participants").select("user_id").eq("thread_id", thread_id).eq("user_id", user.id).execute()
-        if not check.data:
-            raise HTTPException(403, "Not a participant in this thread")
+        # Round 1: verify participation + fetch thread + messages — all independent
+        check_res, thread_res, parts_res, msgs_res = await asyncio.gather(
+            _run(lambda: supabase.table("thread_participants").select("user_id").eq("thread_id", thread_id).eq("user_id", user.id).execute()),
+            _run(lambda: supabase.table("threads").select("*").eq("id", thread_id).single().execute()),
+            _run(lambda: supabase.table("thread_participants").select("user_id").eq("thread_id", thread_id).execute()),
+            _run(lambda: supabase.table("messages").select("*").eq("thread_id", thread_id).order("created_at").execute()),
+        )
 
-        thread_res = supabase.table("threads").select("*").eq("id", thread_id).single().execute()
+        if not check_res.data:
+            raise HTTPException(403, "Not a participant in this thread")
         if not thread_res.data:
             raise HTTPException(404, "Thread not found")
         thread = thread_res.data
 
-        # Listing
-        listing = None
-        if thread.get("listing_id"):
-            l = supabase.table("listings").select("id, title, origin_city, dest_city, kind, status").eq("id", thread["listing_id"]).single().execute()
-            listing = l.data
-
-        # Other participant
-        parts_res = supabase.table("thread_participants").select("user_id").eq("thread_id", thread_id).execute()
         other_id = next((p["user_id"] for p in (parts_res.data or []) if p["user_id"] != user.id), None)
 
-        other_profile = None
-        if other_id:
-            p = supabase.table("profiles").select("id, display_name, avatar_url, bio, city, country").eq("id", other_id).single().execute()
-            other_profile = p.data
-
-        # Messages (ordered)
-        msgs_res = supabase.table("messages").select("*").eq("thread_id", thread_id).order("created_at").execute()
+        # Round 2: listing + other profile — independent, run in parallel
+        listing_task = _run(lambda: supabase.table("listings").select("id, title, origin_city, dest_city, kind, status").eq("id", thread["listing_id"]).single().execute()) if thread.get("listing_id") else asyncio.sleep(0)
+        profile_task = _run(lambda: supabase.table("profiles").select("id, display_name, avatar_url, bio, city, country").eq("id", other_id).single().execute()) if other_id else asyncio.sleep(0)
+        listing_res, profile_res = await asyncio.gather(listing_task, profile_task)
 
         return {
             **thread,
-            "listing": listing,
-            "other_participant": other_profile or {"id": other_id, "display_name": None, "avatar_url": None},
+            "listing": getattr(listing_res, "data", None),
+            "other_participant": getattr(profile_res, "data", None) or {"id": other_id, "display_name": None, "avatar_url": None},
             "messages": msgs_res.data or [],
         }
     except HTTPException:
