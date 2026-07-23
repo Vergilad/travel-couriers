@@ -12,6 +12,8 @@ import {
 
 import { useAuth } from "@/lib/auth"
 import { getInitial } from "@/lib/db_constants"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
+import { useTranslation } from "@/i18n/I18nContext"
 
 const springConfig = { type: "spring" as const, stiffness: 400, damping: 30 }
 
@@ -34,11 +36,12 @@ function UserDrawer({
   open: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const navItems = [
-    { to: "/browse", label: "Browse" },
-    { to: "/my-listings", label: "My Listings" },
-    { to: "/messages", label: "Messages", badge: unreadCount },
-    { to: "/settings", label: "Settings" },
+    { to: "/browse", label: t('navigation.browse') },
+    { to: "/my-listings", label: t('navigation.my_listings') },
+    { to: "/messages", label: t('navigation.messages'), badge: unreadCount },
+    { to: "/settings", label: t('navigation.settings') },
   ] as const
 
   return (
@@ -111,7 +114,7 @@ function UserDrawer({
                   className="text-[10px] tracking-widest mt-0.5"
                   style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}
                 >
-                  TRAVELER
+                  {t('common.traveler')}
                 </p>
               </div>
             </div>
@@ -156,7 +159,7 @@ function UserDrawer({
                 className="w-full text-left text-[14px] transition-colors"
                 style={{ color: "var(--destructive)" }}
               >
-                Sign out
+                {t('common.sign_out')}
               </button>
             </div>
           </motion.div>
@@ -168,6 +171,7 @@ function UserDrawer({
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 export function Nav() {
+  const { t } = useTranslation()
   const { user, unreadCount, loading, signOut } = useAuth()
   const location = useLocation()
   const isLanding = location.pathname === "/"
@@ -217,6 +221,7 @@ export function Nav() {
 
           {/* Desktop right */}
           <div className="hidden items-center gap-2 md:flex">
+            <LanguageSwitcher />
             {!loading && (
               user ? (
                 <button
@@ -252,7 +257,7 @@ export function Nav() {
                     onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text)"}
                     onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
                   >
-                    BROWSE
+                    {t('common.browse')}
                   </Link>
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} transition={springConfig}>
                     <Link
@@ -268,7 +273,7 @@ export function Nav() {
                       onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(59,130,246,0.45)"}
                       onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(59,130,246,0.25)"}
                     >
-                      SIGN UP
+                      {t('common.sign_up')}
                     </Link>
                   </motion.div>
                 </>
@@ -281,7 +286,7 @@ export function Nav() {
             type="button"
             className="flex size-10 items-center justify-center rounded-sm md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             style={{ color: "var(--text)" }}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-label={mobileOpen ? t('common.close_menu') : t('common.open_menu')}
             onClick={() => setMobileOpen((o) => !o)}
           >
             {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -322,7 +327,7 @@ export function Nav() {
                 style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
                 onClick={() => setMobileOpen(false)}
               >
-                Browse
+                {t('navigation.browse')}
               </Link>
               {user ? (
                 <>
@@ -332,7 +337,7 @@ export function Nav() {
                     style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
                     onClick={() => setMobileOpen(false)}
                   >
-                    My Listings
+                    {t('navigation.my_listings')}
                   </Link>
                   <Link
                     to="/messages"
@@ -340,7 +345,7 @@ export function Nav() {
                     style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
                     onClick={() => setMobileOpen(false)}
                   >
-                    Messages
+                    {t('navigation.messages')}
                     {unreadCount > 0 && (
                       <span
                         className="flex size-5 items-center justify-center rounded-full text-[10px] font-bold"
@@ -356,14 +361,14 @@ export function Nav() {
                     style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
                     onClick={() => setMobileOpen(false)}
                   >
-                    Settings
+                    {t('navigation.settings')}
                   </Link>
                   <button
                     onClick={() => { setMobileOpen(false); signOut() }}
                     className="py-4 text-left text-[15px] transition-colors"
                     style={{ color: "var(--destructive)" }}
                   >
-                    Sign out
+                    {t('common.sign_out')}
                   </button>
                 </>
               ) : (
@@ -375,7 +380,7 @@ export function Nav() {
                     style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", borderColor: "var(--border)" }}
                     onClick={() => setMobileOpen(false)}
                   >
-                    SIGN IN
+                    {t('common.sign_in')}
                   </Link>
                   <Link
                     to="/auth"
@@ -384,7 +389,7 @@ export function Nav() {
                     style={{ fontFamily: "var(--font-mono)", background: "var(--accent)", color: "#fff" }}
                     onClick={() => setMobileOpen(false)}
                   >
-                    SIGN UP
+                    {t('common.sign_up')}
                   </Link>
                 </div>
               )}

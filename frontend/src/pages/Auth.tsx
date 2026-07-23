@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Waypoints } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { router } from "@/router"
+import { useTranslation } from "@/i18n/I18nContext"
 
 type Mode = "signin" | "signup"
 
@@ -297,6 +298,7 @@ function Spinner() {
 
 // ── Google button ─────────────────────────────────────────────────────────────
 function GoogleButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  const { t } = useTranslation()
   const [hovered, setHovered] = React.useState(false)
   return (
     <button
@@ -323,13 +325,14 @@ function GoogleButton({ loading, onClick }: { loading: boolean; onClick: () => v
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
         </svg>
       )}
-      CONTINUE WITH GOOGLE
+      {t('auth.continue_with_google')}
     </button>
   )
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPageProps) {
+  const { t } = useTranslation()
   const [mode, setMode]               = React.useState<Mode>(initialMode)
   const [email, setEmail]             = React.useState("")
   const [password, setPassword]       = React.useState("")
@@ -359,7 +362,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
         setSuccess(true)
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Try again.")
+      setError(err instanceof Error ? err.message : t('auth.something_went_wrong'))
     } finally {
       setLoading(false)
     }
@@ -375,7 +378,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
       })
       if (error) throw error
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed.")
+      setError(err instanceof Error ? err.message : t('auth.google_sign_in_failed'))
       setGoogleLoading(false)
     }
   }
@@ -388,7 +391,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
       const { error } = await supabase.auth.resend({ type: "signup", email })
       if (error) throw error
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Resend failed.")
+      setError(err instanceof Error ? err.message : t('auth.resend_failed'))
     } finally {
       setLoading(false)
     }
@@ -431,7 +434,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 className="text-[10px] tracking-[0.22em] mb-4"
                 style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
               >
-                {mode === "signin" ? "// RETURNING NODE" : "// JOINING NETWORK"}
+                {mode === "signin" ? t('auth.returning_node') : t('auth.joining_network')}
               </p>
               <h2
                 className="text-4xl xl:text-5xl font-bold tracking-tighter mb-4 leading-[1.0]"
@@ -454,8 +457,8 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 style={{ color: "var(--text-muted)" }}
               >
                 {mode === "signin"
-                  ? "Your routes and messages are waiting."
-                  : "Become a node. Connect travelers with deliveries across any border."}
+                  ? t('auth.routes_waiting')
+                  : t('auth.become_node')}
               </p>
             </motion.div>
           </AnimatePresence>
@@ -475,7 +478,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
               className="text-[10px] tracking-widest"
               style={{ color: "var(--text-faint)" }}
             >
-              NETWORK ACTIVE
+              {t('auth.network_active')}
             </span>
           </div>
         </div>
@@ -526,7 +529,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 whileTap={{ scale: 0.98 }}
                 transition={springConfig}
               >
-                {m === "signin" ? "SIGN IN" : "SIGN UP"}
+                {m === "signin" ? t('auth.sign_in_tab') : t('auth.sign_up_tab')}
               </motion.button>
             ))}
           </div>
@@ -581,10 +584,10 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                   className="text-xl font-bold tracking-tight mb-3"
                   style={{ color: "var(--text)" }}
                 >
-                  Node created.
+                  {t('auth.node_created')}
                 </h3>
                 <p className="text-sm leading-relaxed mb-8" style={{ color: "var(--text-muted)" }}>
-                  Check your inbox for a confirmation link.<br />
+                  {t('auth.check_inbox')}<br />
                   <span style={{ color: "var(--text-faint)" }}>{email}</span>
                 </p>
 
@@ -600,7 +603,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                     }}
                   >
                     {loading ? <Spinner /> : null}
-                    RESEND EMAIL
+                    {t('auth.resend_email')}
                   </button>
                   <button
                     onClick={() => { setSuccess(false); switchMode("signin") }}
@@ -609,7 +612,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                     onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--accent)"}
                     onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
                   >
-                    ← BACK TO SIGN IN
+                    {t('auth.back_to_sign_in')}
                   </button>
                 </div>
 
@@ -630,7 +633,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 className="flex flex-col gap-5"
               >
                 <Field
-                  label="Email address"
+                  label={t('auth.email_address')}
                   type="email"
                   value={email}
                   onChange={setEmail}
@@ -638,7 +641,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                   autoComplete="email"
                 />
                 <Field
-                  label={mode === "signin" ? "Password" : "Create a password"}
+                  label={mode === "signin" ? t('auth.password') : t('auth.create_password')}
                   type="password"
                   value={password}
                   onChange={setPassword}
@@ -666,7 +669,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                   transition={springConfig}
                 >
                   {loading && <Spinner />}
-                  {mode === "signin" ? "SIGN IN" : "JOIN NETWORK"}
+                  {mode === "signin" ? t('auth.sign_in_tab') : t('auth.join_network_btn')}
                 </motion.button>
 
                 {/* OR divider */}
@@ -676,7 +679,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                     className="text-[10px] tracking-widest"
                     style={{ fontFamily: "var(--font-mono)", color: "var(--text-faint)" }}
                   >
-                    OR
+                    {t('auth.or')}
                   </span>
                   <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
                 </div>
@@ -691,7 +694,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                 >
                   {mode === "signin" ? (
                     <>
-                      No account?{" "}
+                      {t('auth.no_account_question')}{" "}
                       <button
                         type="button"
                         onClick={() => switchMode("signup")}
@@ -700,12 +703,12 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                         onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "underline"}
                         onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "none"}
                       >
-                        SIGN UP FREE
+                        {t('auth.sign_up_free')}
                       </button>
                     </>
                   ) : (
                     <>
-                      Have an account?{" "}
+                      {t('auth.have_account_question')}{" "}
                       <button
                         type="button"
                         onClick={() => switchMode("signin")}
@@ -714,7 +717,7 @@ export function AuthPage({ mode: initialMode = "signin", redirect }: AuthPagePro
                         onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "underline"}
                         onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.textDecoration = "none"}
                       >
-                        SIGN IN
+                        {t('auth.sign_in_link')}
                       </button>
                     </>
                   )}

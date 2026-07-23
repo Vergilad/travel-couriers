@@ -6,6 +6,7 @@ import { SlidersHorizontal, X } from "lucide-react"
 import type { Listing, ListingKind } from "@/types/listing"
 import { formatPrice, formatListingDate } from "@/lib/listings"
 import { CityAutocomplete } from "@/components/CityAutocomplete"
+import { useTranslation } from "@/i18n/I18nContext"
 
 // ── Kind badge ────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ function KindBadgeClean({ kind }: { kind: ListingKind }) {
 // ── Listing card ──────────────────────────────────────────────────────────────
 
 function ListingCard({ listing }: { listing: Listing }) {
+  const { t } = useTranslation()
   return (
     <motion.div
       layout
@@ -96,7 +98,7 @@ function ListingCard({ listing }: { listing: Listing }) {
                 </p>
               ) : (
                 <p className="font-mono text-[10px] tracking-widest" style={{ color: "var(--text-faint)" }}>
-                  NEGOTIATE
+                  {t('listings.negotiate')}
                 </p>
               )}
               {listing.capacity_kg && (
@@ -136,7 +138,7 @@ function ListingCard({ listing }: { listing: Listing }) {
                   )}
                 </span>
               ) : (
-                <span className="opacity-40 tracking-widest">FLEXIBLE</span>
+                <span className="opacity-40 tracking-widest">{t('listings.flexible')}</span>
               )}
             </div>
             {(listing as any).owner_display_name && (
@@ -279,6 +281,7 @@ function useDebounced<T>(value: T, delay: number): T {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function Browse() {
+  const { t } = useTranslation()
   const params = new URLSearchParams(window.location.search)
   const initOrigin = params.get("origin_city") ?? ""
   const initDest   = params.get("dest_city") ?? ""
@@ -344,14 +347,14 @@ export function Browse() {
                   className="font-mono text-[10px] tracking-[0.2em]"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  ACTIVE ROUTES
+                  {t('common.active_routes')}
                 </span>
               </div>
               <h1
                 className="text-xl font-bold tracking-tight"
                 style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
               >
-                Browse
+                {t('navigation.browse')}
               </h1>
             </div>
 
@@ -368,7 +371,7 @@ export function Browse() {
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-dim)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
                 >
-                  + TRIP
+                  {t('listings.post_trip')}
                 </button>
               </Link>
               <Link to="/requests/new">
@@ -388,7 +391,7 @@ export function Browse() {
                     e.currentTarget.style.color = "var(--text-muted)"
                   }}
                 >
-                  + REQUEST
+                  {t('listings.post_request')}
                 </button>
               </Link>
               <Link to="/deliveries/new">
@@ -408,7 +411,7 @@ export function Browse() {
                     e.currentTarget.style.color = "var(--text-muted)"
                   }}
                 >
-                  + DELIVERY
+                  {t('listings.post_delivery')}
                 </button>
               </Link>
             </div>
@@ -453,7 +456,7 @@ export function Browse() {
                     }
                   }}
                 >
-                  {k.toUpperCase()}
+                  {k === "all" ? t('listings.all') : t(`kinds.${k}`)}
                 </button>
               ))}
             </div>
@@ -468,7 +471,7 @@ export function Browse() {
               }}
             >
               <SlidersHorizontal size={11} />
-              FILTERS
+              {t('listings.filters')}
               {hasDateOrPrice && (
                 <span
                   className="w-1.5 h-1.5 rounded-full ml-0.5"
@@ -481,18 +484,18 @@ export function Browse() {
           {/* City search */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
             <CityAutocomplete
-              label="From city"
+              label={t('listings.from_city')}
               value={originValue}
-              placeholder="Moscow, Istanbul…"
+              placeholder={t('listings.from_placeholder')}
               compact
               onSelect={(city) => { setOriginCity(city); setOriginValue(city) }}
               onChange={(raw) => { setOriginValue(raw); setOriginCity(raw) }}
               onClear={() => { setOriginCity(""); setOriginValue("") }}
             />
             <CityAutocomplete
-              label="To city"
+              label={t('listings.to_city')}
               value={destValue}
-              placeholder="Dubai, London…"
+              placeholder={t('listings.to_placeholder')}
               compact
               onSelect={(city) => { setDestCity(city); setDestValue(city) }}
               onChange={(raw) => { setDestValue(raw); setDestCity(raw) }}
@@ -514,10 +517,10 @@ export function Browse() {
                   className="pt-4 mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4"
                   style={{ borderTop: "1px solid var(--border)" }}
                 >
-                  <NumInput label="Min price ($)" value={priceMin} onChange={setPriceMin} placeholder="0"     min={0} max={10000} />
-                  <NumInput label="Max price ($)" value={priceMax} onChange={setPriceMax} placeholder="9999"  min={0} max={10000} />
-                  <DateInput label="Depart after"  value={departFrom} onChange={setDepartFrom} />
-                  <DateInput label="Depart before" value={departTo}   onChange={setDepartTo} />
+                  <NumInput label={t('listings.min_price')} value={priceMin} onChange={setPriceMin} placeholder="0"     min={0} max={10000} />
+                  <NumInput label={t('listings.max_price')} value={priceMax} onChange={setPriceMax} placeholder="9999"  min={0} max={10000} />
+                  <DateInput label={t('listings.depart_after')}  value={departFrom} onChange={setDepartFrom} />
+                  <DateInput label={t('listings.depart_before')} value={departTo}   onChange={setDepartTo} />
                 </div>
               </motion.div>
             )}
@@ -541,7 +544,7 @@ export function Browse() {
               className="font-mono text-[11px] tracking-widest"
               style={{ color: "var(--text-muted)" }}
             >
-              LOADING ROUTES...
+              {t('listings.loading_routes')}
             </span>
           </div>
         )}
@@ -550,10 +553,10 @@ export function Browse() {
         {isError && (
           <div className="text-center py-24">
             <p className="font-mono text-[12px] mb-2" style={{ color: "var(--destructive)" }}>
-              ! FAILED TO LOAD LISTINGS
+              {t('listings.failed_to_load')}
             </p>
             <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-              Check your connection and try again.
+              {t('listings.check_connection')}
             </p>
           </div>
         )}
@@ -564,7 +567,7 @@ export function Browse() {
             {/* Result count + clear */}
             <div className="flex items-center justify-between mb-5">
               <p className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                {listings.length} RESULT{listings.length !== 1 ? "S" : ""}
+                {listings.length} {t('listings.results')}
                 {(originCity || destCity) && (
                   <span className="ml-2" style={{ color: "var(--accent)", opacity: 0.8 }}>
                     {originCity && `FROM ${originCity.toUpperCase()}`}
@@ -582,7 +585,7 @@ export function Browse() {
                   onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
                 >
                   <X size={10} />
-                  CLEAR ALL
+                  {t('listings.clear_all')}
                 </button>
               )}
             </div>
@@ -600,7 +603,7 @@ export function Browse() {
                   —
                 </div>
                 <p className="text-[14px] mb-4" style={{ color: "var(--text-muted)" }}>
-                  No listings match your filters.
+                  {t('listings.no_matching')}
                 </p>
                 <button
                   onClick={clearFilters}
@@ -609,7 +612,7 @@ export function Browse() {
                   onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
                   onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
                 >
-                  CLEAR FILTERS
+                  {t('listings.clear_filters')}
                 </button>
               </div>
             ) : (

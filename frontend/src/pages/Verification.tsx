@@ -1,14 +1,11 @@
-/**
- * Standalone verification page at /verify
- * Users land here after returning from Telegram Passport,
- * or can navigate here directly to complete verification.
- */
 import * as React from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { useAuth } from "@/lib/auth"
 import { VerificationGate } from "@/components/VerificationGate"
+import { useTranslation } from "@/i18n/I18nContext"
 
 export function VerificationPage() {
+  const { t } = useTranslation()
   const { session, user, loading } = useAuth()
   const navigate = useNavigate()
   const token = session?.access_token ?? ""
@@ -23,7 +20,6 @@ export function VerificationPage() {
       navigate({ to: "/auth", search: { mode: "signin", redirect: "/verify" } })
       return
     }
-    // Check current status
     fetch("/api/verification/status", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -61,10 +57,10 @@ export function VerificationPage() {
             className="text-[11px] tracking-[0.2em] mb-2"
             style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--success)" }}
           >
-            IDENTITY VERIFIED
+            {t('verification.identity_verified')}
           </p>
           <p className="text-[14px]" style={{ color: "var(--text-muted)" }}>
-            Your identity has been verified. You can now confirm matches on Peregri.
+            {t('verification.verified_message')}
           </p>
         </div>
         <button
@@ -78,13 +74,12 @@ export function VerificationPage() {
           onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
           onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
         >
-          GO TO MESSAGES →
+          {t('verification.go_to_messages')}
         </button>
       </div>
     )
   }
 
-  // Show the gate inline (not as an overlay) for the standalone page
   return (
     <div
       className="flex items-center justify-center min-h-screen p-4"

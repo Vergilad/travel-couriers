@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
 import type { Listing } from "@/types/listing"
 import { formatListingDate } from "@/lib/listings"
+import { useTranslation } from "@/i18n/I18nContext"
 
 // ── Kind / status ─────────────────────────────────────────────────────────────
 const KIND_STYLE: Record<string, React.CSSProperties> = {
@@ -82,7 +83,7 @@ function ConfirmModal({
             onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
           >
-            CANCEL
+            {confirmLabel === "CANCEL" ? "CANCEL" : "CANCEL"}
           </button>
           <button
             onClick={onConfirm}
@@ -102,6 +103,7 @@ function ConfirmModal({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function MyListings() {
+  const { t } = useTranslation()
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -160,18 +162,18 @@ export function MyListings() {
       <AnimatePresence>
         {confirmClose && closingListing && (
           <ConfirmModal
-            title="Close this listing?"
-            message={`"${closingListing.title || `${closingListing.origin_city} → ${closingListing.dest_city}`}" will be marked closed and removed from browse. Existing threads remain open.`}
-            confirmLabel="CLOSE LISTING"
+            title={t('listings.close_this_listing')}
+            message={`"${closingListing.title || `${closingListing.origin_city} → ${closingListing.dest_city}`}" ${t('listings.close_listing_confirm')}`}
+            confirmLabel={t('listings.confirm_close')}
             onConfirm={() => closeMutation.mutate(confirmClose)}
             onCancel={() => setConfirmClose(null)}
           />
         )}
         {confirmDelete && deletingListing && (
           <ConfirmModal
-            title="Delete this listing?"
-            message={`"${deletingListing.title || `${deletingListing.origin_city} → ${deletingListing.dest_city}`}" will be permanently removed. This cannot be undone.`}
-            confirmLabel="DELETE"
+            title={t('listings.delete_this_listing')}
+            message={`"${deletingListing.title || `${deletingListing.origin_city} → ${deletingListing.dest_city}`}" ${t('listings.delete_listing_confirm')}`}
+            confirmLabel={t('listings.confirm_delete')}
             danger
             onConfirm={() => deleteMutation.mutate(confirmDelete)}
             onCancel={() => setConfirmDelete(null)}
@@ -194,15 +196,14 @@ export function MyListings() {
                     transition={{ duration: 1.6, repeat: Infinity }}
                   />
                   <span className="font-mono text-[10px] tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>
-                    MY ACCOUNT
+                    {t('listings.my_account')}
                   </span>
                 </div>
                 <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--text)", letterSpacing: "-0.03em" }}>
-                  My Listings
+                  {t('listings.my_listings')}
                 </h1>
               </div>
 
-              {/* Quick-post buttons */}
               <div className="flex gap-2">
                 <Link to="/trips/new">
                   <button
@@ -211,7 +212,7 @@ export function MyListings() {
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
                   >
-                    + TRIP
+                    {t('listings.post_trip')}
                   </button>
                 </Link>
                 <Link to="/requests/new">
@@ -227,7 +228,7 @@ export function MyListings() {
                       e.currentTarget.style.color = "var(--text-muted)"
                     }}
                   >
-                    + REQUEST
+                    {t('listings.post_request')}
                   </button>
                 </Link>
                 <Link to="/deliveries/new">
@@ -243,7 +244,7 @@ export function MyListings() {
                       e.currentTarget.style.color = "var(--text-muted)"
                     }}
                   >
-                    + DELIVERY
+                    {t('listings.post_delivery')}
                   </button>
                 </Link>
               </div>
@@ -256,23 +257,23 @@ export function MyListings() {
           {/* ── Tab bar ── */}
           <div className="flex items-center gap-1.5 mb-8">
             {([
-              { key: "all",       label: `ALL (${listings?.length ?? 0})` },
-              { key: "open",      label: `OPEN (${openCount})` },
-              { key: "cancelled", label: `CLOSED (${closedCount})` },
-            ] as const).map(t => (
+              { key: "all",       label: `${t('listings.all')} (${listings?.length ?? 0})` },
+              { key: "open",      label: `${t('listings.open')} (${openCount})` },
+              { key: "cancelled", label: `${t('listings.closed')} (${closedCount})` },
+            ] as const).map(tabItem => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={tabItem.key}
+                onClick={() => setTab(tabItem.key)}
                 className="font-mono text-[10px] tracking-[0.1em] px-3 py-1.5 rounded-sm transition-all"
                 style={
-                  tab === t.key
+                  tab === tabItem.key
                     ? { background: "var(--accent)", color: "#fff", border: "1px solid var(--accent)" }
                     : { background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)" }
                 }
-                onMouseEnter={e => { if (tab !== t.key) { e.currentTarget.style.borderColor = "rgba(37,99,235,0.4)"; e.currentTarget.style.color = "var(--text)" } }}
-                onMouseLeave={e => { if (tab !== t.key) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" } }}
+                onMouseEnter={e => { if (tab !== tabItem.key) { e.currentTarget.style.borderColor = "rgba(37,99,235,0.4)"; e.currentTarget.style.color = "var(--text)" } }}
+                onMouseLeave={e => { if (tab !== tabItem.key) { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" } }}
               >
-                {t.label}
+                {tabItem.label}
               </button>
             ))}
           </div>
@@ -287,7 +288,7 @@ export function MyListings() {
                 transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
               />
               <span className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                LOADING YOUR LISTINGS...
+                {t('listings.loading_listings')}
               </span>
             </div>
           )}
@@ -295,7 +296,7 @@ export function MyListings() {
           {/* ── Error ── */}
           {isError && (
             <div className="text-center py-24">
-              <p className="font-mono text-sm" style={{ color: "var(--destructive)" }}>! FAILED TO LOAD LISTINGS</p>
+              <p className="font-mono text-sm" style={{ color: "var(--destructive)" }}>{t('listings.failed_load')}</p>
             </div>
           )}
 
@@ -309,10 +310,10 @@ export function MyListings() {
                 <div className="font-mono text-5xl mb-5" style={{ color: "var(--text-faint)" }}>—</div>
                 <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
                   {tab === "open"
-                    ? "No open listings. Post a trip, request, or delivery."
+                    ? t('listings.no_open_listings')
                     : tab === "cancelled"
-                    ? "No closed listings yet."
-                    : "You haven't posted any listings yet."}
+                    ? t('listings.no_closed_listings')
+                    : t('listings.no_listings_yet')}
                 </p>
                 {tab !== "cancelled" && (
                   <Link to="/trips/new">
@@ -322,7 +323,7 @@ export function MyListings() {
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
                       onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
                     >
-                      POST YOUR FIRST TRIP
+                      {t('listings.post_first_trip')}
                     </button>
                   </Link>
                 )}
@@ -334,7 +335,7 @@ export function MyListings() {
                   className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-5 py-3"
                   style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}
                 >
-                  {["KIND", "ROUTE", "DATE", "PRICE", "ACTIONS"].map(h => (
+                  {[t('listings.kind'), t('listings.route'), t('listings.date_col'), t('listings.price_col'), t('listings.actions')].map(h => (
                     <span key={h} className="font-mono text-[9px] tracking-[0.2em] uppercase" style={{ color: "var(--text-muted)" }}>
                       {h}
                     </span>
@@ -412,7 +413,7 @@ export function MyListings() {
                               e.currentTarget.style.color = "var(--text-muted)"
                             }}
                           >
-                            CLOSE
+                            {t('listings.close_listing')}
                           </button>
                         )}
                         <button
@@ -429,7 +430,7 @@ export function MyListings() {
                             e.currentTarget.style.color = "var(--text-muted)"
                           }}
                         >
-                          DELETE
+                          {t('listings.delete')}
                         </button>
                       </div>
                     </motion.div>
