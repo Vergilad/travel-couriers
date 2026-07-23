@@ -217,17 +217,17 @@ export function VerificationGate({
                   One last step before confirming
                 </p>
                 <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  To protect everyone on Peregri, both parties must verify their identity before a match is confirmed. Here's exactly what happens with your documents:
+                  To protect everyone on Peregri, we strongly recommend verifying your identity. Here's exactly what happens with your documents:
                 </p>
                 <ul className="text-[12px] leading-relaxed space-y-1.5 mt-3" style={{ color: "var(--text-faint)" }}>
-                  <li>→ Photos are sent over an encrypted connection directly to our team</li>
-                  <li>→ A real person reviews them — no automated processing</li>
-                  <li>→ Documents are permanently deleted the moment review is complete</li>
-                  <li>→ We never store, share, or use them for anything else</li>
+                  <li>~ Photos are sent over an encrypted connection directly to our team</li>
+                  <li>~ A real person reviews them — no automated processing</li>
+                  <li>~ Documents are not stored in a database. No risk of data breaches.</li>
+                  <li>~ We never share, use, or distribute your personal information. With the sole exception of cases required by law.</li>
                 </ul>
                 {otherNeedVerify && (
                   <p className="text-[12px] mt-3" style={{ color: "var(--text-faint)" }}>
-                    The other party also needs to verify before the match can go through.
+                    We also recommend asking the other party to verify their identity. That is a good way to determine if they are not 
                   </p>
                 )}
               </div>
@@ -241,7 +241,7 @@ export function VerificationGate({
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   required
-                  placeholder="e.g. Maria García"
+                  placeholder="e.g. Igor Gofman"
                   className="w-full px-4 py-2.5 rounded-sm text-[14px] focus:outline-none transition-colors"
                   style={{
                     background: "var(--surface-raised)",

@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
 import type { Listing } from "@/types/listing"
 import { formatListingDate } from "@/lib/listings"
+import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
+import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
 
 // ── Kind / status config ──────────────────────────────────────────────────────
 const KIND_BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -39,6 +41,7 @@ interface ListingWithOwner extends Listing {
     country: string | null
     rating: number | null
     review_count: number
+    identity_verified?: boolean
   } | null
 }
 
@@ -70,10 +73,12 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
   const navigate = useNavigate()
   const [contacting, setContacting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [showWarning, setShowWarning] = React.useState(false)
 
   const label = listing.kind === "trip" ? "COURIER" : listing.kind === "delivery" ? "CARRIER" : "REQUESTER"
+  const ownerVerified = listing.owner?.identity_verified ?? null
 
-  async function handleContact() {
+  async function doContact() {
     if (!session?.access_token) return
     setContacting(true)
     setError(null)
@@ -92,6 +97,14 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
       setError(e instanceof Error ? e.message : "Something went wrong")
       setContacting(false)
     }
+  }
+
+  function handleContact() {
+    if (ownerVerified === false) {
+      setShowWarning(true)
+      return
+    }
+    doContact()
   }
 
   if (!user) {
@@ -124,6 +137,16 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
       {error && (
         <p className="font-mono text-[11px] text-center mt-2" style={{ color: "var(--destructive)" }}>{error}</p>
       )}
+      <AnimatePresence>
+        {showWarning && (
+          <UnverifiedWarningModal
+            variant="contact"
+            otherName={listing.owner?.display_name ?? "This user"}
+            onProceed={() => { setShowWarning(false); doContact() }}
+            onCancel={() => setShowWarning(false)}
+          />
+        )}
+      </AnimatePresence>
     </>
   )
 }
@@ -432,6 +455,8 @@ export function ListingDetail() {
                       <span className="text-lg font-semibold" style={{ color: "var(--text)" }}>
                         {owner.display_name ?? "Anonymous"}
                       </span>
+                      {owner.identity_verified === true && <VerifiedBadge size="xs" />}
+                      {owner.identity_verified === false && <UnverifiedBadge size="xs" />}
                       <StarRating rating={owner.rating} count={owner.review_count ?? 0} />
                     </div>
                     {(owner.city || owner.country) && (

@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
+import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ interface PublicProfile {
   city: string | null
   country: string | null
   created_at: string
+  identity_verified?: boolean
 }
 
 interface ProfileListing {
@@ -864,6 +866,26 @@ export function ProfilePage({ userId }: { userId: string }) {
                       </>
                     )}
                   </div>
+                </div>
+
+                {/* ── Verification status ── */}
+                <div className="flex items-center gap-3 mb-3 mt-1">
+                  {profile?.identity_verified
+                    ? <VerifiedBadge />
+                    : <UnverifiedBadge />
+                  }
+                  {isOwnProfile && !profile?.identity_verified && (
+                    <Link to="/verify">
+                      <button
+                        className="text-[10px] tracking-widest transition-colors"
+                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                      >
+                        VERIFY NOW →
+                      </button>
+                    </Link>
+                  )}
                 </div>
 
                 <div

@@ -226,13 +226,13 @@ function LiveRoutes() {
 // ─── How it works: interactive node graph ────────────────────────────────────
 const GRAPH_STEPS = [
   {
-    id: "post",
-    label: "post",
+    id: "post/browse",
+    label: "post/browse",
     x: 10,
     y: 50,
-    title: "POST A LISTING",
+    title: "POST A LISTING or BROWSE",
     content:
-      "You're going somewhere? Post a Trip. You need something delivered to you? Post a Delivery. You want something bought and brought to you? Post a Purchase Request.",
+      "You're going somewhere? Post a Trip. You need something delivered to you? Post a Delivery. You want something bought and brought to you? Post a Purchase Request. Don't have time to post? Browse the listings and reach out to a matching Trip, Delivery or Purchase Request.",
   },
   {
     id: "match",
@@ -241,25 +241,25 @@ const GRAPH_STEPS = [
     y: 25,
     title: "SOMEONE REACHES OUT",
     content:
-      "If you posted a Delivery or Purchase Request, you contact a matching Trip along your route. If you posted a Trip, people needing deliveries or purchases along your way contact you.",
-  },
-  {
-    id: "agree",
-    label: "agree",
-    x: 64,
-    y: 75,
-    title: "YOU BOTH AGREE & VERIFY",
-    content:
-      "Message each other and agree on the details. Before the match is confirmed, both sides complete a quick identity check — a photo of your ID and a selfie, reviewed by a real person on our team. No anonymous deals.",
+      "Someone sees the listing and contacts. Users read each other's profiles, check reviews and whether they are verified, and message each other to confirm the details. If both sides agree, the match is confirmed. After the deals are confirmed, the listing is closed.",
   },
   {
     id: "move",
     label: "move",
+    x: 64,
+    y: 75,
+    title: "THE DEAL HAPPENS",
+    content:
+      "The traveler carries the item along their route. The requester receives it. The listing is automatically deleted and stored in the user's history.",
+  },
+  {
+    id: "leave a review",
+    label: "leave a review",
     x: 90,
     y: 50,
-    title: "CLOSE THE DEAL & REVIEW",
+    title: "LEAVE A PUBLIC REVIEW",
     content:
-      "The handover happens, you mark it as closed, and both sides leave a public review. That review becomes part of each person's permanent track record on Peregri — visible to everyone they deal with next.",
+      "Both sides leave a public review. Reviews are visible on the user's profile and help build trust for future deals. Verified users are more likely to get confirmed and build a stronger reputation over time.",
   },
 ]
 
@@ -428,9 +428,9 @@ function HowItWorks() {
 function TrustSafety() {
   const facts = [
     {
-      label: "VERIFIED IDENTITY, EVERY DEAL",
+      label: "VERIFIED IDENTITY, TRUSTED DEALS",
       value:
-        "Before any match can be confirmed, both sides complete identity verification. A real person on our team reviews your documents and deletes them immediately after — no anonymous arrangements, ever.",
+        "Users can verify their identity through with a legal ID. Verifications are handled anonimously and securely by humans. Verified users build stronger trust — unverified status is shown on profiles and listings so you always know who you're dealing with.",
     },
     {
       label: "LEGAL GOODS ONLY — ZERO EXCEPTIONS",
@@ -487,7 +487,7 @@ function TrustSafety() {
                   <span className="text-zinc-200 text-xs font-bold tracking-widest">IDENTITY · VERIFIED</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed">
-                  Both sides verify before confirming. Documents are reviewed by a human and deleted immediately — never stored or shared.
+                  Verified users show a badge on their profile and listings. Unverified status is clearly flagged — so you always know who you're dealing with before you confirm.
                 </p>
               </motion.div>
 
@@ -524,10 +524,10 @@ function TrustSafety() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <Ban className="w-4 h-4 text-red-400" />
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">CONTRABAND · ZERO TOLERANCE</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">ILLEGAL ACTIVITIES · ZERO TOLERANCE</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed">
-                  Prohibited items mean an instant permanent ban — and a report to the relevant authorities when warranted.
+                  Scamming, ghosting, or attempting to ship illegal goods results in a permanent ban. Reports are reviewed by our team and serious or repeat offenders lose access for good.
                 </p>
               </motion.div>
             </div>
@@ -545,7 +545,7 @@ function TrustSafety() {
             </div>
             <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">BUILT SO YOU CAN TRUST A STRANGER.</h3>
             <p className="text-zinc-400 text-lg mb-10 leading-relaxed">
-              Every person on Peregri is identity-verified before they can confirm a deal. Reviews build a permanent public record. And we have absolute zero tolerance for contraband, scams, or prohibited goods — because the people trusting this network deserve better.
+              People are more likely to trust a stranger when they know the stranger is verified. Peregri strongly recommends that all users verify their identity and stay alert for unverified users.
             </p>
 
             <div className="space-y-6">

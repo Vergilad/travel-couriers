@@ -19,6 +19,7 @@ import { Browse } from "@/pages/Browse"
 import { MyListings } from "@/pages/MyListings"
 import { CreateListing } from "@/pages/CreateListing"
 import { ListingDetail } from "@/pages/ListingDetail"
+import { VerificationPage } from "@/pages/Verification"
 import { useAuth } from "@/lib/auth"
 
 function FullPageSpinner() {
@@ -156,6 +157,12 @@ const reportsNewRoute = createRoute({
   component: () => <PlaceholderPage title="Report — coming soon" />,
 })
 
+const verifyRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/verify",
+  component: VerificationPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   browseRoute,
@@ -171,6 +178,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     myListingsRoute,
     reportsNewRoute,
+    verifyRoute,
   ]),
 ])
 

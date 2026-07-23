@@ -28,7 +28,7 @@ def attach_owner_profiles(listings: list[dict]) -> list[dict]:
 
     profiles_result = (
         supabase.table("profiles")
-        .select("id, display_name, avatar_url, bio, city, country")
+        .select("id, display_name, avatar_url, bio, city, country, identity_verified")
         .in_("id", owner_ids)
         .execute()
     )

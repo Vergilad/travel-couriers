@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { getInitial } from "@/lib/db_constants"
-import { VerificationGate } from "@/components/VerificationGate"
+import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
+import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -350,6 +351,8 @@ function MatchBar({
   onReceived,
   busy,
   justMatched,
+  myVerified,
+  otherVerified,
 }: {
   match: MatchState
   listing: ThreadDetail["listing"]
@@ -360,6 +363,8 @@ function MatchBar({
   onReceived: () => void
   busy: boolean
   justMatched: boolean
+  myVerified?: boolean | null
+  otherVerified?: boolean | null
 }) {
   const kind = match.listing_kind ?? listing?.kind ?? null
   const kColor = kindColor(kind)
@@ -555,19 +560,33 @@ function MatchBar({
 
   // ── None — invite to confirm ─────────────────────────────────────────────
   return (
-    <div
-      className="px-5 py-2.5 shrink-0 flex items-center justify-between gap-3"
-      style={barBase}
-    >
-      <div className="flex items-center gap-3">
-        <span style={{ ...monoSm, color: "var(--text-muted)" }}>
-          CONFIRM ARRANGEMENT
-        </span>
-        <KindBadge />
+    <div className="shrink-0" style={barBase}>
+      {otherVerified === false && (
+        <div
+          className="px-5 py-1.5 flex items-center gap-2"
+          style={{ background: "rgba(239,68,68,0.06)", borderBottom: "1px solid rgba(239,68,68,0.15)" }}
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M8 2L14.5 13.5H1.5L8 2Z" stroke="var(--destructive)" strokeWidth="1.5" strokeLinejoin="round"/>
+            <line x1="8" y1="6.5" x2="8" y2="10" stroke="var(--destructive)" strokeWidth="1.4" strokeLinecap="round"/>
+            <circle cx="8" cy="12" r="0.75" fill="var(--destructive)"/>
+          </svg>
+          <span style={{ ...monoSm, color: "var(--destructive)", fontSize: 10 }}>
+            {otherName.toUpperCase()} IS NOT VERIFIED — CONFIRM WITH CAUTION
+          </span>
+        </div>
+      )}
+      <div className="px-5 py-2.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span style={{ ...monoSm, color: "var(--text-muted)" }}>
+            CONFIRM ARRANGEMENT
+          </span>
+          <KindBadge />
+        </div>
+        <ActionBtn onClick={onConfirm} disabled={busy} variant="ghost">
+          {busy ? "…" : "CONFIRM"}
+        </ActionBtn>
       </div>
-      <ActionBtn onClick={onConfirm} disabled={busy} variant="ghost">
-        {busy ? "…" : "CONFIRM"}
-      </ActionBtn>
     </div>
   )
 }
@@ -579,6 +598,8 @@ function ConversationPanel({
   messages,
   currentUserId,
   match,
+  myVerified,
+  otherVerified,
   onSend,
   onConfirm,
   onHandover,
@@ -589,6 +610,8 @@ function ConversationPanel({
   messages: Message[]
   currentUserId: string
   match: MatchState | null
+  myVerified?: boolean | null
+  otherVerified?: boolean | null
   onSend: (body: string) => Promise<void>
   onConfirm: () => Promise<void>
   onHandover: () => Promise<void>
@@ -600,6 +623,7 @@ function ConversationPanel({
   const [matchBusy, setMatchBusy] = React.useState(false)
   const [justMatched, setJustMatched] = React.useState(false)
   const [inputFocused, setInputFocused] = React.useState(false)
+  const [showUnverifiedWarning, setShowUnverifiedWarning] = React.useState(false)
   const prevBoth = React.useRef<boolean>(match?.both_confirmed ?? false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const other = thread.other_participant
@@ -631,6 +655,16 @@ function ConversationPanel({
   }
 
   async function handleConfirm() {
+    if (otherVerified === false) {
+      setShowUnverifiedWarning(true)
+      return
+    }
+    setMatchBusy(true)
+    try { await onConfirm() } finally { setMatchBusy(false) }
+  }
+
+  async function proceedConfirmDespiteWarning() {
+    setShowUnverifiedWarning(false)
     setMatchBusy(true)
     try { await onConfirm() } finally { setMatchBusy(false) }
   }
@@ -674,16 +708,20 @@ function ConversationPanel({
           <UserAvatar name={other.display_name} url={other.avatar_url} size={36} />
         </Link>
         <div className="flex-1 min-w-0">
-          <Link
-            to="/profile/$userId"
-            params={{ userId: other.id }}
-            className="text-[14px] font-medium transition-colors"
-            style={{ color: "var(--text)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text)")}
-          >
-            {other.display_name ?? "Anonymous"}
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Link
+              to="/profile/$userId"
+              params={{ userId: other.id }}
+              className="text-[14px] font-medium transition-colors"
+              style={{ color: "var(--text)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--text)")}
+            >
+              {other.display_name ?? "Anonymous"}
+            </Link>
+            {otherVerified === true && <VerifiedBadge size="xs" />}
+            {otherVerified === false && <UnverifiedBadge size="xs" />}
+          </div>
           {listingLabel && (
             <div
               className="text-[10px] truncate"
@@ -720,6 +758,8 @@ function ConversationPanel({
           onReceived={handleReceived}
           busy={matchBusy}
           justMatched={justMatched}
+          myVerified={myVerified}
+          otherVerified={otherVerified}
         />
       )}
 
@@ -789,6 +829,15 @@ function ConversationPanel({
           {sending ? "…" : "SEND"}
         </button>
       </div>
+
+      {showUnverifiedWarning && (
+        <UnverifiedWarningModal
+          variant="confirm"
+          otherName={other.display_name ?? "the other party"}
+          onProceed={proceedConfirmDespiteWarning}
+          onCancel={() => setShowUnverifiedWarning(false)}
+        />
+      )}
     </div>
   )
 }
@@ -879,8 +928,8 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [match, setMatch] = React.useState<MatchState | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
-  const [showVerificationGate, setShowVerificationGate] = React.useState(false)
-  const [verificationDetail, setVerificationDetail] = React.useState<{ you: boolean; other: boolean } | null>(null)
+  const [myVerified, setMyVerified] = React.useState<boolean | null>(null)
+  const [otherVerified, setOtherVerified] = React.useState<boolean | null>(null)
   const navigate = useNavigate()
 
   // ── Load thread list ────────────────────────────────────────────────────────
@@ -919,6 +968,14 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
           )
         })
         apiGetMatchState(selectedId, token).then(setMatch).catch(() => setMatch(null))
+        fetch("/api/verification/status", { headers: authHeaders(token) })
+          .then(r => r.json())
+          .then(d => setMyVerified(!!d.verified))
+          .catch(() => setMyVerified(null))
+        fetch(`/api/profiles/${detail.other_participant.id}`)
+          .then(r => r.json())
+          .then(d => setOtherVerified(d.identity_verified === true ? true : d.identity_verified === false ? false : null))
+          .catch(() => setOtherVerified(null))
       })
       .catch(() => {})
       .finally(() => setDetailLoading(false))
@@ -1058,12 +1115,7 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
           .catch(() => {})
       }
     } catch (err: unknown) {
-      const e = err as { message?: string; verificationDetail?: { you: boolean; other: boolean } }
-      if (e.message === "identity_not_verified" && e.verificationDetail) {
-        setVerificationDetail(e.verificationDetail)
-        setShowVerificationGate(true)
-      }
-      // Other errors bubble up silently — the API already shows a message
+      void err // errors bubble up silently
     }
   }
 
@@ -1175,6 +1227,8 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
               messages={messages}
               currentUserId={user?.id ?? ""}
               match={match}
+              myVerified={myVerified}
+              otherVerified={otherVerified}
               onSend={handleSend}
               onConfirm={handleConfirm}
               onHandover={handleHandover}
@@ -1187,21 +1241,6 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
         </div>
       </div>
 
-      {/* Identity verification gate — shown when a user tries to confirm without being verified */}
-      {showVerificationGate && (
-        <VerificationGate
-          token={token}
-          youNeedVerify={verificationDetail?.you ?? true}
-          otherNeedVerify={verificationDetail?.other ?? false}
-          onClose={() => setShowVerificationGate(false)}
-          onVerified={() => {
-            setShowVerificationGate(false)
-            if (selectedId && token) {
-              apiGetMatchState(selectedId, token).then(setMatch).catch(() => {})
-            }
-          }}
-        />
-      )}
     </div>
   )
 }
