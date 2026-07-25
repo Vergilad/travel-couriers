@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
 import type { Listing } from "@/types/listing"
-import { formatListingDate } from "@/lib/listings"
+import { formatListingDate, formatPrice } from "@/lib/listings"
 import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
 import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
 
@@ -22,13 +22,6 @@ const FLEXIBILITY_LABELS: Record<string, string> = {
   month: "±1 month flexible",
 }
 
-function formatPrice(price: number | string | null | undefined, currency: string | null | undefined): string {
-  if (price === null || price === undefined || price === "" || Number.isNaN(Number(price))) return "Negotiable"
-  const amount = typeof price === "string" ? Number(price) : price
-  if (amount === 0) return "Free"
-  const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : ""
-  return symbol ? `${symbol}${amount.toLocaleString()}` : `${amount.toLocaleString()} ${currency ?? ""}`
-}
 
 interface ListingWithOwner extends Listing {
   date_flexibility?: string

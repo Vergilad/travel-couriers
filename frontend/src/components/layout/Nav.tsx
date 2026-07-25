@@ -37,6 +37,7 @@ function UserDrawer({
   const navItems = [
     { to: "/browse", label: "Browse" },
     { to: "/my-listings", label: "My Listings" },
+    { to: "/matches", label: "Matches" },
     { to: "/messages", label: "Messages", badge: unreadCount },
     { to: "/settings", label: "Settings" },
   ] as const
@@ -349,6 +350,14 @@ export function Nav() {
                         {unreadCount}
                       </span>
                     )}
+                  </Link>
+                  <Link
+                    to="/matches"
+                    className="py-4 text-[15px] transition-colors"
+                    style={{ color: "var(--text)", borderBottom: "1px solid var(--border)" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Matches
                   </Link>
                   <Link
                     to="/settings"

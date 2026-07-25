@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
 import type { Listing } from "@/types/listing"
-import { formatListingDate } from "@/lib/listings"
+import { formatListingDate, formatPrice } from "@/lib/listings"
 
 // ── Kind / status ─────────────────────────────────────────────────────────────
 const KIND_STYLE: Record<string, React.CSSProperties> = {
@@ -41,11 +41,6 @@ async function deleteListing(id: string) {
   return res.json()
 }
 
-function formatPrice(price: number | null | undefined, currency: string | null | undefined): string {
-  if (!price) return "—"
-  const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : ""
-  return symbol ? `${symbol}${price}` : `${price} ${currency ?? ""}`
-}
 
 // ── Confirm modal ─────────────────────────────────────────────────────────────
 function ConfirmModal({

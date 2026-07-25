@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from db import supabase
-from models import ListingCreate, flexibility_window_days, date_falls_in_window
+from models import ListingCreate, flexibility_window_days, date_falls_in_window, dates_overlap
 from routers.auth import get_current_user
 from typing import Optional
 from datetime import date
@@ -50,6 +50,71 @@ def attach_owner_profiles(listings: list[dict]) -> list[dict]:
             listing["owner_avatar_url"] = profile.get("avatar_url")
 
     return listings
+
+@router.get("/matches")
+async def get_matches(user=Depends(get_current_user)):
+    _require_db()
+
+    # 1. Fetch the current user's open listings
+    mine_result = (
+        supabase.table("listings")
+        .select("*")
+        .eq("owner_id", user.id)
+        .eq("status", "open")
+        .execute()
+    )
+    my_listings = mine_result.data or []
+
+    if not my_listings:
+        return []
+
+    groups = []
+    for my_listing in my_listings:
+        my_kind = my_listing.get("kind")
+
+        # Trips match against requests and deliveries; requests/deliveries match against trips
+        if my_kind == "trip":
+            match_kinds = ["request", "delivery"]
+        else:
+            match_kinds = ["trip"]
+
+        origin = my_listing.get("origin_city", "")
+        dest = my_listing.get("dest_city", "")
+
+        my_date_str = my_listing.get("depart_date")
+        my_date = date.fromisoformat(my_date_str) if my_date_str else None
+        my_flex = flexibility_window_days(my_listing.get("date_flexibility"))
+
+        # 2. Fetch candidates with matching route from other users
+        candidates = []
+        for kind in match_kinds:
+            result = (
+                supabase.table("listings")
+                .select("*")
+                .eq("status", "open")
+                .eq("kind", kind)
+                .neq("owner_id", user.id)
+                .ilike("origin_city", f"%{origin}%")
+                .ilike("dest_city", f"%{dest}%")
+                .execute()
+            )
+            candidates.extend(result.data or [])
+
+        # 3. Filter by overlapping date windows
+        matched = []
+        for candidate in candidates:
+            cand_date_str = candidate.get("depart_date")
+            cand_date = date.fromisoformat(cand_date_str) if cand_date_str else None
+            cand_flex = flexibility_window_days(candidate.get("date_flexibility"))
+            if dates_overlap(my_date, my_flex, cand_date, cand_flex):
+                matched.append(candidate)
+
+        if matched:
+            matched = attach_owner_profiles(matched)
+            groups.append({"listing": my_listing, "matches": matched})
+
+    return groups
+
 
 @router.get("/mine")
 async def my_listings(user=Depends(get_current_user)):

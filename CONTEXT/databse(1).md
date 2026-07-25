@@ -186,6 +186,8 @@ Authentication data is intentionally excluded.
 | country | text | Home country |
 | created_at | timestamptz | Account creation time |
 | is_banned | boolean | Administrative moderation flag |
+| identity_verified | boolean | Set to true once admin approves manual verification |
+| verification_method | text | How they were verified (`manual`); null if unverified |
 
 ---
 
@@ -262,6 +264,7 @@ Listings are the central entity of the application.
 | dest_country | text | Destination country |
 | depart_date | date | Departure date |
 | arrive_date | date | Arrival date |
+| date_flexibility | text | Date window flexibility: `exact` (0 days), `week` (±7 days), `month` (±30 days). Used by browse date filters and the matches algorithm. |
 | title | text | Listing title |
 | description | text | Detailed description |
 | price | numeric | Requested payment |
@@ -285,10 +288,11 @@ request
 ## Listing Status
 
 ```
-open
-matched
-completed
-cancelled
+open      — visible on browse, eligible for matching
+matched   — both parties confirmed the arrangement
+dealing   — item in transit (courier has marked handover, recipient not yet confirmed)
+completed — recipient confirmed receipt; deal archived to completed_deals
+cancelled — manually closed by owner or system
 ```
 
 Only one status should be active at any given time.
@@ -611,16 +615,52 @@ Reports may target either users or listings.
 
 ---
 
-Typical statuses:
+Statuses:
 
 ```
-open
-investigating
-resolved
-dismissed
+open        — submitted, awaiting review
+reviewed    — reviewed by admin
+dismissed   — not actioned
 ```
 
 Reports should never be physically deleted.
+
+---
+
+# Table: verification_requests
+
+## Purpose
+
+Tracks the lifecycle of a user's identity verification submission.
+
+Photos submitted for verification are **never stored** — they are forwarded directly to the admin's Telegram chat and discarded. Only the submitted name and request status are persisted here.
+
+---
+
+## Columns
+
+| Column | Type | Description |
+|----------|---------|----------------|
+| id | uuid | Primary key |
+| user_id | uuid | Applicant |
+| method | text | Verification method (`manual`) |
+| status | text | Review state |
+| verified_name | text | Full name submitted by the user |
+| rejection_reason | text | Populated on rejection |
+| submitted_at | timestamptz | Submission time |
+| reviewed_at | timestamptz | When admin acted |
+
+---
+
+## Statuses
+
+```
+pending   — submitted, awaiting admin action
+approved  — admin approved; profiles.identity_verified set to true
+rejected  — admin rejected
+```
+
+On approval, `profiles.identity_verified` is set to `true` and `profiles.verification_method` is set to `"manual"`. The `verification_requests` row is kept for audit purposes.
 
 ---
 
@@ -698,7 +738,6 @@ Likely future additions include:
 
 - listing_images
 - saved_listings
-- verification_requests
 - user_devices
 - email_preferences
 - notification_preferences

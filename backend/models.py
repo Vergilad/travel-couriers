@@ -161,6 +161,22 @@ class ProfileUpdate(BaseModel):
         return v
 
 
+def dates_overlap(
+    date_a: Optional[date],
+    flex_a: int,
+    date_b: Optional[date],
+    flex_b: int,
+) -> bool:
+    """Do the two listing date windows overlap? Either null date = no constraint."""
+    if date_a is None or date_b is None:
+        return True
+    lo_a = date_a - timedelta(days=flex_a)
+    hi_a = date_a + timedelta(days=flex_a)
+    lo_b = date_b - timedelta(days=flex_b)
+    hi_b = date_b + timedelta(days=flex_b)
+    return lo_a <= hi_b and lo_b <= hi_a
+
+
 def flexibility_window_days(value: Optional[str]) -> int:
     """Days of slack a listing's date gets when filtered by depart_from/depart_to."""
     if not value:

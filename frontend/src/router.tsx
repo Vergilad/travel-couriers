@@ -13,6 +13,7 @@ import { LandingPage } from "@/pages/Landing"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
+import { MatchesPage } from "@/pages/Matches"
 import { NotFoundPage } from "@/pages/NotFound"
 import { Inbox } from "@/pages/Inbox"
 import { Browse } from "@/pages/Browse"
@@ -151,8 +152,14 @@ const myListingsRoute = createRoute({
   component: MyListings,
 })
 
-const reportsNewRoute = createRoute({
+const matchesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
+  path: "/matches",
+  component: () => <MatchesPage />,
+})
+
+const reportsNewRoute = createRoute({
+  getParentRoute: () => rootRoute,
   path: "/reports/new",
   component: () => <PlaceholderPage title="Report — coming soon" />,
 })
@@ -177,6 +184,7 @@ const routeTree = rootRoute.addChildren([
     messageThreadRoute,
     settingsRoute,
     myListingsRoute,
+    matchesRoute,
     reportsNewRoute,
     verifyRoute,
   ]),
