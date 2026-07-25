@@ -11,6 +11,7 @@ import {
 import { ArrowRight, Waypoints, Star, Flag, Ban } from "lucide-react"
 
 import { CityAutocomplete } from "@/components/CityAutocomplete"
+import { useTranslation } from "@/i18n/I18nContext"
 
 // ─── Domain semantics (single source of truth for the landing) ───────────────
 // trip     → the traveler.  "I'm going A→B (fly, drive, train, ferry — any mode,
@@ -124,6 +125,8 @@ function NetworkBackground() {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 function Hero() {
+  const { t } = useTranslation()
+
   return (
     <section className="relative pt-40 pb-28 overflow-hidden bg-[#09090b]">
       <NetworkBackground />
@@ -136,7 +139,7 @@ function Hero() {
         >
           <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
           <span className="font-mono text-[10px] text-zinc-300 tracking-widest font-bold">
-            PEER-TO-PEER LOGISTICS MARKETPLACE
+            {t('landing.peer_to_peer')}
           </span>
         </motion.div>
 
@@ -146,8 +149,8 @@ function Hero() {
           transition={{ ...elasticConfig, delay: 0.1 }}
           className="text-5xl md:text-7xl font-bold text-zinc-100 tracking-tighter max-w-4xl mb-6 leading-[1.05]"
         >
-          MATCHING TRAVELERS <br className="hidden md:block" />
-          <span className="text-zinc-600">WITH DELIVERIES.</span>
+          {t('landing.matching_travelers')} <br className="hidden md:block" />
+          <span className="text-zinc-600">{t('landing.with_deliveries')}</span>
         </motion.h1>
 
         <motion.p
@@ -156,8 +159,7 @@ function Hero() {
           transition={{ ...elasticConfig, delay: 0.2 }}
           className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed"
         >
-          Put your spare luggage capacity to use. Connect directly with people who need items
-          moved along your route—whether by flight, train, bus, or road.
+          {t('landing.spare_capacity')}
         </motion.p>
 
         <motion.div
@@ -168,7 +170,7 @@ function Hero() {
         >
           <Link to="/browse" className="group w-full sm:w-auto focus-visible:outline-none">
             <GraphButton variant="primary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              BROWSE <ArrowRight className="w-4 h-4" />
+              {t('landing.browse')} <ArrowRight className="w-4 h-4" />
             </GraphButton>
           </Link>
           <Link
@@ -176,7 +178,7 @@ function Hero() {
             className="group w-full sm:w-auto focus-visible:outline-none"
           >
             <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              POST A TRIP
+              {t('landing.post_listing')}
             </GraphButton>
           </Link>
         </motion.div>
@@ -224,50 +226,47 @@ function LiveRoutes() {
 }
 
 // ─── How it works: interactive node graph ────────────────────────────────────
-const GRAPH_STEPS = [
-  {
-    id: "post/browse",
-    label: "post/browse",
-    x: 10,
-    y: 50,
-    title: "POST A LISTING or BROWSE",
-    content:
-      "You're going somewhere? Post a Trip. You need something delivered to you? Post a Delivery. You want something bought and brought to you? Post a Purchase Request. Don't have time to post? Browse the listings and reach out to a matching Trip, Delivery or Purchase Request.",
-  },
-  {
-    id: "match",
-    label: "match",
-    x: 36,
-    y: 25,
-    title: "SOMEONE REACHES OUT",
-    content:
-      "Someone sees the listing and contacts. Users read each other's profiles, check reviews and whether they are verified, and message each other to confirm the details. If both sides agree, the match is confirmed. After the deals are confirmed, the listing is closed.",
-  },
-  {
-    id: "move",
-    label: "move",
-    x: 64,
-    y: 75,
-    title: "THE DEAL HAPPENS",
-    content:
-      "The traveler carries the item along their route. The requester receives it. The listing is automatically deleted and stored in the user's history.",
-  },
-  {
-    id: "leave a review",
-    label: "leave a review",
-    x: 90,
-    y: 50,
-    title: "LEAVE A PUBLIC REVIEW",
-    content:
-      "Both sides leave a public review. Reviews are visible on the user's profile and help build trust for future deals. Verified users are more likely to get confirmed and build a stronger reputation over time.",
-  },
-]
-
 function HowItWorks() {
+  const { t } = useTranslation()
   const [activeIndex, setActiveIndex] = useState(0)
   const graphRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([])
   const [centers, setCenters] = useState<{ x: number; y: number }[]>([])
+
+  const GRAPH_STEPS = [
+    {
+      id: "post/browse",
+      label: "post/browse",
+      x: 10,
+      y: 50,
+      title: t('landing.post_listing_or_browse'),
+      content: t('landing.post_listing_content_v2'),
+    },
+    {
+      id: "match",
+      label: "match",
+      x: 36,
+      y: 25,
+      title: t('landing.someone_reaches_out'),
+      content: t('landing.someone_reaches_out_content'),
+    },
+    {
+      id: "move",
+      label: "move",
+      x: 64,
+      y: 75,
+      title: t('landing.deal_happens'),
+      content: t('landing.deal_happens_content'),
+    },
+    {
+      id: "leave a review",
+      label: "leave a review",
+      x: 90,
+      y: 50,
+      title: t('landing.leave_review'),
+      content: t('landing.leave_review_content'),
+    },
+  ]
 
   useEffect(() => {
     const measure = () => {
@@ -296,10 +295,10 @@ function HowItWorks() {
         <div className="mb-24 text-center flex flex-col items-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Logomark className="w-4 h-4 text-blue-500" />
-            <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">MARKETPLACE LOGIC</h2>
+            <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">{t('landing.marketplace_logic')}</h2>
           </div>
           <h3 className="text-4xl md:text-5xl font-bold text-zinc-100 tracking-tighter max-w-2xl">
-            HOW PEREGRI CONNECTS THE DOTS.
+            {t('landing.how_peregri_connects')}
           </h3>
         </div>
 
@@ -426,26 +425,23 @@ function HowItWorks() {
 
 // ─── Trust & safety ───────────────────────────────────────────────────────────
 function TrustSafety() {
+  const { t } = useTranslation()
   const facts = [
     {
-      label: "VERIFIED IDENTITY, TRUSTED DEALS",
-      value:
-        "Users can verify their identity through with a legal ID. Verifications are handled anonimously and securely by humans. Verified users build stronger trust — unverified status is shown on profiles and listings so you always know who you're dealing with.",
+      label: t('landing.verified_identity'),
+      value: t('landing.verified_identity_content'),
     },
     {
-      label: "LEGAL GOODS ONLY — ZERO EXCEPTIONS",
-      value:
-        "Peregri is strictly for lawful items. Anyone attempting to ship drugs, weapons, counterfeit goods, or any prohibited contraband is permanently banned on the spot and may be reported to the relevant authorities.",
+      label: t('landing.legal_goods_only'),
+      value: t('landing.legal_goods_only_content'),
     },
     {
-      label: "REVIEWS BUILD YOUR REPUTATION",
-      value:
-        "After every closed deal, both sides leave a public review. A courier's track record is visible before you ever message them — honesty compounds over time.",
+      label: t('landing.reviews_build_reputation'),
+      value: t('landing.reviews_build_reputation_content'),
     },
     {
-      label: "SCAMS GET YOU BANNED PERMANENTLY",
-      value:
-        "Ghosting after confirmation, fake listings, or demanding payment outside the platform are treated as fraud. Reports are reviewed privately by our team; serious or repeat offenders lose access for good.",
+      label: t('landing.scams_get_banned'),
+      value: t('landing.scams_get_banned_content'),
     },
   ]
 
@@ -472,7 +468,7 @@ function TrustSafety() {
             <div className="absolute inset-0 flex flex-col justify-center gap-4 px-6 py-8 z-10">
               <div className="font-mono text-[10px] font-bold tracking-widest text-zinc-600 mb-1 flex items-center gap-2">
                 <Logomark className="w-3.5 h-3.5 text-blue-500" />
-                THREE LAYERS OF TRUST
+                {t('landing.three_layers_of_trust')}
               </div>
 
               <motion.div
@@ -484,10 +480,10 @@ function TrustSafety() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-base">🪪</span>
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">IDENTITY · VERIFIED</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">{t('landing.identity_verified_label')}</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed">
-                  Verified users show a badge on their profile and listings. Unverified status is clearly flagged — so you always know who you're dealing with before you confirm.
+                  {t('landing.verified_users_badge')}
                 </p>
               </motion.div>
 
@@ -500,10 +496,10 @@ function TrustSafety() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">REVIEWS · PUBLIC RECORD</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">{t('landing.reviews_public_record')}</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed mb-3">
-                  Left by both sides after every handover. Visible on profiles permanently.
+                  {t('landing.reviews_public_record_desc')}
                 </p>
                 <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-sm px-3 py-2">
                   <div className="flex gap-0.5 text-yellow-500">
@@ -511,7 +507,7 @@ function TrustSafety() {
                       <Star key={i} className="w-3 h-3 fill-current" />
                     ))}
                   </div>
-                  <span className="text-zinc-400 text-[11px]">"Smooth handover, right on time."</span>
+                  <span className="text-zinc-400 text-[11px]">"{t('landing.smooth_handover')}"</span>
                 </div>
               </motion.div>
 
@@ -524,10 +520,10 @@ function TrustSafety() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <Ban className="w-4 h-4 text-red-400" />
-                  <span className="text-zinc-200 text-xs font-bold tracking-widest">ILLEGAL ACTIVITIES · ZERO TOLERANCE</span>
+                  <span className="text-zinc-200 text-xs font-bold tracking-widest">{t('landing.illegal_activities')}</span>
                 </div>
                 <p className="text-zinc-500 text-[11px] leading-relaxed">
-                  Scamming, ghosting, or attempting to ship illegal goods results in a permanent ban. Reports are reviewed by our team and serious or repeat offenders lose access for good.
+                  {t('landing.illegal_activities_content')}
                 </p>
               </motion.div>
             </div>
@@ -541,11 +537,11 @@ function TrustSafety() {
             className="order-1 lg:order-2"
           >
             <div className="flex items-center gap-2 mb-3">
-              <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">TRUST & SAFETY</h2>
+              <h2 className="font-mono text-xs font-bold tracking-widest text-blue-500">{t('landing.trust_safety')}</h2>
             </div>
-            <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">BUILT SO YOU CAN TRUST A STRANGER.</h3>
+            <h3 className="text-4xl font-bold text-zinc-100 tracking-tighter mb-6">{t('landing.trust_stranger')}</h3>
             <p className="text-zinc-400 text-lg mb-10 leading-relaxed">
-              People are more likely to trust a stranger when they know the stranger is verified. Peregri strongly recommends that all users verify their identity and stay alert for unverified users.
+              {t('landing.trust_stranger_content')}
             </p>
 
             <div className="space-y-6">
@@ -568,6 +564,7 @@ function TrustSafety() {
 
 // ─── Route search (real, functional — wired to /browse) ──────────────────────
 function RouteSearch() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
@@ -591,13 +588,13 @@ function RouteSearch() {
         >
           <div className="flex items-center justify-center gap-2 mb-4">
             <Logomark className="w-4 h-4 text-blue-500" />
-            <span className="font-mono text-xs font-bold tracking-widest text-blue-500">FIND A ROUTE</span>
+            <span className="font-mono text-xs font-bold tracking-widest text-blue-500">{t('landing.find_route')}</span>
           </div>
           <h2 className="text-4xl md:text-5xl font-bold text-zinc-100 tracking-tighter mb-4">
-            WHERE TO, AND WHERE FROM?
+            {t('landing.where_to_and_where_from')}
           </h2>
           <p className="text-zinc-400 text-base">
-            Find couriers already going your way — across an ocean or across town.
+            {t('landing.route_search_subtitle')}
           </p>
         </motion.div>
 
@@ -610,9 +607,9 @@ function RouteSearch() {
         >
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] gap-3 items-end">
             <CityAutocomplete
-              label="From"
+              label={t('landing.from_city')}
               value={from}
-              placeholder="Any city…"
+              placeholder={t('landing.any_city')}
               onSelect={(city) => setFrom(city)}
               onChange={(raw) => setFrom(raw)}
               onClear={() => setFrom("")}
@@ -621,9 +618,9 @@ function RouteSearch() {
               <span className="text-blue-500 text-xl px-1 font-mono">→</span>
             </div>
             <CityAutocomplete
-              label="To"
+              label={t('landing.to_city')}
               value={to}
-              placeholder="Any city…"
+              placeholder={t('landing.any_city')}
               onSelect={(city) => setTo(city)}
               onChange={(raw) => setTo(raw)}
               onClear={() => setTo("")}
@@ -632,7 +629,7 @@ function RouteSearch() {
               onClick={handleSearch}
               className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] font-mono tracking-widest rounded-sm transition-colors shadow-[0_0_15px_rgba(37,99,235,0.2)] hover:shadow-[0_0_25px_rgba(37,99,235,0.4)] whitespace-nowrap"
             >
-              FIND COURIERS
+              {t('landing.find_couriers_btn')}
             </button>
           </div>
         </motion.div>
@@ -643,19 +640,20 @@ function RouteSearch() {
 
 // ─── Closing CTA ──────────────────────────────────────────────────────────────
 function FooterCTA() {
+  const { t } = useTranslation()
+
   return (
     <section className="py-32 relative overflow-hidden flex flex-col items-center justify-center text-center bg-[#0a0a0c]">
       <div className="absolute inset-0 bg-blue-600/[0.02]" />
       <div className="max-w-3xl mx-auto px-6 relative z-10">
-        <h2 className="text-5xl md:text-6xl font-bold text-zinc-100 tracking-tighter mb-8">START MOVING.</h2>
+        <h2 className="text-5xl md:text-6xl font-bold text-zinc-100 tracking-tighter mb-8">{t('landing.start_moving')}</h2>
         <p className="text-zinc-400 mb-10 max-w-xl mx-auto text-lg leading-relaxed">
-          Join the peer-to-peer logistics network. List your upcoming trip to help move items
-          along your way, or post a delivery to get an item carried across borders.
+          {t('landing.join_network')}
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link to="/browse" className="group w-full sm:w-auto focus-visible:outline-none">
             <GraphButton variant="primary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              BROWSE <ArrowRight className="w-4 h-4" />
+              {t('landing.browse')} <ArrowRight className="w-4 h-4" />
             </GraphButton>
           </Link>
           <Link
@@ -663,7 +661,7 @@ function FooterCTA() {
             className="group w-full sm:w-auto focus-visible:outline-none"
           >
             <GraphButton variant="secondary" className="h-12 px-8 font-mono w-full sm:w-auto text-xs group-focus-visible:ring-2 group-focus-visible:ring-blue-400">
-              POST A TRIP
+              {t('landing.post_listing')}
             </GraphButton>
           </Link>
         </div>

@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import React from 'react'
 
 import { AuthProvider } from '@/lib/auth'
+import { I18nProvider } from '@/i18n/I18nContext'
 import { router } from '@/router'
 
 const queryClient = new QueryClient({
@@ -17,9 +18,11 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </I18nProvider>
     </QueryClientProvider>
   )
 }

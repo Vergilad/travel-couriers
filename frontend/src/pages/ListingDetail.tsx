@@ -8,6 +8,7 @@ import type { Listing } from "@/types/listing"
 import { formatListingDate, formatPrice } from "@/lib/listings"
 import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
 import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
+import { useTranslation } from "@/i18n/I18nContext"
 
 // ── Kind / status config ──────────────────────────────────────────────────────
 const KIND_BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -46,8 +47,9 @@ async function fetchListing(id: string): Promise<ListingWithOwner> {
 
 // ── Star rating ───────────────────────────────────────────────────────────────
 function StarRating({ rating, count }: { rating: number | null; count: number }) {
+  const { t } = useTranslation()
   if (!rating) return (
-    <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>No reviews yet</span>
+    <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{t('listings.no_reviews')}</span>
   )
   const stars = Math.round(rating)
   return (
@@ -62,13 +64,14 @@ function StarRating({ rating, count }: { rating: number | null; count: number })
 
 // ── Contact button ────────────────────────────────────────────────────────────
 function ContactButton({ listing }: { listing: ListingWithOwner }) {
+  const { t } = useTranslation()
   const { user, session } = useAuth()
   const navigate = useNavigate()
   const [contacting, setContacting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [showWarning, setShowWarning] = React.useState(false)
 
-  const label = listing.kind === "trip" ? "COURIER" : listing.kind === "delivery" ? "CARRIER" : "REQUESTER"
+  const label = listing.kind === "trip" ? t('listings.contact_trip') : listing.kind === "delivery" ? t('listings.contact_delivery') : t('listings.contact_request')
   const ownerVerified = listing.owner?.identity_verified ?? null
 
   async function doContact() {
@@ -109,7 +112,7 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
           onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
           onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
         >
-          SIGN IN TO CONTACT
+          {t('listings.sign_in_to_contact')}
         </button>
       </Link>
     )
@@ -125,7 +128,7 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
         onMouseEnter={e => { if (!contacting) e.currentTarget.style.background = "var(--accent-dim)" }}
         onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
       >
-        {contacting ? "OPENING…" : `CONTACT ${label}`}
+        {contacting ? t('listings.opening') : label}
       </button>
       {error && (
         <p className="font-mono text-[11px] text-center mt-2" style={{ color: "var(--destructive)" }}>{error}</p>
@@ -224,6 +227,7 @@ function MetaCell({ label, children }: { label: string; children: React.ReactNod
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function ListingDetail() {
+  const { t } = useTranslation()
   const { id } = useParams({ strict: false })
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -274,7 +278,7 @@ export function ListingDetail() {
             transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
           />
           <span className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-            LOADING MANIFEST...
+            {t('listings.loading_manifest')}
           </span>
         </div>
       </div>
@@ -286,8 +290,8 @@ export function ListingDetail() {
     return (
       <div className="min-h-screen pt-16 flex flex-col items-center justify-center text-center px-6" style={{ background: "var(--bg)" }}>
         <div className="font-mono text-[64px] mb-4 font-bold" style={{ color: "var(--text-faint)" }}>404</div>
-        <h2 className="text-2xl font-bold mb-3" style={{ color: "var(--text)" }}>Listing Not Found</h2>
-        <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>This route could not be located in the system.</p>
+        <h2 className="text-2xl font-bold mb-3" style={{ color: "var(--text)" }}>{t('listings.listing_not_found')}</h2>
+        <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>{t('listings.not_found_message')}</p>
         <Link to="/browse">
           <button
             className="font-mono text-[11px] tracking-widest rounded-sm px-6 py-2.5 transition-colors"
@@ -301,7 +305,7 @@ export function ListingDetail() {
               e.currentTarget.style.color = "var(--text-muted)"
             }}
           >
-            ← BACK TO BROWSE
+            {t('listings.back_to_browse')}
           </button>
         </Link>
       </div>
@@ -327,7 +331,7 @@ export function ListingDetail() {
               onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
               onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
             >
-              ← BACK TO BROWSE
+              {t('listings.back_to_browse')}
             </button>
           </Link>
         </div>
@@ -390,20 +394,20 @@ export function ListingDetail() {
               style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
             >
               {listing.depart_date && (
-                <MetaCell label="Departure">
+                <MetaCell label={t('listings.departure')}>
                   {formatListingDate(listing.depart_date)}
                   {listing.date_flexibility && listing.date_flexibility !== "exact" && (
                     <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      {FLEXIBILITY_LABELS[listing.date_flexibility]}
+                      {listing.date_flexibility === "week" ? t('listings.week_flexible') : t('listings.month_flexible')}
                     </p>
                   )}
                 </MetaCell>
               )}
               {listing.arrive_date && (
-                <MetaCell label="Arrival">{formatListingDate(listing.arrive_date)}</MetaCell>
+                <MetaCell label={t('listings.arrival')}>{formatListingDate(listing.arrive_date)}</MetaCell>
               )}
               {listing.capacity_kg && (
-                <MetaCell label="Capacity">{listing.capacity_kg} kg</MetaCell>
+                <MetaCell label={t('listings.capacity')}>{listing.capacity_kg} kg</MetaCell>
               )}
             </div>
           )}
@@ -411,10 +415,10 @@ export function ListingDetail() {
           {/* Description */}
           <div className="mb-10">
             <h2 className="font-mono text-[10px] tracking-[0.2em] mb-4 uppercase" style={{ color: "var(--text-muted)" }}>
-              Details
+              {t('listings.details')}
             </h2>
             <p className="leading-relaxed text-[15px]" style={{ color: "var(--text-muted)" }}>
-              {listing.description || "No additional details provided for this listing."}
+              {listing.description || t('listings.no_details')}
             </p>
           </div>
 
@@ -428,7 +432,7 @@ export function ListingDetail() {
                 onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
               >
                 <h3 className="font-mono text-[10px] tracking-[0.2em] mb-5 uppercase" style={{ color: "var(--text-muted)" }}>
-                  {listing.kind === "trip" ? "Traveler Profile" : listing.kind === "delivery" ? "Carrier Profile" : "Requester Profile"}
+                  {listing.kind === "trip" ? t('listings.traveler_profile') : listing.kind === "delivery" ? t('listings.carrier_profile') : t('listings.requester_profile')}
                 </h3>
                 <div className="flex items-center gap-4">
                   <div
@@ -465,7 +469,7 @@ export function ListingDetail() {
                     className="font-mono text-[11px] tracking-widest shrink-0 self-center transition-colors"
                     style={{ color: "var(--text-faint)" }}
                   >
-                    VIEW →
+                    {t('listings.view_profile')}
                   </span>
                 </div>
               </div>
@@ -487,7 +491,7 @@ export function ListingDetail() {
             {/* Price */}
             <div className="mb-5">
               <p className="font-mono text-[9px] tracking-[0.2em] mb-2 uppercase" style={{ color: "var(--text-muted)" }}>
-                {listing.kind === "request" ? "Offered Reward" : "Price"}
+                {listing.kind === "request" ? t('listings.offered_reward') : t('listings.price_label')}
               </p>
               <p
                 className="text-3xl font-bold"
@@ -523,7 +527,7 @@ export function ListingDetail() {
             {isOwn ? (
               <div className="space-y-3">
                 <p className="text-center font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                  YOUR LISTING
+                  {t('listings.your_listing')}
                 </p>
                 {listing.status === "open" && (
                   <button
@@ -539,7 +543,7 @@ export function ListingDetail() {
                       e.currentTarget.style.color = "var(--text-muted)"
                     }}
                   >
-                    CLOSE LISTING
+                    {t('listings.confirm_close')}
                   </button>
                 )}
                 <button
@@ -555,7 +559,7 @@ export function ListingDetail() {
                     e.currentTarget.style.color = "var(--text-muted)"
                   }}
                 >
-                  DELETE LISTING
+                  {t('listings.delete_listing')}
                 </button>
               </div>
             ) : listing.status === "open" ? (
@@ -566,7 +570,7 @@ export function ListingDetail() {
                 className="w-full font-mono text-[11px] tracking-widest rounded-sm py-3 cursor-not-allowed"
                 style={{ border: "1px solid var(--border)", color: "var(--text-muted)", opacity: 0.5 }}
               >
-                LISTING CLOSED
+                {t('listings.listing_closed')}
               </button>
             )}
 
@@ -577,7 +581,7 @@ export function ListingDetail() {
             )}
 
             <p className="text-center font-mono text-[10px] mt-4 tracking-wider" style={{ color: "var(--text-faint)" }}>
-              SECURED BY PEREGRI
+              {t('listings.secured_by_peregri')}
             </p>
           </div>
         </motion.aside>
@@ -587,9 +591,9 @@ export function ListingDetail() {
       <AnimatePresence>
         {confirmClose && (
           <ConfirmModal
-            title="Close this listing?"
-            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" will be marked closed and removed from browse. Existing messages remain open.`}
-            confirmLabel="CLOSE LISTING"
+            title={t('listings.close_this_listing')}
+            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t('listings.close_listing_confirm_detail')}`}
+            confirmLabel={t('listings.confirm_close')}
             busy={closeMutation.isPending}
             onConfirm={() => closeMutation.mutate()}
             onCancel={() => setConfirmClose(false)}
@@ -597,9 +601,9 @@ export function ListingDetail() {
         )}
         {confirmDelete && (
           <ConfirmModal
-            title="Delete this listing?"
-            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" will be permanently removed along with its messages. This cannot be undone.`}
-            confirmLabel="DELETE"
+            title={t('listings.delete_this_listing')}
+            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t('listings.delete_listing_confirm_detail')}`}
+            confirmLabel={t('listings.confirm_deleting')}
             danger
             busy={deleteMutation.isPending}
             onConfirm={() => deleteMutation.mutate()}

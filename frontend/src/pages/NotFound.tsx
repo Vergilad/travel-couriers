@@ -1,11 +1,11 @@
 import { Link } from "@tanstack/react-router"
+import { useTranslation } from "@/i18n/I18nContext"
 
 // ─── Not Found (404) ────────────────────────────────────────────────────────
-// Peregri motif: a route on the network map that goes nowhere — a waypoint
-// dot with a dashed line trailing off into static. Matches the "GATE: ..."
-// breadcrumb + JetBrains Mono numerics used across Create Listing / errors.
 
 export function NotFoundPage() {
+  const { t } = useTranslation()
+
   return (
     <div
       className="min-h-screen pt-16 flex flex-col items-center justify-center text-center px-6"
@@ -16,7 +16,7 @@ export function NotFoundPage() {
         style={{ color: "var(--accent)" }}
       >
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />
-        GATE: UNKNOWN ROUTE
+        {t('not_found.gate_unknown')}
       </div>
 
       <svg width="180" height="72" viewBox="0 0 180 72" fill="none" className="mb-8">
@@ -43,10 +43,10 @@ export function NotFoundPage() {
         404
       </div>
       <h2 className="text-2xl font-bold mb-3" style={{ color: "var(--text)" }}>
-        This waypoint doesn&apos;t exist
+        {t('not_found.this_waypoint_doesnt_exist')}
       </h2>
       <p className="text-sm mb-8 max-w-sm" style={{ color: "var(--text-muted)" }}>
-        The route you&apos;re looking for isn&apos;t on the network — it may have been moved, or never existed.
+        {t('not_found.route_not_on_network')}
       </p>
 
       <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ export function NotFoundPage() {
             onMouseEnter={e => { e.currentTarget.style.background = "var(--accent-dim)" }}
             onMouseLeave={e => { e.currentTarget.style.background = "var(--accent)" }}
           >
-            BROWSE ROUTES →
+            {t('not_found.browse_routes')}
           </button>
         </Link>
         <Link to="/">
@@ -73,7 +73,7 @@ export function NotFoundPage() {
               e.currentTarget.style.color = "var(--text-muted)"
             }}
           >
-            ← HOME
+            {t('common.home')}
           </button>
         </Link>
       </div>

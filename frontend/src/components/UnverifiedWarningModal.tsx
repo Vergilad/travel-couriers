@@ -1,12 +1,6 @@
-/**
- * UnverifiedWarningModal — shown before Contact or Confirm when the OTHER
- * party has not verified their identity. Always suggests the current user
- * also verify, since trust is mutual.
- *
- * Never hard-blocks. Requires active acknowledgment each time.
- */
 import { Link } from "@tanstack/react-router"
 import { motion } from "framer-motion"
+import { useTranslation } from "@/i18n/I18nContext"
 
 export interface UnverifiedWarningModalProps {
   /** Which action triggered the modal */
@@ -22,20 +16,21 @@ export function UnverifiedWarningModal({
   onProceed,
   onCancel,
 }: UnverifiedWarningModalProps) {
+  const { t } = useTranslation()
   const isConfirm = variant === "confirm"
 
-  const heading = `${otherName} has not verified their identity`
+  const heading = `${otherName} ${t('unverified_warning.not_verified_heading')}`
 
   const body = isConfirm
     ? [
-        "This person's real identity is unknown to Peregri.",
-        "Confirming arrangements with unverified users increases the risk of fraud, dangerous items, and no-shows.",
-        "Peregri strongly advises against confirming arrangements with unverified users.",
+        t('unverified_warning.identity_unknown'),
+        t('unverified_warning.confirm_risk'),
+        t('unverified_warning.advise_against_confirm'),
       ]
     : [
-        "This person's real identity is unknown to Peregri.",
-        "Contacting unverified users significantly increases the risk of fraud, dangerous items, or wasted time.",
-        "We strongly recommend only engaging with verified users.",
+        t('unverified_warning.identity_unknown'),
+        t('unverified_warning.contact_risk'),
+        t('unverified_warning.recommend_verified_only'),
       ]
 
   const mono: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace" }
@@ -55,7 +50,6 @@ export function UnverifiedWarningModal({
         style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.35)" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* ── Header ── */}
         <div
           className="px-6 py-4 flex items-center gap-3"
           style={{ background: "rgba(239,68,68,0.07)", borderBottom: "1px solid rgba(239,68,68,0.2)" }}
@@ -76,7 +70,6 @@ export function UnverifiedWarningModal({
           </p>
         </div>
 
-        {/* ── Body ── */}
         <div className="px-6 py-5 space-y-2.5">
           {body.map((line, i) => (
             <p
@@ -87,22 +80,20 @@ export function UnverifiedWarningModal({
               {line}
             </p>
           ))}
-          {/* Always nudge the current user to verify too */}
           <p className="text-[12px] leading-relaxed pt-1" style={{ color: "var(--text-muted)" }}>
-            Not verified yourself?{" "}
+            {t('unverified_warning.not_verified_yourself')}{" "}
             <Link
               to="/verify"
               className="underline underline-offset-2 transition-colors"
               style={{ color: "var(--accent)" }}
               onClick={onCancel}
             >
-              Verify your identity
+              {t('unverified_warning.verify_your_identity')}
             </Link>{" "}
-            to build trust with others.
+            {t('unverified_warning.build_trust')}
           </p>
         </div>
 
-        {/* ── Actions ── */}
         <div
           className="px-6 py-4 flex items-center justify-end gap-2"
           style={{ borderTop: "1px solid var(--border)" }}
@@ -120,7 +111,7 @@ export function UnverifiedWarningModal({
               e.currentTarget.style.color = "var(--text-muted)"
             }}
           >
-            CANCEL
+            {t('unverified_warning.cancel')}
           </button>
           <button
             onClick={onProceed}
@@ -135,7 +126,7 @@ export function UnverifiedWarningModal({
               e.currentTarget.style.color = "var(--text-muted)"
             }}
           >
-            I UNDERSTAND THE RISK
+            {t('unverified_warning.i_understand_risk')}
           </button>
         </div>
       </motion.div>

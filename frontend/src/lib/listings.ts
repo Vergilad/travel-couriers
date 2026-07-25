@@ -13,11 +13,12 @@ export function formatListingDate(date: string): string {
   })
 }
 
-export function formatPrice(price: number | string, currency: string): string {
+export function formatPrice(price: number | string | null | undefined, currency: string | null | undefined): string {
+  if (price === null || price === undefined || price === "" || Number.isNaN(Number(price))) return "Negotiable"
   const amount = typeof price === "string" ? Number(price) : price
-  const symbol =
-    currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : ""
-  return symbol ? `${symbol}${amount}` : `${amount} ${currency}`
+  if (amount === 0) return "Free"
+  const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : ""
+  return symbol ? `${symbol}${amount.toLocaleString()}` : `${amount.toLocaleString()} ${currency ?? ""}`
 }
 
 export function kindLabel(kind: ListingKind): string {
