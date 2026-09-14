@@ -1,7 +1,8 @@
 fastapi
 uvicorn[standard]
-supabase
-stripe
+psycopg[binary]
+psycopg_pool
+passlib
 resend
 pydantic
 python-dotenv

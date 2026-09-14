@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from db import supabase
+from db import get_conn, fetchone, fetchall
 from models import ListingCreate, flexibility_window_days, date_falls_in_window, dates_overlap
 from routers.auth import get_current_user
 from typing import Optional
@@ -7,10 +7,6 @@ from datetime import date
 
 router = APIRouter()
 
-
-def _require_db():
-    if not supabase:
-        raise HTTPException(503, "Database not configured")
 
 # Саша я решил сделать отдельную функцию для прикрепления профилей гадов к объявлениям, чтобы там не повторяться бльшею
 def attach_owner_profiles(listings: list[dict]) -> list[dict]:
@@ -26,14 +22,13 @@ def attach_owner_profiles(listings: list[dict]) -> list[dict]:
     if not owner_ids:
         return listings
 
-    profiles_result = (
-        supabase.table("profiles")
-        .select("id, display_name, avatar_url, bio, city, country, identity_verified")
-        .in_("id", owner_ids)
-        .execute()
-    )
-
-    profiles = profiles_result.data or []
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, display_name, avatar_url, bio, city, country,"
+            " identity_verified FROM profiles WHERE id = ANY(%s)",
+            (owner_ids,),
+        )
+        profiles = fetchall(cur)
 
     profile_map = {
         profile["id"]: profile
@@ -53,80 +48,64 @@ def attach_owner_profiles(listings: list[dict]) -> list[dict]:
 
 @router.get("/matches")
 async def get_matches(user=Depends(get_current_user)):
-    _require_db()
+    with get_conn() as conn, conn.cursor() as cur:
+        # 1. Fetch the current user's open listings
+        cur.execute(
+            "SELECT * FROM listings WHERE owner_id = %s AND status = 'open'",
+            (user.id,),
+        )
+        my_listings = fetchall(cur)
 
-    # 1. Fetch the current user's open listings
-    mine_result = (
-        supabase.table("listings")
-        .select("*")
-        .eq("owner_id", user.id)
-        .eq("status", "open")
-        .execute()
-    )
-    my_listings = mine_result.data or []
+        if not my_listings:
+            return []
 
-    if not my_listings:
-        return []
+        groups = []
+        for my_listing in my_listings:
+            my_kind = my_listing.get("kind")
 
-    groups = []
-    for my_listing in my_listings:
-        my_kind = my_listing.get("kind")
+            # Two sides: carry matches need, need matches carry.
+            match_kind = "need" if my_kind == "carry" else "carry"
 
-        # Trips match against requests and deliveries; requests/deliveries match against trips
-        if my_kind == "trip":
-            match_kinds = ["request", "delivery"]
-        else:
-            match_kinds = ["trip"]
+            origin = my_listing.get("origin_city", "")
+            dest = my_listing.get("dest_city", "")
 
-        origin = my_listing.get("origin_city", "")
-        dest = my_listing.get("dest_city", "")
+            my_date_str = my_listing.get("depart_date")
+            my_date = date.fromisoformat(my_date_str) if my_date_str else None
+            my_flex = flexibility_window_days(my_listing.get("date_flexibility"))
 
-        my_date_str = my_listing.get("depart_date")
-        my_date = date.fromisoformat(my_date_str) if my_date_str else None
-        my_flex = flexibility_window_days(my_listing.get("date_flexibility"))
-
-        # 2. Fetch candidates with matching route from other users
-        candidates = []
-        for kind in match_kinds:
-            result = (
-                supabase.table("listings")
-                .select("*")
-                .eq("status", "open")
-                .eq("kind", kind)
-                .neq("owner_id", user.id)
-                .ilike("origin_city", f"%{origin}%")
-                .ilike("dest_city", f"%{dest}%")
-                .execute()
+            # 2. Fetch candidates with matching route from other users
+            cur.execute(
+                "SELECT * FROM listings WHERE status = 'open' AND kind = %s"
+                " AND owner_id <> %s AND origin_city ILIKE %s"
+                " AND dest_city ILIKE %s",
+                (match_kind, user.id, f"%{origin}%", f"%{dest}%"),
             )
-            candidates.extend(result.data or [])
+            candidates = fetchall(cur)
 
-        # 3. Filter by overlapping date windows
-        matched = []
-        for candidate in candidates:
-            cand_date_str = candidate.get("depart_date")
-            cand_date = date.fromisoformat(cand_date_str) if cand_date_str else None
-            cand_flex = flexibility_window_days(candidate.get("date_flexibility"))
-            if dates_overlap(my_date, my_flex, cand_date, cand_flex):
-                matched.append(candidate)
+            # 3. Filter by overlapping date windows
+            matched = []
+            for candidate in candidates:
+                cand_date_str = candidate.get("depart_date")
+                cand_date = date.fromisoformat(cand_date_str) if cand_date_str else None
+                cand_flex = flexibility_window_days(candidate.get("date_flexibility"))
+                if dates_overlap(my_date, my_flex, cand_date, cand_flex):
+                    matched.append(candidate)
 
-        if matched:
-            matched = attach_owner_profiles(matched)
-            groups.append({"listing": my_listing, "matches": matched})
+            if matched:
+                matched = attach_owner_profiles(matched)
+                groups.append({"listing": my_listing, "matches": matched})
 
-    return groups
+        return groups
 
 
 @router.get("/mine")
 async def my_listings(user=Depends(get_current_user)):
-    _require_db()
-    result = (
-        supabase.table("listings")
-        .select("*")
-        .eq("owner_id", user.id)
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return result.data
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT * FROM listings WHERE owner_id = %s ORDER BY created_at DESC",
+            (user.id,),
+        )
+        return fetchall(cur)
 
 
 @router.get("")
@@ -143,32 +122,40 @@ async def browse_listings(
     limit: int = 40,
     offset: int = 0,
 ):
-    _require_db()
     # Date filtering is applied in Python (not SQL) so that:
     #   • a listing's flexibility window widens its matchable range, and
     #   • undated listings (NULL depart_date) still surface under any time
     #     filter instead of being dropped by a `depart_date >= X` clause.
-    query = (
-        supabase.table("listings")
-        .select("*")
-        .eq("status", status)
-    )
+    where = ["status = %s"]
+    params: list = [status]
     if kind:
-        query = query.eq("kind", kind)
+        where.append("kind = %s")
+        params.append(kind)
     if origin_city:
-        query = query.ilike("origin_city", f"%{origin_city}%")
+        where.append("origin_city ILIKE %s")
+        params.append(f"%{origin_city}%")
     if dest_city:
-        query = query.ilike("dest_city", f"%{dest_city}%")
+        where.append("dest_city ILIKE %s")
+        params.append(f"%{dest_city}%")
     if price_min is not None:
-        query = query.gte("price", price_min)
+        where.append("price >= %s")
+        params.append(price_min)
     if price_max is not None:
-        query = query.lte("price", price_max)
+        where.append("price <= %s")
+        params.append(price_max)
 
     # Fetch a generous pool so Python-side date filtering + sort don't get
     # truncated by the page limit before undated listings can surface.
     pool_limit = min(max(limit * 5, limit + 50), 200)
-    result = query.order(order_by, desc=True).limit(pool_limit).execute()
-    rows = result.data or []
+    if order_by not in {"created_at", "depart_date", "price"}:
+        order_by = "created_at"
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM listings WHERE {' AND '.join(where)}"
+            f" ORDER BY {order_by} DESC LIMIT %s",
+            (*params, pool_limit),
+        )
+        rows = fetchall(cur)
 
     has_date_filter = bool(depart_from or depart_to)
     parsed_from = date.fromisoformat(depart_from) if depart_from else None
@@ -196,74 +183,69 @@ async def browse_listings(
 
 @router.get("/{listing_id}")
 async def get_listing(listing_id: str):
-    _require_db()
-    result = (
-        supabase.table("listings")
-        .select("*")
-        .eq("id", listing_id)
-        .single()
-        .execute()
-    )
-    if not result.data:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT * FROM listings WHERE id = %s", (listing_id,))
+        row = fetchone(cur)
+    if not row:
         raise HTTPException(404, "Listing not found")
 
-    listing = attach_owner_profiles([result.data])[0]
+    listing = attach_owner_profiles([row])[0]
     return listing
 
 
 @router.post("")
 async def create_listing(body: ListingCreate, user=Depends(get_current_user)):
-    _require_db()
     data = body.model_dump(exclude_none=True)
     data["owner_id"] = user.id
     data["status"] = "open"
-    if "depart_date" in data and data["depart_date"]:
-        data["depart_date"] = data["depart_date"].isoformat()
-    if "arrive_date" in data and data["arrive_date"]:
-        data["arrive_date"] = data["arrive_date"].isoformat()
+    if data.get("kind") == "carry":
+        # The purchase flag is a need-side detail; never set on carry.
+        data["needs_purchase"] = False
 
     data.pop("accepts_multiple", None)
 
-    try:
-        result = supabase.table("listings").insert(data).execute()
-    except Exception as e:
-        err = str(e)
-        if "date_flexibility" in err:
-            data.pop("date_flexibility", None)
-            result = supabase.table("listings").insert(data).execute()
-        else:
-            raise
+    cols = ", ".join(data.keys())
+    placeholders = ", ".join(["%s"] * len(data))
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO listings ({cols}) VALUES ({placeholders}) RETURNING *",
+            tuple(data.values()),
+        )
+        return fetchone(cur)
 
-    return result.data[0]
+
+PATCHABLE = {
+    "kind", "origin_city", "origin_country", "dest_city", "dest_country",
+    "title", "description", "price", "currency",
+    "depart_date", "arrive_date", "date_flexibility", "status",
+    "needs_purchase",
+}
 
 
 @router.patch("/{listing_id}")
 async def update_listing(listing_id: str, body: dict, user=Depends(get_current_user)):
-    _require_db()
-    existing = (
-        supabase.table("listings")
-        .select("owner_id")
-        .eq("id", listing_id)
-        .single()
-        .execute()
-    )
-    if not existing.data or existing.data["owner_id"] != user.id:
-        raise HTTPException(403, "Not your listing")
-    result = supabase.table("listings").update(body).eq("id", listing_id).execute()
-    return result.data[0]
+    updates = {k: v for k, v in body.items() if k in PATCHABLE}
+    if not updates:
+        raise HTTPException(400, "No fields to update")
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT owner_id FROM listings WHERE id = %s", (listing_id,))
+        existing = fetchone(cur)
+        if not existing or existing["owner_id"] != user.id:
+            raise HTTPException(403, "Not your listing")
+        assignments = ", ".join(f"{col} = %s" for col in updates)
+        cur.execute(
+            f"UPDATE listings SET {assignments} WHERE id = %s RETURNING *",
+            (*updates.values(), listing_id),
+        )
+        return fetchone(cur)
 
 
 @router.delete("/{listing_id}")
 async def delete_listing(listing_id: str, user=Depends(get_current_user)):
-    _require_db()
-    existing = (
-        supabase.table("listings")
-        .select("owner_id")
-        .eq("id", listing_id)
-        .single()
-        .execute()
-    )
-    if not existing.data or existing.data["owner_id"] != user.id:
-        raise HTTPException(403, "Not your listing")
-    supabase.table("listings").delete().eq("id", listing_id).execute()
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT owner_id FROM listings WHERE id = %s", (listing_id,))
+        existing = fetchone(cur)
+        if not existing or existing["owner_id"] != user.id:
+            raise HTTPException(403, "Not your listing")
+        cur.execute("DELETE FROM listings WHERE id = %s", (listing_id,))
     return {"deleted": True}

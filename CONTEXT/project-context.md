@@ -1,146 +1,90 @@
-# Project Context — Peregri
+# Project Context: Viactor (backend still speaks Peregri)
 
-> **This file supersedes the PDF of the same name.** Keep this file updated whenever a major feature area changes state.
+> Supersedes all earlier versions. Read this plus `technical-architecture.md`,
+> `database.md`, and `design.md` before changing anything. `docs/` outranks
+> this directory when they disagree.
 
-**Project name:** Peregri (working title)
-**Status:** MVP with the core marketplace loop implemented end-to-end. Pre-launch; no real users yet.
+**Project name:** Viactor (frontend). Backend, DB, and infra keep the
+working title Peregri. Lowercase wordmark `viactor`.
+**Status:** MVP loop complete end to end, self-hosted, pre-launch. No real
+users yet. Admin: pledsterr@gmail.com.
 
-**Purpose of this document:** Single source of truth for the project's philosophy, current state, and development history. Every developer or AI agent working on this project should read this before making changes. The CONTEXT directory also contains dedicated files for Design Philosophy, Technical Architecture, and Database Design — read all of them.
+## 1. What is Viactor?
 
----
+A marketplace connecting international travelers with people who need items
+moved across borders. Travelers earn from luggage space on trips they were
+already making. Senders pay less than courier tariffs. The platform only
+facilitates matching, communication, and payment. The traveler is always an
+independent user, never an employee or contractor.
 
-## 1. What is Peregri?
-
-A marketplace that connects international travelers with people who need items transported across borders.
-
-Instead of using traditional courier companies, the platform allows ordinary travelers to carry items in unused luggage space and earn money, while requesters receive significantly cheaper international delivery.
-
-Peregri is **not** a courier company, logistics company, Uber for packages, or classified ads site. It is a marketplace connecting travelers with delivery requests. The traveler is always an independent user. The platform only facilitates matching, communication, and payment.
-
-**Example:**
-- Alice is flying from Berlin to New York.
-- Bob wants someone to bring him a graphics tablet.
-- Alice has spare luggage capacity.
-- Bob pays Alice through the platform.
-- Both users verify completion. Both leave reviews.
-
-The traveler earns money for a trip they were already making. The requester receives a much cheaper delivery.
-
----
+Example: Alice flies Berlin to Istanbul with spare space. Bob needs a box
+moved along that route, or wants something bought there and brought back.
+They match, message, both confirm, hand over, confirm receipt, review.
 
 ## 2. Core Philosophy
 
-The project is built around one simple observation: **people travel anyway.**
+**People travel anyway.** The platform creates no transportation; it matches
+existing transportation. Density over geography: one liquid corridor beats
+fifty empty countries. Launch corridors: Mexico/US, EU/UK, Turkey/Germany,
+Poland/Ukraine, Azerbaijan/Russia, Kazakhstan/Russia.
 
-Peregri connects people who already have matching interests. The platform does not create transportation — it matches existing transportation. That distinction is important because it keeps the marketplace scalable and simple.
+**Trust is the product.** Identity verification (human-checked ID on file,
+duplicates blocked), mutual reviews, held escrow, fast bans. Verification is
+optional and means deterrence, never a promise. Copy rule: the user always
+decides; nothing is automatic.
 
-### Long-term vision
+**Business model:** platform fee on completed transactions. No aggressive
+monetization during MVP.
 
-The goal is to become the default place people visit whenever they think: *"Someone is already going there."*
+## 3. Model: carry / need (replaces trip / request / delivery)
 
-Instead of asking friends, posting on Facebook, or messaging Telegram groups, people should naturally check Peregri. Eventually the platform should support travelers, delivery requests, personal shopping, airport pickups, local errands, document delivery, and international communities — everything connected through one marketplace.
-
-### Target audience
-
-The initial audience is not "everyone." First users should come from routes where international travel is already common and dense: Mexico ↔ United States, EU ↔ UK, Turkey ↔ Germany, Poland ↔ Ukraine, Azerbaijan ↔ Russia, Kazakhstan ↔ Russia.
-
-Launching in one dense corridor is significantly better than launching globally with no liquidity.
-
-### Marketplace philosophy
-
-**Density over geography.** One active route with thousands of users is better than fifty inactive countries. Every product decision should increase marketplace liquidity.
-
-### Business model
-
-Primary revenue: platform fee on successful transactions.
-
-Future potential: promoted listings, verified traveler subscription, insurance, premium visibility, business accounts, API integrations.
-
-Avoid excessive monetization during MVP. Growth is more valuable than immediate profit.
-
-### Trust philosophy
-
-Trust is the single biggest challenge. Every feature should increase trust. Examples: verified identity, reviews, ratings, completed deliveries, profile history, response time.
-
-### Product principles
-
-Every feature should satisfy at least one of: reduce friction, increase trust, improve matching, simplify communication. If a feature doesn't improve one of those four things, reconsider whether it belongs in the MVP.
-
----
-
-## 3. Development Philosophy
-
-The project intentionally prioritizes correct architecture over fast hacks. It is acceptable to spend extra time designing a clean solution if it avoids technical debt.
-
-The goal is not simply finishing the MVP — it is building a foundation that can survive years of development.
-
-### AI collaboration philosophy
-
-AI is used as a development assistant. AI should accelerate implementation. AI should **not** redesign architecture without explicit approval.
-
-Whenever AI proposes changes it should preserve: existing architecture, design language, naming conventions, database philosophy, user experience.
-
-Consistency is valued more than novelty. Large rewrites are discouraged unless explicitly requested.
-
-See the Design Philosophy and Technical Architecture files for the specific rules that govern UI and backend decisions respectively.
-
----
+- `carry`: "I am going, I have space." Owner is the courier.
+- `need`: "Move this for me." Non-owner is the courier.
+- `needs_purchase` flag on need: carrier buys the item, cost settled in chat.
+- No weight/capacity fields. No flex control in UI: one anchor date, the
+  listing's own flexibility flag widens matching automatically.
+- Listing lifecycle:
+  open > conversation > both confirm > handover > receipt > completed.
+  Carry listings stay open after a deal (other senders welcome).
+  Need listings close on completion.
 
 ## 4. Current Project State
 
-*(Update this section whenever a major feature area changes.)*
-
-### Implemented and complete
+### Implemented and verified live
 
 | Feature | Notes |
 |---------|-------|
-| Authentication | Supabase Auth — sign in, sign up, session management |
-| Profiles | Public profile pages, avatar, bio, city/country, transaction history |
-| Listings | Trip / delivery / request kinds; create, browse, filter by route + date + price; date flexibility (exact / ±1 week / ±1 month) |
-| Listing detail | Full detail page with owner info, verified badge |
-| Messaging | Threads, conversations, system-generated event notices (`is_system` messages) |
-| Match confirmation | Both parties confirm → `delivery_confirmations` row created |
-| Delivery flow | Courier marks handover; recipient confirms receipt → deal archived to `completed_deals` |
-| Completed-deal history | Immutable snapshots driving profile history and review eligibility |
-| Reviews | Tied to a specific `completed_deal_id`; one review per participant per deal |
-| Payments | Stripe Checkout session created; webhook confirms payment |
-| Reports | User/listing abuse report submission (backend complete) |
-| Algorithmic matching | `/matches` page: shows complementary listings from other users that overlap your own listings by route and date window |
-| Identity verification | Manual flow: user submits ID + selfie → admin reviews via Telegram bot → `profiles.identity_verified` set on approval |
-| 404 page | Styled not-found page |
-| Navigation | Top nav bar, slide-in user drawer, mobile hamburger menu |
+| Auth | Self-owned email/password: signup/signin/refresh/signout/me + password change. 15-min JWT, rotating 30-day refresh. Proven: 201/200/200/401 paths |
+| Profiles | Dossier pages, avatar (512px JPEG), bio, home city, track record, reviews |
+| Listings | carry/need, create, browse ledger, anchor-date search, buy flag |
+| My Routes | Matches grouped under own listings + manage (close/delete). `/matches` forwards here |
+| Messaging | Threads, polling (15s list, 5s open thread), system event notices, mark-read, unread badges |
+| Deal flow | confirm x2 > handover > received > snapshot. Proven for carry AND need paths |
+| Reviews | Anchored to `completed_deal_id`, one per participant per deal, seg 1-5 input |
+| Reports | Submission from profiles (backend complete, admin queue removed for now) |
+| Verification | In-app manual review: photos held on disk until decision, blind admin queue at `/admin`, ID hash duplicate detection, photos deleted on decision |
+| Account menu | Avatar menu (Profile, Messages, My routes, Settings, Sign out), both navs |
+| Settings | Profile/account/danger sections, avatar change, password change |
 
-### Known gaps / placeholder features
+### Known gaps
 
 | Item | Status |
 |------|--------|
-| Payment frontend | Backend Stripe integration is ready; no checkout UI exists in the frontend. `/pay/{thread_id}` and `/pay/{thread_id}/success` routes do not exist → Stripe redirects currently land on 404. |
-| Report form | `/reports/new` route renders a "coming soon" placeholder — no submission form yet. |
-| `FRONTEND_URL` env var | Required for Stripe redirects; not yet documented in deployment secrets. |
+| Payments | Free while pre Yookassa. Handover code carries receipt. `payments` table dormant, no Stripe code left |
+| Password reset email | No email flows at all; Resend unwired, no token needed yet |
+| Reports admin queue | Built then reverted at user request; submit endpoint kept |
+| Email confirmation | Signup signs straight in by design |
+| Server move | Laptop `docker compose` is canonical; real server needs fresh secrets + HTTPS + `/files` routing |
 
----
+## 5. Development Philosophy
 
-## 5. Schema Migration History
+Correct architecture over fast hacks. AI accelerates implementation but does
+not redesign architecture without approval. Consistency over novelty.
+Surgical changes: every changed line traces to the request. Verify through
+execution: builds, live API probes, headless-browser checks. Nothing is
+committed without explicit request.
 
-Migrations live in `supabase/migrations/`. In chronological order:
-
-| Migration | What it added |
-|-----------|--------------|
-| `0001_initial_schema.sql` | Base schema: profiles, listings, threads, messages, payments, reviews, reports, notification_log |
-| `20260621055403_initial_schema.sql` | Duplicate/revised initial schema |
-| `20260626000000_listings_extended_fields.sql` | `listings.date_flexibility` column |
-| `20260629000000_match_and_history.sql` | `messages.is_system`, `completed_deals` table, revised match confirmation trigger |
-| `20260704000000_simplify_date_flexibility.sql` | Simplified flexibility enum |
-| `20260705000000_reviews_anchor_completed_deals.sql` | Reviews now reference `completed_deal_id` instead of `listing_id` directly |
-| `20260712000000_option_b_delivery_flow.sql` | `delivery_confirmations` table |
-
----
-
-## 6. What Peregri is NOT
-
-- Not a courier company or logistics company
-- Not Uber for packages
-- Not a classified ads website
-- Not a platform where the traveler is an employee or contractor
-
-The traveler is always an independent user. The platform facilitates matching, communication, and payment only.
+Backend runs from a baked docker image: code changes need
+`up -d --build`, a plain restart does nothing. Dev frontend needs restart
+after `vite.config.ts` changes. Single canonical schema in `db/schema.sql`;
+changes ship as numbered files in `db/migrations/` applied live with psql.

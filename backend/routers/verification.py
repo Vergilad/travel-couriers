@@ -2,81 +2,109 @@
 Verification router — handles:
   - GET  /api/verification/status           current user's verification status
   - POST /api/verification/start-manual     submit ID + selfie for manual review
-  - POST /api/verification/bot-webhook      Telegram bot webhook (admin approve/reject)
-  - POST /api/verification/setup-webhook    one-time helper to register the bot webhook URL
+  - GET  /api/verification/requests         admin: pending queue
+  - GET  /api/verification/requests/{user_id}/photo  admin: review a photo
+  - POST /api/verification/requests/{user_id}/approve  admin
+  - POST /api/verification/requests/{user_id}/reject   admin
+
+Manual review, no bots: photos wait on our own disk until decision, then are
+deleted. The DB keeps only the submitted name, the ID photo hash (same
+document on two accounts lights up as a duplicate), and who approved.
 """
 from __future__ import annotations
 
-import logging
+import hashlib
 import os
+import shutil
 from datetime import datetime, timezone
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-from db import supabase
-from routers.auth import get_current_user
+from db import get_conn, fetchone, fetchall
+from routers.auth import get_current_user, require_admin
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ─── Config ──────────────────────────────────────────────────────────────────
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+REVIEW_DIR = os.path.join(DATA_DIR, "verification")
+os.makedirs(REVIEW_DIR, exist_ok=True)
 
-def _bot_token() -> str:
-    return os.getenv("TELEGRAM_BOT_TOKEN", "")
+# Documents need detail, so the cap is roomier than avatars (2 MB).
+MAX_BYTES = 8 * 1024 * 1024
+ALLOWED_EXT = {"jpg", "jpeg", "png", "webp"}
+PHOTO_KINDS = {"id": "id", "selfie": "selfie"}
 
-def _admin_chat() -> str:
-    return os.getenv("TELEGRAM_ADMIN_CHAT_ID", "")
-
-def _webhook_secret() -> str:
-    return os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-
-def _tg(path: str) -> str:
-    return f"https://api.telegram.org/bot{_bot_token()}/{path}"
-
-def _guard():
-    if not supabase:
-        raise HTTPException(503, "Database not configured")
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-# ─── Endpoints ────────────────────────────────────────────────────────────────
+
+def _user_dir(user_id: str) -> str:
+    return os.path.join(REVIEW_DIR, user_id)
+
+
+def _check_image(name: str, content_type: str | None, data: bytes) -> str:
+    ext = (name or "").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_EXT or not (content_type or "").startswith("image/"):
+        raise HTTPException(400, "Verification photos must be JPG, PNG or WebP images")
+    if not data or len(data) > MAX_BYTES:
+        raise HTTPException(400, "Verification photos must be non-empty and under 8 MB")
+    return ext
+
+
+def _photo_path(user_id: str, kind: str) -> str | None:
+    """Stored file for a pending review, or None when already decided."""
+    d = _user_dir(user_id)
+    if not os.path.isdir(d):
+        return None
+    for f in sorted(os.listdir(d)):
+        if f.startswith(f"{kind}."):
+            return os.path.join(d, f)
+    return None
+
+
+def _clear_photos(user_id: str) -> None:
+    shutil.rmtree(_user_dir(user_id), ignore_errors=True)
+
+
+class RejectIn(BaseModel):
+    reason: str | None = None
+
+
+# ─── User endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/status")
 async def get_verification_status(user=Depends(get_current_user)):
     """Return the current user's verification status."""
-    _guard()
-    profile = (
-        supabase.table("profiles")
-        .select("identity_verified, verification_method")
-        .eq("id", user.id)
-        .maybe_single()
-        .execute()
-    )
-    if profile.data and profile.data.get("identity_verified"):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT identity_verified, verification_method FROM profiles"
+            " WHERE id = %s",
+            (user.id,),
+        )
+        profile = fetchone(cur)
+    if profile and profile.get("identity_verified"):
         return {
             "verified": True,
-            "method": profile.data.get("verification_method"),
+            "method": profile.get("verification_method"),
             "status": "approved",
         }
 
-    req = (
-        supabase.table("verification_requests")
-        .select("status, method, rejection_reason")
-        .eq("user_id", user.id)
-        .order("submitted_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if req.data:
-        r = req.data[0]
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT status, method, rejection_reason FROM verification_requests"
+            " WHERE user_id = %s ORDER BY submitted_at DESC LIMIT 1",
+            (user.id,),
+        )
+        req = fetchone(cur)
+    if req:
         return {
             "verified": False,
-            "method": r.get("method"),
-            "status": r.get("status"),
-            "rejection_reason": r.get("rejection_reason"),
+            "method": req.get("method"),
+            "status": req.get("status"),
+            "rejection_reason": req.get("rejection_reason"),
         }
 
     return {"verified": False, "method": None, "status": "unverified"}
@@ -89,169 +117,139 @@ async def start_manual(
     selfie_photo: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    """Submit a manual verification request: ID photo + selfie with ID.
-    Photos are forwarded to the admin's Telegram chat and immediately discarded —
-    they are never stored on our servers.
-    """
-    _guard()
-
-    profile = (
-        supabase.table("profiles")
-        .select("identity_verified")
-        .eq("id", user.id)
-        .maybe_single()
-        .execute()
-    )
-    if profile.data and profile.data.get("identity_verified"):
+    """Submit a manual verification request. Photos wait on our disk until an
+    admin decides, then are deleted. Only the name + ID hash stay in the DB."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT identity_verified FROM profiles WHERE id = %s", (user.id,)
+        )
+        profile = fetchone(cur)
+    if profile and profile.get("identity_verified"):
         raise HTTPException(400, "Already verified")
 
-    # Delete any stale pending manual request so the user can re-submit
-    supabase.table("verification_requests").delete().eq("user_id", user.id).eq(
-        "method", "manual"
-    ).eq("status", "pending").execute()
-
-    if not _bot_token() or not _admin_chat():
-        raise HTTPException(503, "Verification service not configured — admin credentials missing")
-
-    # Read files into memory (never touch disk)
     id_bytes = await id_photo.read()
     selfie_bytes = await selfie_photo.read()
+    id_ext = _check_image(id_photo.filename or "", id_photo.content_type, id_bytes)
+    selfie_ext = _check_image(selfie_photo.filename or "", selfie_photo.content_type, selfie_bytes)
+    id_hash = hashlib.sha256(id_bytes).hexdigest()
 
-    user_tag = f"{user.id[:8]}…"
-    caption_id = f"ID Document\nUser: {user_tag}\nName submitted: {full_name}"
-    caption_selfie = f"Selfie + ID\nUser: {user_tag}"
-    action_text = (
-        f"📋 Manual Verification Request\n"
-        f"Full user ID: {user.id}\n"
-        f"Email: {user.email}\n"
-        f"Name: {full_name}\n\n"
-        f"Tap a button below to approve or reject."
-    )
-    keyboard = {
-        "inline_keyboard": [
-            [
-                {"text": "Approve", "callback_data": f"approve:{user.id}"},
-                {"text": "Reject", "callback_data": f"reject:{user.id}"},
-            ]
-        ]
-    }
+    # Fixed names per user: resubmit replaces the waiting photos.
+    d = _user_dir(user.id)
+    os.makedirs(d, exist_ok=True)
+    for stale in os.listdir(d):
+        if stale.startswith("id.") or stale.startswith("selfie."):
+            os.remove(os.path.join(d, stale))
+    with open(os.path.join(d, f"id.{id_ext}"), "wb") as f:
+        f.write(id_bytes)
+    with open(os.path.join(d, f"selfie.{selfie_ext}"), "wb") as f:
+        f.write(selfie_bytes)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        await client.post(
-            _tg("sendPhoto"),
-            data={"chat_id": _admin_chat(), "caption": caption_id},
-            files={"photo": (id_photo.filename or "id.jpg", id_bytes, id_photo.content_type or "image/jpeg")},
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM verification_requests WHERE user_id = %s"
+            " AND method = 'manual' AND status = 'pending'",
+            (user.id,),
         )
-        await client.post(
-            _tg("sendPhoto"),
-            data={"chat_id": _admin_chat(), "caption": caption_selfie},
-            files={"photo": (selfie_photo.filename or "selfie.jpg", selfie_bytes, selfie_photo.content_type or "image/jpeg")},
+        cur.execute(
+            "INSERT INTO verification_requests (user_id, method, status, verified_name, id_photo_sha256)"
+            " VALUES (%s, 'manual', 'pending', %s, %s)",
+            (user.id, full_name, id_hash),
         )
-        await client.post(
-            _tg("sendMessage"),
-            json={"chat_id": _admin_chat(), "text": action_text, "reply_markup": keyboard},
-        )
-
-    # Store the pending request (photos are NOT stored — only the name)
-    supabase.table("verification_requests").insert(
-        {
-            "user_id": user.id,
-            "method": "manual",
-            "status": "pending",
-            "verified_name": full_name,
-        }
-    ).execute()
 
     return {"ok": True, "status": "pending"}
 
 
-# ─── Telegram bot webhook ─────────────────────────────────────────────────────
+# ─── Admin endpoints ──────────────────────────────────────────────────────────
 
-@router.post("/bot-webhook")
-async def bot_webhook(request: Request):
-    """Telegram bot webhook — receives admin approve/reject button callbacks."""
-    secret = _webhook_secret()
-    if secret:
-        incoming = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if incoming != secret:
-            return JSONResponse({"ok": False}, status_code=403)
+@router.get("/requests")
+async def list_requests(admin=Depends(require_admin)):
+    """Pending queue, oldest first. Blind by construction: the response
+    carries request IDs only, never accounts. The submitted name stays
+    because comparing it against the ID document is the review itself."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, verified_name, submitted_at, id_photo_sha256"
+            " FROM verification_requests"
+            " WHERE method = 'manual' AND status = 'pending'"
+            " ORDER BY submitted_at ASC"
+        )
+        rows = fetchall(cur)
+        out = []
+        for r in rows:
+            dup = 0
+            if r.get("id_photo_sha256"):
+                cur.execute(
+                    "SELECT COUNT(DISTINCT user_id) FROM verification_requests"
+                    " WHERE id_photo_sha256 = %s",
+                    (r["id_photo_sha256"],),
+                )
+                dup = (fetchone(cur) or {}).get("count", 0) - 1
+            out.append({
+                "id": str(r["id"]),
+                "verified_name": r.get("verified_name"),
+                "submitted_at": r.get("submitted_at"),
+                "duplicates": max(dup, 0),
+            })
+        return out
 
-    try:
-        update = await request.json()
-    except Exception:
-        return JSONResponse({"ok": True})
 
-    if "callback_query" in update:
-        await _handle_callback_query(update["callback_query"])
+def _pending_user(request_id: str) -> str:
+    """Resolve a pending request to its owner, or 404. The only place a
+    request ID touches an account."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT user_id FROM verification_requests WHERE id = %s"
+            " AND method = 'manual' AND status = 'pending'",
+            (request_id,),
+        )
+        row = fetchone(cur)
+    if not row:
+        raise HTTPException(404, "No pending request with this id")
+    return str(row["user_id"])
 
-    return JSONResponse({"ok": True})
+
+@router.get("/requests/{request_id}/photo")
+async def review_photo(request_id: str, kind: str = "id", admin=Depends(require_admin)):
+    """Serve one waiting photo to the admin. Nothing here is public."""
+    if kind not in PHOTO_KINDS:
+        raise HTTPException(400, "kind must be id or selfie")
+    path = _photo_path(_pending_user(request_id), PHOTO_KINDS[kind])
+    if not path:
+        raise HTTPException(404, "No waiting photos for this request")
+    ext = path.rsplit(".", 1)[-1].lower()
+    media = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+    return FileResponse(path, media_type=media)
 
 
-async def _handle_callback_query(cq: dict):
-    """Admin taps Approve / Reject on a manual verification request."""
-    if not supabase:
-        return
-
-    data = cq.get("data", "")
-    cq_id = cq.get("id", "")
-    chat_id = cq.get("message", {}).get("chat", {}).get("id")
-    message_id = cq.get("message", {}).get("message_id")
-
-    if not (data.startswith("approve:") or data.startswith("reject:")):
-        return
-
-    action, user_id = data.split(":", 1)
-    is_approve = action == "approve"
+@router.post("/requests/{request_id}/approve")
+async def approve_request(request_id: str, admin=Depends(require_admin)):
+    user_id = _pending_user(request_id)
     now = _now()
-
-    if is_approve:
-        supabase.table("profiles").update(
-            {"identity_verified": True, "verification_method": "manual"}
-        ).eq("id", user_id).execute()
-        supabase.table("verification_requests").update(
-            {"status": "approved", "reviewed_at": now}
-        ).eq("user_id", user_id).eq("method", "manual").eq("status", "pending").execute()
-        answer_text = "User approved"
-        status_label = "APPROVED"
-    else:
-        supabase.table("verification_requests").update(
-            {"status": "rejected", "reviewed_at": now, "rejection_reason": "Rejected by admin"}
-        ).eq("user_id", user_id).eq("method", "manual").eq("status", "pending").execute()
-        answer_text = "User rejected"
-        status_label = "REJECTED"
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(_tg("answerCallbackQuery"), json={"callback_query_id": cq_id, "text": answer_text})
-        if chat_id and message_id:
-            await client.post(
-                _tg("editMessageReplyMarkup"),
-                json={"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
-            )
-            await client.post(
-                _tg("sendMessage"),
-                json={"chat_id": chat_id, "text": f"{status_label} — user `{user_id[:8]}…`", "parse_mode": "Markdown"},
-            )
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE profiles SET identity_verified = TRUE,"
+            " verification_method = 'manual' WHERE id = %s",
+            (user_id,),
+        )
+        cur.execute(
+            "UPDATE verification_requests SET status = 'approved',"
+            " reviewed_at = %s, reviewed_by = %s WHERE id = %s",
+            (now, admin.id, request_id),
+        )
+    _clear_photos(user_id)
+    return {"ok": True, "status": "approved"}
 
 
-# ─── One-time webhook setup helper ────────────────────────────────────────────
-
-@router.post("/setup-webhook")
-async def setup_webhook(webhook_url: str, user=Depends(get_current_user)):
-    """Register the Telegram bot webhook. Call once after deployment."""
-    if not _bot_token():
-        raise HTTPException(503, "TELEGRAM_BOT_TOKEN not set")
-
-    full_url = f"{webhook_url.rstrip('/')}/api/verification/bot-webhook"
-    payload: dict = {"url": full_url, "allowed_updates": ["callback_query"]}
-    secret = _webhook_secret()
-    if secret:
-        payload["secret_token"] = secret
-
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.post(_tg("setWebhook"), json=payload)
-        result = r.json()
-
-    if not result.get("ok"):
-        raise HTTPException(500, f"Telegram error: {result.get('description', 'unknown')}")
-
-    return {"ok": True, "webhook_url": full_url}
+@router.post("/requests/{request_id}/reject")
+async def reject_request(request_id: str, body: RejectIn, admin=Depends(require_admin)):
+    user_id = _pending_user(request_id)
+    now = _now()
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE verification_requests SET status = 'rejected',"
+            " reviewed_at = %s, reviewed_by = %s, rejection_reason = %s"
+            " WHERE id = %s",
+            (now, admin.id, (body.reason or "").strip() or "Rejected by admin", request_id),
+        )
+    _clear_photos(user_id)
+    return {"ok": True, "status": "rejected"}

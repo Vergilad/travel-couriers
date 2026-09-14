@@ -1,5 +1,18 @@
+import logging
 from functools import wraps
 from fastapi import HTTPException
+
+log = logging.getLogger("peregri")
+
+
+def public_error(action: str, e: Exception) -> HTTPException:
+    """Log the real cause server-side; the client only gets a generic line.
+
+    Every `except` that used to return str(e) goes through here: SQL and
+    filesystem details must never reach the browser.
+    """
+    log.exception("Failed to %s", action)
+    return HTTPException(400, f"Failed to {action}. Try again.")
 
 
 def handle_db_errors(action: str):
@@ -12,6 +25,6 @@ def handle_db_errors(action: str):
             except HTTPException:
                 raise
             except Exception as e:
-                raise HTTPException(400, f"Failed to {action}: {str(e)}")
+                raise public_error(action, e)
         return wrapper
     return decorator

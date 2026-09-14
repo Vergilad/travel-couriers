@@ -3,7 +3,6 @@ from datetime import date, timedelta
 from typing import Literal, Optional
 
 MAX_PRICE = 10_000.0
-MAX_CAPACITY_KG = 3_000.0
 
 # Text length boundaries, enforced on the backend as well as the UI.
 MAX_DISPLAY_NAME = 40
@@ -23,7 +22,8 @@ FLEXIBILITY_DAYS: dict[str, int] = {
 
 
 class ListingCreate(BaseModel):
-    kind: Literal["trip", "request", "delivery"]
+    kind: Literal["carry", "need"]
+    needs_purchase: bool = False
     origin_city: str
     origin_country: str
     dest_city: str
@@ -32,7 +32,6 @@ class ListingCreate(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     currency: str = "USD"
-    capacity_kg: Optional[float] = None
     depart_date: Optional[date] = None
     arrive_date: Optional[date] = None
     accepts_multiple: bool = False
@@ -46,16 +45,6 @@ class ListingCreate(BaseModel):
                 raise ValueError("Price cannot be negative")
             if v > MAX_PRICE:
                 raise ValueError(f"Price cannot exceed {MAX_PRICE:,.0f}")
-        return v
-
-    @field_validator("capacity_kg")
-    @classmethod
-    def validate_capacity(cls, v):
-        if v is not None:
-            if v <= 0:
-                raise ValueError("Capacity must be greater than 0")
-            if v > MAX_CAPACITY_KG:
-                raise ValueError(f"Capacity cannot exceed {MAX_CAPACITY_KG:,.0f} kg")
         return v
 
     @field_validator("origin_city", "dest_city", "origin_country", "dest_country", "title")
@@ -122,6 +111,19 @@ class ReviewCreate(BaseModel):
             return ""
         if len(v) > MAX_REVIEW_COMMENT:
             raise ValueError(f"Comment cannot exceed {MAX_REVIEW_COMMENT} characters")
+        return v
+
+
+class HandoverCodeSubmit(BaseModel):
+    thread_id: str
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v):
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Code cannot be empty")
         return v
 
 

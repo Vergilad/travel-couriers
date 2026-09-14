@@ -14,6 +14,7 @@ class ProfileFields:
     CITY = "city"
     COUNTRY = "country"
     CREATED_AT = "created_at"
+    IDENTITY_VERIFIED = "identity_verified"
 
 
 class ListingFields:

@@ -1,1 +1,0 @@
-ALTER TABLE listings ADD COLUMN IF NOT EXISTS date_flexibility TEXT DEFAULT 'exact' CHECK (date_flexibility IN ('exact', '3days', '1week', '2weeks'));

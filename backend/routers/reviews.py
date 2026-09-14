@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
-from db import supabase
+from db import get_conn, fetchone, fetchall
 from models import ReviewCreate
 from routers.auth import get_current_user
-from error_handlers import handle_db_errors
+from error_handlers import handle_db_errors, public_error
 
 router = APIRouter()
 
@@ -21,13 +21,12 @@ def _enrich_reviews(rows: list[dict]) -> list[dict]:
     reviewer_ids = {r["reviewer_id"] for r in rows if r.get("reviewer_id")}
     if not reviewer_ids:
         return rows
-    prof_res = (
-        supabase.table("profiles")
-        .select("id, display_name, avatar_url")
-        .in_("id", list(reviewer_ids))
-        .execute()
-    )
-    prof_map = {p["id"]: p for p in (prof_res.data or [])}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, display_name, avatar_url FROM profiles WHERE id = ANY(%s)",
+            (list(reviewer_ids),),
+        )
+        prof_map = {p["id"]: p for p in fetchall(cur)}
     for r in rows:
         p = prof_map.get(r.get("reviewer_id"), {})
         r["reviewer"] = {
@@ -47,22 +46,21 @@ async def get_eligible_deal(partner_id: str, user=Depends(get_current_user)):
     caller has NOT yet reviewed. Drives the "Rate {partner}" button on the
     partner's profile. Returns null when there is nothing to review.
     """
-    deals = (
-        supabase.table("completed_deals")
-        .select("id, kind, origin_city, dest_city, completed_at, user_a, user_b")
-        .or_(f"user_a.eq.{user.id},user_b.eq.{user.id}")
-        .order("completed_at", desc=True)
-        .execute()
-    )
-    my_reviews = (
-        supabase.table("reviews")
-        .select("completed_deal_id")
-        .eq("reviewer_id", user.id)
-        .execute()
-    )
-    already_reviewed = {r["completed_deal_id"] for r in (my_reviews.data or [])}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, kind, origin_city, dest_city, completed_at, user_a, user_b"
+            " FROM completed_deals WHERE user_a = %s OR user_b = %s"
+            " ORDER BY completed_at DESC",
+            (user.id, user.id),
+        )
+        deals = fetchall(cur)
+        cur.execute(
+            "SELECT completed_deal_id FROM reviews WHERE reviewer_id = %s",
+            (user.id,),
+        )
+        already_reviewed = {r["completed_deal_id"] for r in fetchall(cur)}
 
-    for d in deals.data or []:
+    for d in deals:
         parties = {d.get("user_a"), d.get("user_b")}
         if partner_id in parties and user.id in parties and d["id"] not in already_reviewed:
             return {
@@ -79,20 +77,15 @@ async def get_eligible_deal(partner_id: str, user=Depends(get_current_user)):
 @router.post("")
 @handle_db_errors("create review")
 async def create_review(body: ReviewCreate, user=Depends(get_current_user)):
-    if not supabase:
-        raise HTTPException(503, "Database not configured")
-
-    # Eligibility (server-side source of truth — service role bypasses RLS):
-    # the completed_deal must exist and have both the reviewer and the named
-    # reviewee as its two parties.
-    deal_res = (
-        supabase.table("completed_deals")
-        .select("id, user_a, user_b")
-        .eq("id", body.completed_deal_id)
-        .maybe_single()
-        .execute()
-    )
-    deal = deal_res.data or {}
+    # Eligibility (server-side source of truth): the completed_deal must
+    # exist and have both the reviewer and the named reviewee as its parties.
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, user_a, user_b FROM completed_deals WHERE id = %s",
+            (body.completed_deal_id,),
+        )
+        deal = fetchone(cur)
+    deal = deal or {}
     user_a, user_b = deal.get("user_a"), deal.get("user_b")
     parties = {user_a, user_b}
     if not deal or user.id not in parties:
@@ -103,31 +96,33 @@ async def create_review(body: ReviewCreate, user=Depends(get_current_user)):
     # Insert. The UNIQUE(completed_deal_id, reviewer_id) constraint catches a
     # double-submit race; surface it as a clear 409.
     try:
-        result = supabase.table("reviews").insert({
-            "completed_deal_id": body.completed_deal_id,
-            "reviewer_id": user.id,
-            "reviewee_id": body.reviewee_id,
-            "rating": body.rating,
-            "comment": body.comment or None,
-        }).execute()
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO reviews (completed_deal_id, reviewer_id, reviewee_id,"
+                " rating, comment) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+                (
+                    body.completed_deal_id, user.id, body.reviewee_id,
+                    body.rating, body.comment or None,
+                ),
+            )
+            result = fetchall(cur)
     except Exception as e:
         msg = str(e)
-        if "completed_deal_reviewer_unique" in msg or "unique" in msg.lower():
+        if "reviews_completed_deal_id_reviewer_id_key" in msg or "already exists" in msg.lower():
             raise HTTPException(409, "You have already reviewed this deal")
-        raise HTTPException(400, f"Failed to create review: {msg}")
+        raise public_error("create review", e)
 
-    return _enrich_reviews(result.data)[0]
+    return _enrich_reviews(result)[0]
 
 
 @router.get("/{user_id}")
 @handle_db_errors("fetch reviews")
 async def get_reviews(user_id: str):
     """All reviews received by user_id, newest first, with reviewer profiles merged."""
-    result = (
-        supabase.table("reviews")
-        .select(REVIEW_FIELDS)
-        .eq("reviewee_id", user_id)
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return _enrich_reviews(result.data or [])
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"SELECT {REVIEW_FIELDS} FROM reviews WHERE reviewee_id = %s"
+            " ORDER BY created_at DESC",
+            (user_id,),
+        )
+        return _enrich_reviews(fetchall(cur))

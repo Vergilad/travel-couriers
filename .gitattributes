@@ -1,0 +1,4 @@
+# Normalize line endings on commit. The repo standard is LF; Windows
+# checkouts get CRLF. Added during the Supabase removal cleanup to end
+# the whole-repo line-ending noise in `git status`.
+* text=auto
