@@ -23,3 +23,7 @@ infra/supabase/backups/
 
 # Vendored MCP servers (machine-local)
 MCP/
+
+# AI session working files (machine-local: agent prompts, handoffs, specs)
+SYSTEM_PROMPT.md
+docs/
