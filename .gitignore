@@ -15,11 +15,6 @@ frontend/.env
 # Vendored agent skills (machine-local)
 SKILLS/
 
-# Self-hosted Supabase stack runtime data (vendored stack's own gitignore also applies)
-infra/supabase/volumes/db/data/
-infra/supabase/volumes/storage/
-infra/supabase/.supabase-version
-infra/supabase/backups/
 
 # Vendored MCP servers (machine-local)
 MCP/
