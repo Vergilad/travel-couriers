@@ -1,9 +1,14 @@
+/**
+ * Inbox as Viactor paperwork: a thread ledger beside the open letter. Thread
+ * rows read like manifest lines (face, name, route, preview, unread stamp);
+ * the conversation is one field with a deal strip on top, messages in the
+ * middle, composer at the bottom. Same endpoints, same polling (15s list,
+ * 5s open thread), same deal stages; only the surface changed.
+ */
 import * as React from "react"
 import { useNavigate, Link } from "@tanstack/react-router"
-import { motion, AnimatePresence } from "framer-motion"
 import { useAuth } from "@/lib/auth"
-import { supabase } from "@/lib/supabase"
-import { getInitial } from "@/lib/db_constants"
+import { authedFetch } from "@/lib/api"
 import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
 import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
 import { useTranslation } from "@/i18n/I18nContext"
@@ -49,252 +54,289 @@ interface MatchState {
   is_me_courier: boolean
   handed_over: boolean
   received: boolean
+  handover_code: string | null
+  is_me_needer: boolean
+  code_locked: boolean
 }
 
-function authHeaders(token: string) {
-  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-}
-
-async function apiFetchThreads(token: string): Promise<ThreadSummary[]> {
-  const res = await fetch("/api/threads", { headers: authHeaders(token) })
-  if (!res.ok) throw new Error("Failed to load conversations")
-  return res.json()
-}
-
-async function apiFetchThread(threadId: string, token: string): Promise<ThreadDetail> {
-  const res = await fetch(`/api/threads/${threadId}`, { headers: authHeaders(token) })
-  if (!res.ok) throw new Error("Failed to load conversation")
-  return res.json()
-}
-
-async function apiSend(threadId: string, body: string, token: string): Promise<Message> {
-  const res = await fetch("/api/messages", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ thread_id: threadId, body }),
-  })
-  if (!res.ok) throw new Error("Failed to send message")
-  return res.json()
-}
-
-async function apiMarkRead(threadId: string, token: string): Promise<void> {
-  await fetch(`/api/messages/thread/${threadId}/read`, {
-    method: "PATCH",
-    headers: authHeaders(token),
-  })
-}
-
-async function apiGetMatchState(threadId: string, token: string): Promise<MatchState> {
-  const res = await fetch(`/api/matches?thread_id=${threadId}`, { headers: authHeaders(token) })
-  if (!res.ok) throw new Error("Failed to load match state")
-  return res.json()
-}
-
-async function apiConfirmMatch(threadId: string, token: string): Promise<{ both_confirmed: boolean }> {
-  const res = await fetch(`/api/matches/confirm?thread_id=${threadId}`, {
-    method: "POST",
-    headers: authHeaders(token),
-  })
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}))
-    if (res.status === 403 && d.detail?.code === "identity_not_verified") {
-      throw Object.assign(new Error("identity_not_verified"), { verificationDetail: d.detail })
-    }
-    throw new Error(typeof d.detail === "string" ? d.detail : "Failed to confirm")
-  }
-  return res.json()
-}
-
-async function apiHandover(threadId: string, token: string): Promise<void> {
-  const res = await fetch(`/api/matches/handover?thread_id=${threadId}`, {
-    method: "POST",
-    headers: authHeaders(token),
-  })
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}))
-    throw new Error(d.detail ?? "Failed to mark as delivered")
-  }
-}
-
-async function apiReceived(threadId: string, token: string): Promise<void> {
-  const res = await fetch(`/api/matches/received?thread_id=${threadId}`, {
-    method: "POST",
-    headers: authHeaders(token),
-  })
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}))
-    throw new Error(d.detail ?? "Failed to confirm receipt")
-  }
-}
-
-function formatTime(iso: string): string {
+function formatTime(iso: string, justNow: string, minutesAgo: string): string {
   const date = new Date(iso)
   const diff = Date.now() - date.getTime()
-  if (diff < 60_000) return "just now"
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 60_000) return justNow
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}${minutesAgo}`
   if (diff < 86_400_000) return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   if (diff < 604_800_000) return date.toLocaleDateString([], { weekday: "short" })
   return date.toLocaleDateString([], { month: "short", day: "numeric" })
 }
 
-const KIND_COLOR: Record<string, string> = {
-  trip: "#93c5fd",
-  request: "#86efac",
-  delivery: "#d8b4fe",
+function KindChip({ kind }: { kind: string | null | undefined }) {
+  const { t } = useTranslation()
+  if (!kind) return null
+  const k = kind.toLowerCase()
+  if (k === "carry" || k === "need") {
+    return (
+      <span className="stencil-chip" data-side={k}>
+        {t(`kinds.${k}`)}
+      </span>
+    )
+  }
+  return <span className="stencil-chip">{kind.toUpperCase()}</span>
 }
 
-function kindColor(kind: string | null | undefined) {
-  return KIND_COLOR[(kind ?? "").toLowerCase()] ?? "var(--text-faint)"
-}
-
-function UserAvatar({ name, url, size }: { name: string | null; url?: string | null; size: number }) {
+function Face({ name, url, size = 36 }: { name: string; url?: string | null; size?: number }) {
   return (
-    <div className="rounded-sm flex items-center justify-center shrink-0 overflow-hidden"
-      style={{ width: size, height: size, background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        background: "var(--face)",
+        border: "var(--bw) solid var(--line)",
+        borderRadius: "var(--radius-base)",
+        fontFamily: "var(--font-mono)",
+        fontWeight: 700,
+        fontSize: Math.max(11, Math.round(size * 0.4)),
+        color: "var(--face-ink)",
+      }}
+    >
       {url ? (
-        <img src={url} alt={name ?? ""} className="w-full h-full object-cover" />
+        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       ) : (
-        <span className="font-bold" style={{ fontFamily: "'DM Sans', sans-serif", fontSize: size * 0.42, color: "var(--accent)" }}>
-          {getInitial(name ?? "?")}
-        </span>
+        name.charAt(0).toUpperCase()
       )}
-    </div>
+    </span>
   )
 }
 
-function ThreadItem({ thread, selected, currentUserId, onClick }: {
+/** Two delivery ticks: handover, receipt. Real state, square like everything. */
+function DeliveryTicks({ step }: { step: 0 | 1 | 2 }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }} aria-hidden="true">
+      <span style={{ width: 10, height: 10, background: step >= 1 ? "var(--success)" : "transparent", border: "var(--bw) solid var(--line)" }} />
+      <span style={{ width: 16, height: 2, background: "var(--line)" }} />
+      <span style={{ width: 10, height: 10, background: step >= 2 ? "var(--success)" : "transparent", border: "var(--bw) solid var(--line)" }} />
+    </span>
+  )
+}
+
+// ── Thread ledger row ───────────────────────────────────────────────────────
+
+function ThreadRow({ thread, selected, currentUserId, onClick }: {
   thread: ThreadSummary; selected: boolean; currentUserId: string; onClick: () => void
 }) {
   const { t } = useTranslation()
   const other = thread.other_participant
-  const name = other.display_name ?? t('inbox.anonymous')
+  const name = other.display_name ?? t("inbox.anonymous")
   const lastMsg = thread.last_message
   const preview = lastMsg
     ? lastMsg.sender_id === null
       ? lastMsg.body
       : lastMsg.sender_id === currentUserId
-        ? `${t('inbox.you')}${lastMsg.body}`
+        ? `${t("inbox.you")}${lastMsg.body}`
         : lastMsg.body
-    : "No messages yet"
+    : t("messages.no_messages")
 
   return (
-    <button onClick={onClick}
-      className="w-full text-left flex items-center gap-3 px-4 py-3.5 transition-colors relative"
-      style={{ background: selected ? "var(--surface-raised)" : "transparent", borderBottom: "1px solid var(--border)", ...(selected ? { borderLeft: "2px solid var(--accent)", paddingLeft: 14 } : {}) }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "var(--surface)" }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent" }}>
-      <UserAvatar name={name} url={other.avatar_url} size={40} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[13px] truncate font-medium" style={{ color: selected ? "var(--text)" : "var(--text-muted)" }}>{name}</span>
-          <span className="text-[10px] ml-2 shrink-0" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-            {lastMsg ? formatTime(lastMsg.created_at) : ""}
-          </span>
-        </div>
-        <div className="text-[10px] truncate mb-0.5" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={selected || undefined}
+      className="dossier-row field-row"
+      style={{ cursor: "pointer", width: "100%", textAlign: "left", border: 0 }}
+    >
+      <Face name={name} url={other.avatar_url} size={36} />
+      <span style={{ minWidth: 0 }}>
+        <span className="font-display" style={{ fontSize: "1rem", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </span>
+        <span className="font-label field-dim" style={{ display: "block", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {thread.listing_title}
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] truncate" style={{ color: "var(--text-faint)" }}>{preview}</span>
-          {thread.unread_count > 0 && (
-            <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold"
-              style={{ background: "var(--accent)", color: "#ffffff" }}>
-              {thread.unread_count > 9 ? "9+" : thread.unread_count}
-            </span>
-          )}
-        </div>
-      </div>
+        </span>
+        <span className="copy ink-dim" style={{ display: "block", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.85rem" }}>
+          {preview}
+        </span>
+      </span>
+      <span style={{ display: "grid", gap: 6, justifyItems: "end" }}>
+        <span className="font-label field-dim tabular" style={{ whiteSpace: "nowrap" }}>
+          {lastMsg ? formatTime(lastMsg.created_at, t("messages.just_now"), t("messages.minutes_ago")) : ""}
+        </span>
+        {thread.unread_count > 0 && (
+          <span
+            aria-label={`${thread.unread_count} unread`}
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              minWidth: 20,
+              height: 20,
+              padding: "0 5px",
+              background: "var(--orange)",
+              color: "var(--on-fill)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+            }}
+          >
+            {thread.unread_count > 9 ? "9+" : thread.unread_count}
+          </span>
+        )}
+      </span>
     </button>
   )
 }
 
-function MessageRow({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
+// ── Message bubble ──────────────────────────────────────────────────────────
+
+function MessageRow({ msg, isOwn, justNow, minutesAgo }: { msg: Message; isOwn: boolean; justNow: string; minutesAgo: string }) {
   if (msg.is_system) {
     return (
-      <div className="flex justify-center my-4">
-        <div className="px-4 py-1.5 rounded-sm text-[11px] tracking-wider text-center max-w-[85%]"
-          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)", background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
+      <div style={{ display: "flex", justifyContent: "center", margin: "14px 0" }}>
+        <p className="font-label" style={{ margin: 0, textAlign: "center", maxWidth: "85%", color: "var(--text-muted)" }}>
           {msg.body}
-        </div>
+        </p>
       </div>
     )
   }
   return (
-    <div className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[72%] ${isOwn ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
-        <div className="px-3.5 py-2 rounded-sm text-[14px] leading-relaxed"
-          style={isOwn
-            ? { background: "rgba(37,99,235,0.18)", color: "var(--text)", border: "1px solid rgba(37,99,235,0.25)" }
-            : { background: "var(--surface-raised)", color: "var(--text)", border: "1px solid var(--border)" }}>
+    <div style={{ display: "flex", justifyContent: isOwn ? "flex-end" : "flex-start", marginBottom: 12 }}>
+      <div style={{ maxWidth: "75%", display: "flex", flexDirection: "column", gap: 4, alignItems: isOwn ? "flex-end" : "flex-start" }}>
+        <div
+          className="copy"
+          style={{
+            margin: 0,
+            padding: "10px 14px",
+            background: isOwn ? "var(--teal)" : "var(--sheet)",
+            color: isOwn ? "var(--on-fill)" : "var(--text)",
+            border: "var(--bw) solid var(--line)",
+            borderRadius: "var(--radius-base)",
+            overflowWrap: "anywhere",
+          }}
+        >
           {msg.body}
         </div>
-        <span className="text-[10px] px-1" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-          {formatTime(msg.created_at)}
+        <span className="font-label field-dim tabular">
+          {formatTime(msg.created_at, justNow, minutesAgo)}
         </span>
       </div>
     </div>
   )
 }
 
-function DeliveryProgress({ step }: { step: 0 | 1 | 2 }) {
+// ── Handover code: needer reads it, courier types it ────────────────────────
+// The code is minted at both-confirm and shown only to the needer
+// (parcel owner side). The courier entering it IS the receipt event.
+
+function CodeDisplay({ code, locked, onRegenerate, busy }: {
+  code: string | null; locked: boolean; onRegenerate: () => void; busy: boolean
+}) {
+  const { t } = useTranslation()
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <div className="w-2 h-2 rounded-sm transition-all" style={{ background: step >= 1 ? "var(--success)" : "var(--border)" }} title="Courier marks delivered" />
-      <div className="w-4 h-px" style={{ background: "var(--border)" }} />
-      <div className="w-2 h-2 rounded-sm transition-all" style={{ background: step >= 2 ? "var(--success)" : "var(--border)" }} title="Recipient confirms receipt" />
+    <div style={{ marginTop: 12, padding: 14, background: "var(--ground)", border: "var(--bw) solid var(--line)" }}>
+      <p className="font-label field-dim" style={{ margin: 0 }}>{t("inbox.handover_code_title")}</p>
+      {locked ? (
+        <>
+          <p className="copy" style={{ margin: "8px 0 0" }}>{t("inbox.code_locked_needer")}</p>
+          <button type="button" onClick={onRegenerate} disabled={busy} className="btn btn--plain press" style={{ marginTop: 12, padding: "10px 18px" }}>
+            {t("inbox.new_code")}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="font-display tabular" style={{ margin: "8px 0 0", fontSize: "2rem", letterSpacing: "0.35em" }}>
+            {code ?? ""}
+          </p>
+          <p className="copy ink-dim" style={{ margin: "8px 0 0", fontSize: "0.85rem" }}>
+            {t("inbox.code_needer_hint")}
+          </p>
+        </>
+      )}
     </div>
   )
 }
 
-function MatchBar({ match, listing, otherName, otherId, onConfirm, onHandover, onReceived, busy, justMatched, myVerified, otherVerified }: {
+function CodeEntry({ onSubmit, busy }: {
+  onSubmit: (code: string) => Promise<void>; busy: boolean
+}) {
+  const { t } = useTranslation()
+  const [value, setValue] = React.useState("")
+  const [error, setError] = React.useState<string | null>(null)
+  const [sending, setSending] = React.useState(false)
+
+  async function submit() {
+    const code = value.trim()
+    if (!code || sending) return
+    setSending(true)
+    setError(null)
+    try {
+      await onSubmit(code)
+      setValue("")
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t("inbox.code_wrong_default"))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 12, padding: 14, background: "var(--ground)", border: "var(--bw) solid var(--line)" }}>
+      <p className="font-label field-dim" style={{ margin: 0 }}>{t("inbox.handover_code_title")}</p>
+      <p className="copy ink-dim" style={{ margin: "8px 0 0", fontSize: "0.85rem" }}>
+        {t("inbox.code_courier_hint")}
+      </p>
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") void submit() }}
+          placeholder={t("inbox.code_placeholder")}
+          aria-label={t("inbox.handover_code_title")}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={6}
+          className="route-input"
+          style={{ flex: 1, minWidth: 0, letterSpacing: "0.3em" }}
+        />
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={!value.trim() || sending || busy}
+          className="btn btn--primary press"
+        >
+          {t("inbox.complete_delivery")}
+        </button>
+      </div>
+      {error && (
+        <p className="copy" style={{ margin: "8px 0 0", color: "var(--destructive)" }}>{error}</p>
+      )}
+    </div>
+  )
+}
+
+// ── Deal strip: one line of state, one action ───────────────────────────────
+
+function DealStrip({ match, listing, otherName, otherId, onConfirm, onHandover, onCompleteWithCode, onRegenerateCode, busy, otherVerified }: {
   match: MatchState; listing: ThreadDetail["listing"]; otherName: string; otherId: string
-  onConfirm: () => void; onHandover: () => void; onReceived: () => void; busy: boolean; justMatched: boolean
-  myVerified?: boolean | null; otherVerified?: boolean | null
+  onConfirm: () => void; onHandover: () => void
+  onCompleteWithCode: (code: string) => Promise<void>; onRegenerateCode: () => void
+  busy: boolean
+  otherVerified?: boolean | null
 }) {
   const { t } = useTranslation()
   const kind = match.listing_kind ?? listing?.kind ?? null
-  const kColor = kindColor(kind)
-  const barBase: React.CSSProperties = { borderBottom: "1px solid var(--border)", background: "var(--surface)" }
-  const monoSm: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace", fontSize: 11, letterSpacing: "0.1em" }
-
-  function KindBadge() {
-    if (!kind) return null
-    return (
-      <span className="text-[9px] px-1.5 py-0.5 rounded-sm"
-        style={{ fontFamily: "'JetBrains Mono', monospace", color: kColor, background: `${kColor}18`, border: `1px solid ${kColor}30` }}>
-        {kind.toUpperCase()}
-      </span>
-    )
-  }
-
-  function ActionBtn({ onClick, disabled, variant = "primary", children }: {
-    onClick: () => void; disabled?: boolean; variant?: "primary" | "ghost" | "success"; children: React.ReactNode
-  }) {
-    const [hov, setHov] = React.useState(false)
-    const base: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", borderRadius: 2, padding: "6px 14px", transition: "background 0.15s, opacity 0.15s", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }
-    const variants: Record<string, React.CSSProperties> = {
-      primary: { background: hov && !disabled ? "var(--accent-dim)" : "var(--accent)", color: "#fff", border: "none" },
-      ghost: { background: hov && !disabled ? "rgba(37,99,235,0.14)" : "rgba(37,99,235,0.07)", color: "var(--accent)", border: "1px solid rgba(37,99,235,0.35)" },
-      success: { background: hov && !disabled ? "rgba(34,197,94,0.85)" : "var(--success)", color: "#000", border: "none" },
-    }
-    return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>{children}</button>
-  }
 
   if (match.stage === "completed") {
     return (
-      <div className="px-5 py-2.5 shrink-0 flex items-center justify-between gap-3" style={{ ...barBase, background: "rgba(34,197,94,0.04)" }}>
-        <div className="flex items-center gap-2.5">
-          <DeliveryProgress step={2} />
-          <span style={{ ...monoSm, color: "var(--success)" }}>{t('inbox.delivery_confirmed')}</span>
-          <KindBadge />
-        </div>
-        <Link to="/profile/$userId" params={{ userId: otherId }}
-          className="text-[10px] tracking-widest transition-colors shrink-0"
-          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
-          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
-          {t('inbox.leave_review')}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "12px 0", borderTop: "var(--bw) solid var(--line)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <DeliveryTicks step={2} />
+          <span className="font-label" style={{ color: "var(--success)" }}>{t("inbox.delivery_confirmed")}</span>
+          <KindChip kind={kind} />
+        </span>
+        <Link to="/profile/$userId" params={{ userId: otherId }} className="font-label" style={{ color: "var(--text)" }}>
+          {t("inbox.leave_review")}
         </Link>
       </div>
     )
@@ -303,125 +345,106 @@ function MatchBar({ match, listing, otherName, otherId, onConfirm, onHandover, o
   if (match.stage === "handed_over") {
     if (!match.is_me_courier) {
       return (
-        <motion.div initial={{ boxShadow: "0 0 0px rgba(34,197,94,0)" }}
-          animate={{ boxShadow: ["0 0 0px rgba(34,197,94,0)", "0 0 18px rgba(34,197,94,0.25)", "0 0 0px rgba(34,197,94,0)"] }}
-          transition={{ duration: 1.1, delay: 0.2 }}
-          className="px-5 py-2.5 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" style={barBase}>
-          <div className="flex items-center gap-2.5">
-            <DeliveryProgress step={1} />
-            <span style={{ ...monoSm, color: "var(--text-muted)" }}>{otherName.toUpperCase()} {t('inbox.marked_as_delivered')}</span>
-            <KindBadge />
+        <div style={{ padding: "12px 0", borderTop: "var(--bw) solid var(--line)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <DeliveryTicks step={1} />
+            <span className="font-label field-dim">{otherName.toUpperCase()} {t("inbox.marked_as_delivered")}</span>
+            <KindChip kind={kind} />
           </div>
-          <ActionBtn onClick={onReceived} disabled={busy} variant="success">
-            {busy ? "…" : t('inbox.confirm_receipt_btn')}
-          </ActionBtn>
-        </motion.div>
+          {match.is_me_needer && (
+            <CodeDisplay code={match.handover_code} locked={match.code_locked} onRegenerate={onRegenerateCode} busy={busy} />
+          )}
+        </div>
       )
     }
     return (
-      <div className="px-5 py-2.5 shrink-0 flex items-center gap-3" style={barBase}>
-        <DeliveryProgress step={1} />
-        <span style={{ ...monoSm, color: "var(--text-muted)" }}>
-          <span className="animate-pulse">●</span> {t('inbox.waiting_receipt')}
-        </span>
+      <div style={{ padding: "12px 0", borderTop: "var(--bw) solid var(--line)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <DeliveryTicks step={1} />
+          <span className="font-label field-dim">{t("inbox.waiting_receipt")}</span>
+        </div>
+        <CodeEntry onSubmit={onCompleteWithCode} busy={busy} />
       </div>
     )
   }
 
   if (match.stage === "in_transit") {
     return (
-      <motion.div initial={justMatched ? { boxShadow: "0 0 0px rgba(37,99,235,0)" } : false}
-        animate={justMatched ? { boxShadow: ["0 0 0px rgba(37,99,235,0)", "0 0 20px rgba(37,99,235,0.3)", "0 0 0px rgba(37,99,235,0)"] } : {}}
-        transition={{ duration: 0.9 }}
-        className="px-5 py-2.5 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" style={barBase}>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <DeliveryProgress step={0} />
-          <span style={{ ...monoSm, color: "var(--text-muted)" }}>
-            {match.is_me_courier ? t('inbox.arrange_pickup') : t('inbox.awaiting_handover')}
+      <div style={{ padding: "12px 0", borderTop: "var(--bw) solid var(--line)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <DeliveryTicks step={0} />
+            <span className="font-label field-dim">
+              {match.is_me_courier ? t("inbox.arrange_pickup") : t("inbox.awaiting_handover")}
+            </span>
+            <KindChip kind={kind} />
           </span>
-          <KindBadge />
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {match.is_me_courier ? (
-            <ActionBtn onClick={onHandover} disabled={busy} variant="ghost">
-              {busy ? "…" : t('inbox.mark_delivered')}
-            </ActionBtn>
-          ) : (
-            <ActionBtn onClick={onReceived} disabled={busy} variant="ghost">
-              {busy ? "…" : t('inbox.confirm_receipt')}
-            </ActionBtn>
+          {match.is_me_courier && (
+            <button type="button" onClick={onHandover} disabled={busy} className="btn btn--plain press" style={{ padding: "10px 18px" }}>
+              {t("inbox.mark_delivered")}
+            </button>
           )}
         </div>
-      </motion.div>
+        {match.is_me_needer
+          ? <CodeDisplay code={match.handover_code} locked={match.code_locked} onRegenerate={onRegenerateCode} busy={busy} />
+          : <CodeEntry onSubmit={onCompleteWithCode} busy={busy} />}
+      </div>
     )
   }
 
   if (match.me_confirmed && !match.both_confirmed) {
     return (
-      <div className="px-5 py-2.5 shrink-0 text-center text-[11px] tracking-wider" style={{ ...barBase, color: "var(--text-muted)" }}>
-        <span style={monoSm}>
-          <span className="animate-pulse">●</span> {t('inbox.waiting_for')} {otherName.toUpperCase()} {t('inbox.to_confirm')}
+      <div style={{ padding: "12px 0", borderTop: "var(--bw) solid var(--line)", textAlign: "center" }}>
+        <span className="font-label field-dim">
+          {t("inbox.waiting_for")} {otherName.toUpperCase()} {t("inbox.to_confirm")}
         </span>
       </div>
     )
   }
 
   return (
-    <div className="shrink-0" style={barBase}>
+    <div style={{ padding: "12px 0", borderTop: "var(--bw) solid var(--line)" }}>
       {otherVerified === false && (
-        <div className="px-5 py-1.5 flex items-center gap-2" style={{ background: "rgba(239,68,68,0.06)", borderBottom: "1px solid rgba(239,68,68,0.15)" }}>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M8 2L14.5 13.5H1.5L8 2Z" stroke="var(--destructive)" strokeWidth="1.5" strokeLinejoin="round"/>
-            <line x1="8" y1="6.5" x2="8" y2="10" stroke="var(--destructive)" strokeWidth="1.4" strokeLinecap="round"/>
-            <circle cx="8" cy="12" r="0.75" fill="var(--destructive)"/>
-          </svg>
-          <span style={{ ...monoSm, color: "var(--destructive)", fontSize: 10 }}>
-            {otherName.toUpperCase()} {t('inbox.not_verified_warning')}
-          </span>
-        </div>
+        <p className="font-label" style={{ margin: "0 0 10px", color: "var(--destructive)" }}>
+          {otherName.toUpperCase()} {t("messages.not_verified_warning")}
+        </p>
       )}
-      <div className="px-5 py-2.5 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span style={{ ...monoSm, color: "var(--text-muted)" }}>{t('inbox.confirm_title')}</span>
-          <KindBadge />
-        </div>
-        <ActionBtn onClick={onConfirm} disabled={busy} variant="ghost">
-          {busy ? "…" : t('inbox.confirm')}
-        </ActionBtn>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <span className="font-label field-dim">{t("inbox.confirm_title")}</span>
+          <KindChip kind={kind} />
+        </span>
+        <button type="button" onClick={onConfirm} disabled={busy} className="btn btn--plain press" style={{ padding: "10px 18px" }}>
+          {t("inbox.confirm")}
+        </button>
       </div>
     </div>
   )
 }
 
-function ConversationPanel({ thread, messages, currentUserId, match, myVerified, otherVerified, onSend, onConfirm, onHandover, onReceived, onBack }: {
+// ── Conversation ────────────────────────────────────────────────────────────
+
+function Conversation({ thread, messages, currentUserId, match, otherVerified, onSend, onConfirm, onHandover, onCompleteWithCode, onRegenerateCode, onBack }: {
   thread: ThreadDetail; messages: Message[]; currentUserId: string; match: MatchState | null
-  myVerified?: boolean | null; otherVerified?: boolean | null
-  onSend: (body: string) => Promise<void>; onConfirm: () => Promise<void>; onHandover: () => Promise<void>; onReceived: () => Promise<void>; onBack: () => void
+  otherVerified?: boolean | null
+  onSend: (body: string) => Promise<void>; onConfirm: () => Promise<void>; onHandover: () => Promise<void>
+  onCompleteWithCode: (code: string) => Promise<void>; onRegenerateCode: () => Promise<void>; onBack: () => void
 }) {
   const { t } = useTranslation()
   const [input, setInput] = React.useState("")
   const [sending, setSending] = React.useState(false)
   const [matchBusy, setMatchBusy] = React.useState(false)
-  const [justMatched, setJustMatched] = React.useState(false)
-  const [inputFocused, setInputFocused] = React.useState(false)
   const [showUnverifiedWarning, setShowUnverifiedWarning] = React.useState(false)
-  const prevBoth = React.useRef<boolean>(match?.both_confirmed ?? false)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const other = thread.other_participant
   const listing = thread.listing
   const listingLabel = listing?.title || (listing ? `${listing.origin_city} → ${listing.dest_city}` : "")
+  const otherName = other.display_name ?? t("inbox.anonymous")
 
   React.useEffect(() => {
     const el = scrollRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
+    if (el) el.scrollTop = el.scrollHeight
   }, [messages.length])
-
-  React.useEffect(() => {
-    const nowBoth = match?.both_confirmed ?? false
-    if (nowBoth && !prevBoth.current) setJustMatched(true)
-    prevBoth.current = nowBoth
-  }, [match?.both_confirmed])
 
   async function handleSend() {
     const text = input.trim()
@@ -431,166 +454,115 @@ function ConversationPanel({ thread, messages, currentUserId, match, myVerified,
     try { await onSend(text) } finally { setSending(false) }
   }
 
-  async function handleConfirm() {
+  async function runBusy(fn: () => Promise<void>) {
+    setMatchBusy(true)
+    try { await fn() } finally { setMatchBusy(false) }
+  }
+
+  function handleConfirm() {
     if (otherVerified === false) { setShowUnverifiedWarning(true); return }
-    setMatchBusy(true)
-    try { await onConfirm() } finally { setMatchBusy(false) }
-  }
-
-  async function proceedConfirmDespiteWarning() {
-    setShowUnverifiedWarning(false)
-    setMatchBusy(true)
-    try { await onConfirm() } finally { setMatchBusy(false) }
-  }
-
-  async function handleHandover() {
-    setMatchBusy(true)
-    try { await onHandover() } finally { setMatchBusy(false) }
-  }
-
-  async function handleReceived() {
-    setMatchBusy(true)
-    try { await onReceived() } finally { setMatchBusy(false) }
+    void runBusy(onConfirm)
   }
 
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend() }
   }
 
   const isCompleted = match?.stage === "completed"
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "var(--bg)" }}>
-      <div className="flex items-center gap-3 px-5 py-3.5 shrink-0" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-        <button onClick={onBack}
-          className="lg:hidden mr-1 text-[11px] tracking-widest transition-colors"
-          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}>←</button>
-        <Link to="/profile/$userId" params={{ userId: other.id }} className="shrink-0">
-          <UserAvatar name={other.display_name} url={other.avatar_url} size={36} />
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 12 }}>
+        <button
+          type="button"
+          onClick={onBack}
+          className="font-label field-dim nav-toggle"
+          style={{ cursor: "pointer", background: "none", border: 0, padding: 4 }}
+        >
+          ←
+        </button>
+        <Link to="/profile/$userId" params={{ userId: other.id }} style={{ display: "inline-flex" }}>
+          <Face name={otherName} url={other.avatar_url} size={36} />
         </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link to="/profile/$userId" params={{ userId: other.id }}
-              className="text-[14px] font-medium transition-colors" style={{ color: "var(--text)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--text)")}>
-              {other.display_name ?? t('inbox.anonymous')}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Link
+              to="/profile/$userId"
+              params={{ userId: other.id }}
+              className="font-display"
+              style={{ fontSize: "1.1rem", color: "var(--text)", textDecoration: "none" }}
+            >
+              {otherName}
             </Link>
             {otherVerified === true && <VerifiedBadge size="xs" />}
             {otherVerified === false && <UnverifiedBadge size="xs" />}
-          </div>
+          </p>
           {listingLabel && (
-            <div className="text-[10px] truncate" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}>
+            <p className="font-label field-dim" style={{ margin: "4px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {listingLabel}
-            </div>
+            </p>
           )}
         </div>
-        {listing?.kind && (
-          <span className="text-[9px] px-2 py-0.5 rounded-sm shrink-0"
-            style={{ fontFamily: "'JetBrains Mono', monospace", color: kindColor(listing.kind), background: `${kindColor(listing.kind)}18`, border: `1px solid ${kindColor(listing.kind)}30` }}>
-            {listing.kind.toUpperCase()}
-          </span>
-        )}
+        <KindChip kind={listing?.kind} />
       </div>
 
       {match && (
-        <MatchBar match={match} listing={listing} otherName={other.display_name ?? "the other party"}
-          otherId={other.id} onConfirm={handleConfirm} onHandover={handleHandover} onReceived={handleReceived}
-          busy={matchBusy} justMatched={justMatched} myVerified={myVerified} otherVerified={otherVerified} />
+        <DealStrip
+          match={match} listing={listing} otherName={otherName} otherId={other.id}
+          onConfirm={handleConfirm} onHandover={() => void runBusy(onHandover)}
+          onCompleteWithCode={onCompleteWithCode} onRegenerateCode={() => void runBusy(onRegenerateCode)}
+          busy={matchBusy} otherVerified={otherVerified}
+        />
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 0" }}>
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-[11px] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {t('inbox.no_messages_placeholder')}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+            <p className="font-label field-dim" style={{ margin: 0 }}>
+              {t("inbox.no_messages_placeholder")}
             </p>
           </div>
         ) : (
-          <AnimatePresence initial={false}>
-            {messages.map((msg) => (
-              <motion.div key={msg.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }}>
-                <MessageRow msg={msg} isOwn={msg.sender_id === currentUserId} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          messages.map((msg) => (
+            <MessageRow key={msg.id} msg={msg} isOwn={msg.sender_id === currentUserId} justNow={t("messages.just_now")} minutesAgo={t("messages.minutes_ago")} />
+          ))
         )}
       </div>
 
-      <div className="shrink-0 px-5 py-4 flex gap-3 items-end" style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}>
-        <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKey}
-          onFocus={() => setInputFocused(true)} onBlur={() => setInputFocused(false)}
-          placeholder={isCompleted ? t('inbox.archived_placeholder') : t('inbox.type_message')}
-          disabled={isCompleted} rows={1}
-          className="flex-1 rounded-sm px-4 py-2.5 text-[14px] resize-none focus:outline-none transition-colors disabled:opacity-50"
-          style={{ minHeight: 42, maxHeight: 120, background: "var(--surface-raised)", border: `1px solid ${inputFocused ? "var(--accent)" : "var(--border)"}`, color: "var(--text)", caretColor: "var(--accent)" }} />
-        <button onClick={handleSend} disabled={!input.trim() || sending || isCompleted}
-          className="px-5 py-2.5 text-[11px] font-bold tracking-widest rounded-sm transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ fontFamily: "'JetBrains Mono', monospace", background: "var(--accent)", color: "#ffffff" }}
-          onMouseEnter={e => { if (input.trim() && !sending && !isCompleted) e.currentTarget.style.background = "var(--accent-dim)" }}
-          onMouseLeave={e => { e.currentTarget.style.background = "var(--accent)" }}>
-          {sending ? "…" : t('inbox.send')}
+      <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: "var(--bw) solid var(--line)" }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder={isCompleted ? t("inbox.archived_placeholder") : t("inbox.type_message")}
+          disabled={isCompleted}
+          aria-label={t("inbox.type_message")}
+          className="route-input"
+          style={{ flex: 1, minWidth: 0, opacity: isCompleted ? 0.5 : 1 }}
+        />
+        <button
+          type="button"
+          onClick={() => void handleSend()}
+          disabled={!input.trim() || sending || isCompleted}
+          className="btn btn--primary press"
+        >
+          {t("inbox.send")}
         </button>
       </div>
 
       {showUnverifiedWarning && (
-        <UnverifiedWarningModal variant="confirm" otherName={other.display_name ?? "the other party"}
-          onProceed={proceedConfirmDespiteWarning} onCancel={() => setShowUnverifiedWarning(false)} />
+        <UnverifiedWarningModal
+          variant="confirm"
+          otherName={otherName}
+          onProceed={() => { setShowUnverifiedWarning(false); void runBusy(onConfirm) }}
+          onCancel={() => setShowUnverifiedWarning(false)}
+        />
       )}
     </div>
   )
 }
 
-function EmptyConversation({ noThreads }: { noThreads: boolean }) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-5 px-8 text-center" style={{ background: "var(--bg)" }}>
-      {noThreads ? (
-        <>
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ opacity: 0.15 }}>
-            <circle cx="8" cy="24" r="4" stroke="var(--accent)" strokeWidth="1.5" />
-            <circle cx="40" cy="24" r="4" stroke="var(--accent)" strokeWidth="1.5" />
-            <circle cx="24" cy="8" r="4" stroke="var(--accent)" strokeWidth="1.5" />
-            <line x1="12" y1="24" x2="36" y2="24" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
-            <line x1="24" y1="12" x2="24" y2="20" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
-            <line x1="8" y1="20" x2="24" y2="12" stroke="var(--accent)" strokeWidth="1" strokeDasharray="3 2" />
-          </svg>
-          <div>
-            <p className="text-[11px] tracking-[0.2em] mb-2" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {t('inbox.no_threads_yet')}
-            </p>
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              {t('messages.browse_listings')}
-            </p>
-          </div>
-          <button onClick={() => navigate({ to: "/browse" })}
-            className="mt-1 px-6 py-2.5 text-[11px] tracking-widest rounded-sm transition-colors"
-            style={{ fontFamily: "'JetBrains Mono', monospace", border: "1px solid var(--border)", color: "var(--text-muted)" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)" }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" }}>
-            {t('inbox.browse_listings')}
-          </button>
-        </>
-      ) : (
-        <p className="text-[11px] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-          {t('inbox.select_thread')}
-        </p>
-      )}
-    </div>
-  )
-}
-
-function PanelSpinner() {
-  return (
-    <div className="flex items-center justify-center h-full" style={{ background: "var(--bg)" }}>
-      <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-        style={{ borderColor: "var(--border)", borderTopColor: "var(--accent)" }} />
-    </div>
-  )
-}
+// ── Page ────────────────────────────────────────────────────────────────────
 
 export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const { t } = useTranslation()
@@ -604,24 +576,25 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
   const [messages, setMessages] = React.useState<Message[]>([])
   const [match, setMatch] = React.useState<MatchState | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
-  const [myVerified, setMyVerified] = React.useState<boolean | null>(null)
   const [otherVerified, setOtherVerified] = React.useState<boolean | null>(null)
   const navigate = useNavigate()
-
-  function loadThreads() {
-    if (!token) return
-    apiFetchThreads(token).then(setThreads).catch(() => {})
-  }
 
   React.useEffect(() => {
     if (!token) return
     setThreadsLoading(true)
-    apiFetchThreads(token).then(setThreads).catch(() => {}).finally(() => setThreadsLoading(false))
+    authedFetch("/api/threads", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then(setThreads).catch(() => {})
+      .finally(() => setThreadsLoading(false))
   }, [token])
 
+  // Polling replaces the Supabase Realtime channels removed with the
+  // backend move: thread list every 15s.
   React.useEffect(() => {
     if (!token) return
-    const id = setInterval(loadThreads, 60_000)
+    const id = setInterval(() => {
+      authedFetch("/api/threads", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json()).then(setThreads).catch(() => {})
+    }, 15_000)
     return () => clearInterval(id)
   }, [token])
 
@@ -629,56 +602,37 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     if (!selectedId || !token) return
     setDetailLoading(true)
     setMatch(null)
-    apiFetchThread(selectedId, token).then((detail) => {
+    const headers = { Authorization: `Bearer ${token}` }
+    authedFetch(`/api/threads/${selectedId}`, { headers }).then((r) => r.json()).then((detail: ThreadDetail) => {
       setThreadDetail(detail)
       setMessages(detail.messages)
-      apiMarkRead(selectedId, token).then(() => {
-        setThreads((prev) => prev.map((t) => (t.id === selectedId ? { ...t, unread_count: 0 } : t)))
-      })
-      apiGetMatchState(selectedId, token).then(setMatch).catch(() => setMatch(null))
-      fetch("/api/verification/status", { headers: authHeaders(token) })
-        .then(r => r.json()).then(d => setMyVerified(!!d.verified)).catch(() => setMyVerified(null))
-      fetch(`/api/profiles/${detail.other_participant.id}`)
-        .then(r => r.json()).then(d => setOtherVerified(d.identity_verified === true ? true : d.identity_verified === false ? false : null)).catch(() => setOtherVerified(null))
+      authedFetch(`/api/messages/thread/${selectedId}/read`, { method: "PATCH", headers }).then(() => {
+        setThreads((prev) => prev.map((th) => (th.id === selectedId ? { ...th, unread_count: 0 } : th)))
+      }).catch(() => {})
+      authedFetch(`/api/matches?thread_id=${selectedId}`, { headers }).then((r) => r.json()).then(setMatch).catch(() => setMatch(null))
+      authedFetch(`/api/profiles/${detail.other_participant.id}`, { headers }).then((r) => r.json()).then((d) =>
+        setOtherVerified(d.identity_verified === true ? true : d.identity_verified === false ? false : null),
+      ).catch(() => setOtherVerified(null))
     }).catch(() => {}).finally(() => setDetailLoading(false))
   }, [selectedId, token])
 
+  // Open thread: messages + match state every 5s, plus mark-read.
   React.useEffect(() => {
-    if (!selectedId || !supabase) return
-    const channel = supabase.channel(`messages:${selectedId}`)
-      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "messages", filter: `thread_id=eq.${selectedId}` },
-        (payload: { new: Message }) => {
-          const msg = payload.new
-          setMessages((prev) => { if (prev.some((m) => m.id === msg.id)) return prev; return [...prev, msg] })
-          if (msg.sender_id !== user?.id && token) { apiMarkRead(selectedId, token) }
-          setThreads((prev) => prev.map((t) => t.id === selectedId ? { ...t, last_message: { id: msg.id, body: msg.body, created_at: msg.created_at, sender_id: msg.sender_id }, unread_count: 0 } : t))
-        }).subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [selectedId, token, user?.id])
-
-  React.useEffect(() => {
-    if (!selectedId || !supabase || !token) return
-    const channel = supabase.channel(`matches:${selectedId}`)
-      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "match_confirmations", filter: `thread_id=eq.${selectedId}` },
-        () => { apiGetMatchState(selectedId, token).then(setMatch).catch(() => {}) }).subscribe()
-    return () => { supabase.removeChannel(channel) }
+    if (!selectedId || !token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    const tick = () => {
+      authedFetch(`/api/threads/${selectedId}`, { headers }).then((r) => r.json()).then((detail: ThreadDetail) => {
+        setMessages(detail.messages)
+        setThreads((prev) => prev.map((th) => th.id === selectedId
+          ? { ...th, last_message: detail.messages[detail.messages.length - 1] ?? th.last_message, unread_count: 0 }
+          : th))
+      }).catch(() => {})
+      authedFetch(`/api/matches?thread_id=${selectedId}`, { headers }).then((r) => r.json()).then(setMatch).catch(() => {})
+      authedFetch(`/api/messages/thread/${selectedId}/read`, { method: "PATCH", headers }).catch(() => {})
+    }
+    const id = setInterval(tick, 5_000)
+    return () => clearInterval(id)
   }, [selectedId, token])
-
-  React.useEffect(() => {
-    if (!selectedId || !supabase || !token) return
-    const channel = supabase.channel(`delivery:${selectedId}`)
-      .on("postgres_changes" as any, { event: "UPDATE", schema: "public", table: "delivery_confirmations", filter: `thread_id=eq.${selectedId}` },
-        () => { apiGetMatchState(selectedId, token).then(setMatch).catch(() => {}) }).subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [selectedId, token])
-
-  React.useEffect(() => {
-    if (!user?.id || !supabase || !token) return
-    const channel = supabase.channel(`new-threads:${user.id}`)
-      .on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "thread_participants", filter: `user_id=eq.${user.id}` },
-        () => { setTimeout(loadThreads, 400) }).subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [user?.id, token])
 
   function selectThread(id: string) {
     setSelectedId(id); setThreadDetail(null); setMessages([])
@@ -690,102 +644,176 @@ export function Inbox({ initialThreadId }: { initialThreadId?: string }) {
     navigate({ to: "/messages" })
   }
 
+  async function refreshMatch() {
+    if (!selectedId || !token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    const updated = await authedFetch(`/api/matches?thread_id=${selectedId}`, { headers }).then((r) => r.json()).catch(() => null)
+    if (updated) setMatch(updated)
+  }
+
+  async function refreshMessages() {
+    if (!selectedId || !token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    await authedFetch(`/api/threads/${selectedId}`, { headers }).then((r) => r.json()).then((detail: ThreadDetail) => {
+      setMessages(detail.messages)
+    }).catch(() => {})
+  }
+
   async function handleSend(body: string) {
     if (!selectedId || !token) return
-    const msg = await apiSend(selectedId, body, token)
+    const msg: Message = await authedFetch("/api/messages", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ thread_id: selectedId, body }),
+    }).then((r) => r.json())
     setMessages((prev) => [...prev, msg])
-    setThreads((prev) => prev.map((t) => t.id === selectedId ? { ...t, last_message: { id: msg.id, body: msg.body, created_at: msg.created_at, sender_id: msg.sender_id } } : t))
+    setThreads((prev) => prev.map((th) => th.id === selectedId
+      ? { ...th, last_message: { id: msg.id, body: msg.body, created_at: msg.created_at, sender_id: msg.sender_id } }
+      : th))
   }
 
   async function handleConfirm() {
     if (!selectedId || !token) return
-    try {
-      const res = await apiConfirmMatch(selectedId, token)
-      const updated = await apiGetMatchState(selectedId, token).catch(() => null)
-      if (updated) setMatch(updated)
-      if (res.both_confirmed) { apiFetchThread(selectedId, token).then((detail) => setMessages(detail.messages)).catch(() => {}) }
-    } catch (err: unknown) { void err }
+    await authedFetch(`/api/matches/confirm?thread_id=${selectedId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((r) => r.json()).then((res) => {
+      if (res.both_confirmed) void refreshMessages()
+    }).catch(() => {})
+    await refreshMatch()
   }
 
   async function handleHandover() {
     if (!selectedId || !token) return
-    await apiHandover(selectedId, token)
-    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
-    if (updated) setMatch(updated)
-    apiFetchThread(selectedId, token).then((detail) => setMessages(detail.messages)).catch(() => {})
+    await authedFetch(`/api/matches/handover?thread_id=${selectedId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
+    await refreshMatch()
+    await refreshMessages()
   }
 
-  async function handleReceived() {
+  async function handleCompleteWithCode(code: string) {
     if (!selectedId || !token) return
-    await apiReceived(selectedId, token)
-    const updated = await apiGetMatchState(selectedId, token).catch(() => null)
-    if (updated) setMatch(updated)
-    apiFetchThread(selectedId, token).then((detail) => setMessages(detail.messages)).catch(() => {})
+    const res = await authedFetch("/api/matches/complete-with-code", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ thread_id: selectedId, code }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.detail ?? "Wrong code.")
+    if (data.completed) await refreshMessages()
+    await refreshMatch()
   }
 
-  const showMobileList = !selectedId
+  async function handleRegenerateCode() {
+    if (!selectedId || !token) return
+    await authedFetch(`/api/matches/regenerate-code?thread_id=${selectedId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
+    await refreshMatch()
+  }
+
   const showConversation = !!selectedId && !!threadDetail
-  const totalUnread = threads.reduce((s, t) => s + t.unread_count, 0)
+  const totalUnread = threads.reduce((s, th) => s + th.unread_count, 0)
 
   return (
-    <div className="h-screen pt-16 flex flex-col overflow-hidden" style={{ background: "var(--bg)" }}>
-      <div className="flex flex-1 overflow-hidden">
-        <div className={`${showMobileList ? "flex" : "hidden"} lg:flex flex-col w-full lg:w-[300px] shrink-0 overflow-y-auto`}
-          style={{ borderRight: "1px solid var(--border)", background: "var(--surface)" }}>
-          <div className="px-5 py-4 shrink-0 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div className="flex items-center gap-2">
-              <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
-              <h1 className="text-[11px] tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-                {t('messages.messages_title')}
-              </h1>
-            </div>
-            {totalUnread > 0 && (
-              <span className="flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold"
-                style={{ background: "var(--accent)", color: "#fff" }}>
-                {totalUnread > 99 ? "99+" : totalUnread}
-              </span>
+    <div className="manifest">
+      <section className="manifest-field">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h2 className="field-caption" style={{ margin: 0 }}>{t("messages.messages_title")}</h2>
+          {totalUnread > 0 && (
+            <span
+              aria-label={`${totalUnread} unread`}
+              style={{
+                display: "inline-grid",
+                placeItems: "center",
+                minWidth: 20,
+                height: 20,
+                padding: "0 5px",
+                background: "var(--orange)",
+                color: "var(--on-fill)",
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+              }}
+            >
+              {totalUnread > 99 ? "99+" : totalUnread}
+            </span>
+          )}
+        </div>
+
+        <div className="inbox-split" style={{ marginTop: 16, height: "max(480px, min(660px, 72dvh))" }}>
+          {/* Thread ledger */}
+          <div
+            className={selectedId ? "inbox-pane-hide" : undefined}
+            style={{ background: "var(--sheet)", overflowY: "auto", minHeight: 0 }}
+          >
+            {threadsLoading ? (
+              <div aria-hidden="true" style={{ padding: 12 }}>
+                {[0, 1].map((i) => (
+                  <div key={i} className="skel" style={{ height: 64, marginBottom: i < 1 ? 12 : 0 }} />
+                ))}
+              </div>
+            ) : threads.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "left" }}>
+                <p className="font-label field-dim" style={{ margin: 0 }}>
+                  {t("inbox.no_threads_yet")}
+                </p>
+                <p className="copy ink-dim" style={{ marginTop: 8 }}>
+                  {t("messages.browse_listings")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/browse" })}
+                  className="btn btn--plain press"
+                  style={{ marginTop: 14 }}
+                >
+                  {t("inbox.browse_listings")}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "var(--bw)", background: "var(--line)" }}>
+                {threads.map((thread) => (
+                  <ThreadRow
+                    key={thread.id}
+                    thread={thread}
+                    selected={thread.id === selectedId}
+                    currentUserId={user?.id ?? ""}
+                    onClick={() => selectThread(thread.id)}
+                  />
+                ))}
+              </div>
             )}
           </div>
 
-          {threadsLoading ? (
-            <div className="flex items-center justify-center flex-1">
-              <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
-                style={{ borderColor: "var(--border)", borderTopColor: "var(--accent)" }} />
-            </div>
-          ) : threads.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 px-6 text-center">
-              <p className="text-[11px] tracking-widest" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                {t('inbox.no_threads_yet')}
-              </p>
-              <button onClick={() => navigate({ to: "/browse" })}
-                className="text-[11px] tracking-widest transition-colors"
-                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
-                onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
-                {t('inbox.browse_listings')}
-              </button>
-            </div>
-          ) : (
-            threads.map((thread) => (
-              <ThreadItem key={thread.id} thread={thread} selected={thread.id === selectedId}
-                currentUserId={user?.id ?? ""} onClick={() => selectThread(thread.id)} />
-            ))
-          )}
+          {/* Open letter */}
+          <div
+            className={selectedId ? undefined : "inbox-pane-hide"}
+            style={{ background: "var(--sheet)", padding: "var(--tile-pad)", overflowY: "auto", minHeight: 0 }}
+          >
+            {detailLoading ? (
+              <div aria-hidden="true">
+                <div className="skel" style={{ height: 40, marginBottom: 12 }} />
+                <div className="skel" style={{ height: 200 }} />
+              </div>
+            ) : showConversation ? (
+              <Conversation
+                thread={threadDetail} messages={messages} currentUserId={user?.id ?? ""}
+                match={match} otherVerified={otherVerified}
+                onSend={handleSend} onConfirm={handleConfirm} onHandover={handleHandover}
+                onCompleteWithCode={handleCompleteWithCode} onRegenerateCode={handleRegenerateCode} onBack={handleBack}
+              />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                <p className="font-label field-dim" style={{ margin: 0 }}>
+                  {t("inbox.select_thread")}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
-
-        <div className={`${showMobileList ? "hidden" : "flex"} lg:flex flex-col flex-1 overflow-hidden`}>
-          {detailLoading ? (
-            <PanelSpinner />
-          ) : showConversation ? (
-            <ConversationPanel thread={threadDetail} messages={messages} currentUserId={user?.id ?? ""}
-              match={match} myVerified={myVerified} otherVerified={otherVerified}
-              onSend={handleSend} onConfirm={handleConfirm} onHandover={handleHandover}
-              onReceived={handleReceived} onBack={handleBack} />
-          ) : (
-            <EmptyConversation noThreads={threads.length === 0} />
-          )}
-        </div>
-      </div>
+      </section>
     </div>
   )
 }

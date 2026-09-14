@@ -47,7 +47,6 @@ export const DB = {
       DESCRIPTION: 'description',
       PRICE: 'price',
       CURRENCY: 'currency',
-      CAPACITY_KG: 'capacity_kg',
       STATUS: 'status',
     },
   },

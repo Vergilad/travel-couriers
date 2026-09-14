@@ -13,14 +13,14 @@ import { LandingPage } from "@/pages/Landing"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
-import { MatchesPage } from "@/pages/Matches"
 import { NotFoundPage } from "@/pages/NotFound"
 import { Inbox } from "@/pages/Inbox"
 import { Browse } from "@/pages/Browse"
-import { MyListings } from "@/pages/MyListings"
+import { MyRoutes } from "@/pages/MyRoutes"
 import { CreateListing } from "@/pages/CreateListing"
 import { ListingDetail } from "@/pages/ListingDetail"
 import { VerificationPage } from "@/pages/Verification"
+import { AdminPage } from "@/pages/Admin"
 import { useAuth } from "@/lib/auth"
 
 function FullPageSpinner() {
@@ -107,22 +107,16 @@ const profileRoute = createRoute({
   },
 })
 
-const tripsNewRoute = createRoute({
+const carryNewRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
-  path: "/trips/new",
-  component: () => <CreateListing kind="trip" />,
+  path: "/carry/new",
+  component: () => <CreateListing kind="carry" />,
 })
 
-const requestsNewRoute = createRoute({
+const needNewRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
-  path: "/requests/new",
-  component: () => <CreateListing kind="request" />,
-})
-
-const deliveriesNewRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/deliveries/new",
-  component: () => <CreateListing kind="delivery" />,
+  path: "/need/new",
+  component: () => <CreateListing kind="need" />,
 })
 
 const messagesRoute = createRoute({
@@ -149,13 +143,20 @@ const settingsRoute = createRoute({
 const myListingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/my-listings",
-  component: MyListings,
+  component: MyRoutes,
 })
 
 const matchesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/matches",
-  component: () => <MatchesPage />,
+  component: function MatchesRedirect() {
+    // Merged into My routes; the old address forwards.
+    const navigate = useNavigate()
+    React.useEffect(() => {
+      navigate({ to: "/my-listings" })
+    }, [navigate])
+    return null
+  },
 })
 
 const reportsNewRoute = createRoute({
@@ -170,6 +171,12 @@ const verifyRoute = createRoute({
   component: VerificationPage,
 })
 
+const adminRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/admin",
+  component: AdminPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   browseRoute,
@@ -177,9 +184,8 @@ const routeTree = rootRoute.addChildren([
   listingRoute,
   profileRoute,
   authenticatedRoute.addChildren([
-    tripsNewRoute,
-    requestsNewRoute,
-    deliveriesNewRoute,
+    carryNewRoute,
+    needNewRoute,
     messagesRoute,
     messageThreadRoute,
     settingsRoute,
@@ -187,6 +193,7 @@ const routeTree = rootRoute.addChildren([
     matchesRoute,
     reportsNewRoute,
     verifyRoute,
+    adminRoute,
   ]),
 ])
 

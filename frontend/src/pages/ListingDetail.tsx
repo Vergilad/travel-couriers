@@ -1,6 +1,10 @@
+/**
+ * Listing detail as a manifest: header field, meta strip, details,
+ * owner, and a sidebar field with price and the one action that matters.
+ * Same data flow as before; only the reading surface changed.
+ */
 import * as React from "react"
 import { useParams, Link, useNavigate } from "@tanstack/react-router"
-import { motion, AnimatePresence } from "framer-motion"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth"
 import { authedFetch } from "@/lib/api"
@@ -9,20 +13,6 @@ import { formatListingDate, formatPrice } from "@/lib/listings"
 import { VerifiedBadge, UnverifiedBadge } from "@/components/VerifiedBadge"
 import { UnverifiedWarningModal } from "@/components/UnverifiedWarningModal"
 import { useTranslation } from "@/i18n/I18nContext"
-
-// ── Kind / status config ──────────────────────────────────────────────────────
-const KIND_BADGE_STYLE: Record<string, React.CSSProperties> = {
-  trip:     { background: "rgba(37,99,235,0.12)",  border: "1px solid rgba(37,99,235,0.30)",  color: "#93c5fd" },
-  request:  { background: "rgba(34,197,94,0.10)",  border: "1px solid rgba(34,197,94,0.28)",  color: "#86efac" },
-  delivery: { background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.28)", color: "#d8b4fe" },
-}
-
-const FLEXIBILITY_LABELS: Record<string, string> = {
-  exact: "Exact date",
-  week: "±1 week flexible",
-  month: "±1 month flexible",
-}
-
 
 interface ListingWithOwner extends Listing {
   date_flexibility?: string
@@ -49,15 +39,15 @@ async function fetchListing(id: string): Promise<ListingWithOwner> {
 function StarRating({ rating, count }: { rating: number | null; count: number }) {
   const { t } = useTranslation()
   if (!rating) return (
-    <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{t('listings.no_reviews')}</span>
+    <span className="font-label field-dim">{t("listings.no_reviews")}</span>
   )
   const stars = Math.round(rating)
   return (
-    <span className="flex items-center gap-0.5 font-mono text-[11px]">
+    <span className="font-label" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
       {Array.from({ length: 5 }).map((_, i) => (
-        <span key={i} style={{ color: i < stars ? "var(--accent)" : "var(--text-faint)" }}>★</span>
+        <span key={i} style={{ color: i < stars ? "var(--text)" : "var(--text-faint)" }}>★</span>
       ))}
-      {count > 0 && <span className="ml-1" style={{ color: "var(--text-muted)" }}>({count})</span>}
+      {count > 0 && <span className="field-dim" style={{ marginLeft: 4 }}>({count})</span>}
     </span>
   )
 }
@@ -71,7 +61,7 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
   const [error, setError] = React.useState<string | null>(null)
   const [showWarning, setShowWarning] = React.useState(false)
 
-  const label = listing.kind === "trip" ? t('listings.contact_trip') : listing.kind === "delivery" ? t('listings.contact_delivery') : t('listings.contact_request')
+  const label = listing.kind === "carry" ? t("listings.contact_carry") : t("listings.contact_need")
   const ownerVerified = listing.owner?.identity_verified ?? null
 
   async function doContact() {
@@ -105,15 +95,8 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
 
   if (!user) {
     return (
-      <Link to="/auth" search={{ mode: "signin", redirect: undefined }}>
-        <button
-          className="w-full font-mono font-bold tracking-widest text-[11px] rounded-sm transition-colors"
-          style={{ background: "var(--accent)", color: "#fff", padding: "12px 0" }}
-          onMouseEnter={e => (e.currentTarget.style.background = "var(--accent-dim)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
-        >
-          {t('listings.sign_in_to_contact')}
-        </button>
+      <Link to="/auth" search={{ mode: "signin", redirect: undefined }} className="btn btn--primary press" style={{ width: "100%" }}>
+        {t("listings.sign_in_to_contact")}
       </Link>
     )
   }
@@ -123,26 +106,22 @@ function ContactButton({ listing }: { listing: ListingWithOwner }) {
       <button
         onClick={handleContact}
         disabled={contacting}
-        className="w-full font-mono font-bold tracking-widest text-[11px] rounded-sm transition-colors disabled:opacity-60 disabled:cursor-wait"
-        style={{ background: "var(--accent)", color: "#fff", padding: "12px 0" }}
-        onMouseEnter={e => { if (!contacting) e.currentTarget.style.background = "var(--accent-dim)" }}
-        onMouseLeave={e => (e.currentTarget.style.background = "var(--accent)")}
+        className="btn btn--primary press"
+        style={{ width: "100%", opacity: contacting ? 0.6 : 1 }}
       >
-        {contacting ? t('listings.opening') : label}
+        {contacting ? t("listings.opening") : label}
       </button>
       {error && (
-        <p className="font-mono text-[11px] text-center mt-2" style={{ color: "var(--destructive)" }}>{error}</p>
+        <p className="copy" style={{ color: "var(--destructive)", textAlign: "center", marginTop: 10 }}>{error}</p>
       )}
-      <AnimatePresence>
-        {showWarning && (
-          <UnverifiedWarningModal
-            variant="contact"
-            otherName={listing.owner?.display_name ?? "This user"}
-            onProceed={() => { setShowWarning(false); doContact() }}
-            onCancel={() => setShowWarning(false)}
-          />
-        )}
-      </AnimatePresence>
+      {showWarning && (
+        <UnverifiedWarningModal
+          variant="contact"
+          otherName={listing.owner?.display_name ?? "This user"}
+          onProceed={() => { setShowWarning(false); doContact() }}
+          onCancel={() => setShowWarning(false)}
+        />
+      )}
     </>
   )
 }
@@ -168,59 +147,53 @@ function ConfirmModal({
   danger?: boolean; busy?: boolean; onConfirm: () => void; onCancel: () => void;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm"
-      style={{ background: "rgba(9,9,11,0.8)" }}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: "color-mix(in srgb, var(--ground) 82%, transparent)" }}
       onClick={onCancel}
     >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.18 }}
-        className="max-w-sm w-full p-6 rounded-sm"
-        style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
+      <div
+        className="w-full"
+        style={{
+          maxWidth: 420,
+          background: "var(--sheet)",
+          border: "var(--bw) solid var(--line)",
+          boxShadow: "var(--shadow)",
+          padding: "var(--tile-pad)",
+        }}
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold mb-2" style={{ color: "var(--text)" }}>{title}</h3>
-        <p className="text-sm leading-relaxed mb-6" style={{ color: "var(--text-muted)" }}>{message}</p>
-        <div className="flex gap-3 justify-end">
+        <h3 className="font-display" style={{ fontSize: "var(--t-h3)", margin: 0 }}>{title}</h3>
+        <p className="copy ink-dim" style={{ marginTop: 10 }}>{message}</p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 20 }}>
           <button
             onClick={onCancel}
             disabled={busy}
-            className="font-mono text-[11px] tracking-widest rounded-sm px-5 py-2 transition-colors disabled:opacity-40"
-            style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
+            className="btn btn--ghost"
+            style={{ opacity: busy ? 0.4 : 1 }}
           >
             CANCEL
           </button>
           <button
             onClick={onConfirm}
             disabled={busy}
-            className="font-mono text-[11px] tracking-widest font-bold rounded-sm px-5 py-2 transition-colors disabled:opacity-60"
-            style={danger
-              ? { background: "var(--destructive)", color: "#fff" }
-              : { background: "var(--accent)", color: "#fff" }
-            }
+            className="btn btn--primary press"
+            style={danger ? { background: "var(--destructive)", borderColor: "var(--destructive)" } : undefined}
           >
             {busy ? "…" : confirmLabel}
           </button>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }
 
-// ── Meta chip ─────────────────────────────────────────────────────────────────
+// ── Meta cell ─────────────────────────────────────────────────────────────────
 function MetaCell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="font-mono text-[9px] tracking-[0.2em] mb-1.5 uppercase" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <div className="font-mono text-sm" style={{ color: "var(--text)" }}>{children}</div>
+      <p className="font-label field-dim" style={{ margin: "0 0 8px" }}>{label}</p>
+      <div className="copy" style={{ fontWeight: 500 }}>{children}</div>
     </div>
   )
 }
@@ -269,17 +242,9 @@ export function ListingDetail() {
   // ── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-16 flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div className="flex flex-col items-center gap-4">
-          <motion.div
-            className="w-5 h-5 rounded-full"
-            style={{ border: "2px solid rgba(37,99,235,0.15)", borderTopColor: "var(--accent)" }}
-            animate={{ rotate: 360 }}
-            transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
-          />
-          <span className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-            {t('listings.loading_manifest')}
-          </span>
+      <div className="manifest">
+        <div className="manifest-field" aria-hidden="true">
+          <div className="skel" style={{ height: 180 }} />
         </div>
       </div>
     )
@@ -288,26 +253,19 @@ export function ListingDetail() {
   // ── Error / 404 ──────────────────────────────────────────────────────────
   if (isError || !listing) {
     return (
-      <div className="min-h-screen pt-16 flex flex-col items-center justify-center text-center px-6" style={{ background: "var(--bg)" }}>
-        <div className="font-mono text-[64px] mb-4 font-bold" style={{ color: "var(--text-faint)" }}>404</div>
-        <h2 className="text-2xl font-bold mb-3" style={{ color: "var(--text)" }}>{t('listings.listing_not_found')}</h2>
-        <p className="text-sm mb-8" style={{ color: "var(--text-muted)" }}>{t('listings.not_found_message')}</p>
-        <Link to="/browse">
-          <button
-            className="font-mono text-[11px] tracking-widest rounded-sm px-6 py-2.5 transition-colors"
-            style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = "rgba(37,99,235,0.4)"
-              e.currentTarget.style.color = "var(--text)"
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = "var(--border)"
-              e.currentTarget.style.color = "var(--text-muted)"
-            }}
-          >
-            {t('listings.back_to_browse')}
-          </button>
-        </Link>
+      <div className="manifest">
+        <div className="manifest-field" style={{ textAlign: "left" }}>
+          <h2 className="field-caption">404</h2>
+          <h1 className="font-display" style={{ fontSize: "var(--t-h2)", margin: 0 }}>
+            {t("listings.listing_not_found")}
+          </h1>
+          <p className="copy ink-dim" style={{ marginTop: 12 }}>
+            {t("listings.not_found_message")}
+          </p>
+          <Link to="/browse" className="btn btn--ghost" style={{ marginTop: 20 }}>
+            {t("listings.back_to_browse")}
+          </Link>
+        </div>
       </div>
     )
   }
@@ -316,301 +274,206 @@ export function ListingDetail() {
   const isOwn = user?.id === listing.owner_id
   const priceDisplay = formatPrice(listing.price, listing.currency)
   const hasDates = listing.depart_date || listing.arrive_date
-  const kindStyle = KIND_BADGE_STYLE[listing.kind] ?? {}
 
   return (
-    <div className="min-h-screen pt-16" style={{ background: "var(--bg)" }}>
-
-      {/* Breadcrumb */}
-      <div style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="max-w-[1100px] mx-auto px-6 py-3">
-          <Link to="/browse">
-            <button
-              className="font-mono text-[11px] tracking-widest transition-colors"
-              style={{ color: "var(--text-muted)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}
-            >
-              {t('listings.back_to_browse')}
-            </button>
-          </Link>
+    <div className="manifest">
+      {/* ── Header field ── */}
+      <div className="manifest-field">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+          <span className="stencil-chip" data-side={listing.kind}>
+            {t(`kinds.${listing.kind}`)}
+          </span>
+          {listing.kind === "need" && listing.needs_purchase && (
+            <span className="stencil-chip" data-side="buy">
+              {t("listings.buy_badge")}
+            </span>
+          )}
+          <span className="font-label field-dim" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span
+              aria-hidden="true"
+              style={{
+                width: 8,
+                height: 8,
+                background: listing.status === "open" ? "var(--success)" : "var(--text-faint)",
+              }}
+            />
+            {listing.status.toUpperCase()}
+          </span>
         </div>
+
+        <h1 className="font-display" style={{ fontSize: "var(--t-h1)", margin: 0 }}>
+          {listing.title || `${listing.origin_city} → ${listing.dest_city}`}
+        </h1>
+        <p className="font-label field-dim" style={{ marginTop: 12 }}>
+          {listing.origin_city}
+          {listing.origin_country && <span> · {listing.origin_country}</span>}
+          {" → "}
+          {listing.dest_city}
+          {listing.dest_country && <span> · {listing.dest_country}</span>}
+        </p>
       </div>
 
-      <div className="max-w-[1100px] mx-auto px-6 py-10 flex flex-col lg:flex-row gap-12">
-
-        {/* ── Main ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="flex-1 min-w-0"
-        >
-          {/* Kind + status row */}
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <span
-              className="inline-flex items-center px-2 py-0.5 rounded-sm font-mono text-[10px] tracking-widest"
-              style={kindStyle}
-            >
-              {listing.kind.toUpperCase()}
-            </span>
-            <span
-              className="font-mono text-[10px] tracking-widest flex items-center gap-1.5"
-              style={{ color: listing.status === "open" ? "var(--success)" : "var(--text-muted)" }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: listing.status === "open" ? "var(--success)" : "var(--text-muted)" }}
-              />
-              {listing.status.toUpperCase()}
-            </span>
-          </div>
-
-          {/* Title */}
-          <h1
-            className="text-3xl md:text-4xl font-bold leading-tight mb-5"
-            style={{ color: "var(--text)", letterSpacing: "-0.03em" }}
-          >
-            {listing.title || `${listing.origin_city} → ${listing.dest_city}`}
-          </h1>
-
-          {/* Route */}
-          <div className="flex items-center gap-2 font-mono text-base mb-6">
-            <span style={{ color: "var(--text)" }}>{listing.origin_city}</span>
-            {listing.origin_country && (
-              <span className="text-sm" style={{ color: "var(--text-muted)" }}>{listing.origin_country}</span>
-            )}
-            <span className="mx-1 text-lg" style={{ color: "var(--accent)" }}>→</span>
-            <span style={{ color: "var(--text)" }}>{listing.dest_city}</span>
-            {listing.dest_country && (
-              <span className="text-sm" style={{ color: "var(--text-muted)" }}>{listing.dest_country}</span>
-            )}
-          </div>
-
-          {/* Meta chips */}
-          {(hasDates || listing.capacity_kg) && (
-            <div
-              className="flex flex-wrap gap-8 py-5 mb-8"
-              style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
-            >
+      {/* ── Meta + sidebar ── */}
+      <div className="detail-split">
+        <div className="manifest-field">
+          {hasDates && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "24px 40px" }}>
               {listing.depart_date && (
-                <MetaCell label={t('listings.departure')}>
+                <MetaCell label={t("listings.departure")}>
                   {formatListingDate(listing.depart_date)}
                   {listing.date_flexibility && listing.date_flexibility !== "exact" && (
-                    <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      {listing.date_flexibility === "week" ? t('listings.week_flexible') : t('listings.month_flexible')}
-                    </p>
+                    <span className="font-label field-dim" style={{ display: "block", marginTop: 4 }}>
+                      {listing.date_flexibility === "week" ? t("listings.week_flexible") : t("listings.month_flexible")}
+                    </span>
                   )}
                 </MetaCell>
               )}
               {listing.arrive_date && (
-                <MetaCell label={t('listings.arrival')}>{formatListingDate(listing.arrive_date)}</MetaCell>
-              )}
-              {listing.capacity_kg && (
-                <MetaCell label={t('listings.capacity')}>{listing.capacity_kg} kg</MetaCell>
+                <MetaCell label={t("listings.arrival")}>{formatListingDate(listing.arrive_date)}</MetaCell>
               )}
             </div>
           )}
 
-          {/* Description */}
-          <div className="mb-10">
-            <h2 className="font-mono text-[10px] tracking-[0.2em] mb-4 uppercase" style={{ color: "var(--text-muted)" }}>
-              {t('listings.details')}
-            </h2>
-            <p className="leading-relaxed text-[15px]" style={{ color: "var(--text-muted)" }}>
-              {listing.description || t('listings.no_details')}
-            </p>
-          </div>
+          <h2 className="field-caption" style={{ marginTop: hasDates ? 24 : 0 }}>
+            {t("listings.details")}
+          </h2>
+          <p className="copy" style={{ color: "var(--text-muted)" }}>
+            {listing.description || t("listings.no_details")}
+          </p>
 
-          {/* Owner card */}
           {owner && (
-            <Link to="/profile/$userId" params={{ userId: owner.id }} className="block group">
-              <div
-                className="p-6 rounded-sm transition-all"
-                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(37,99,235,0.35)")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
-              >
-                <h3 className="font-mono text-[10px] tracking-[0.2em] mb-5 uppercase" style={{ color: "var(--text-muted)" }}>
-                  {listing.kind === "trip" ? t('listings.traveler_profile') : listing.kind === "delivery" ? t('listings.carrier_profile') : t('listings.requester_profile')}
-                </h3>
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-14 h-14 rounded-sm flex items-center justify-center shrink-0 overflow-hidden"
-                    style={{ background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}
-                  >
-                    {owner.avatar_url ? (
-                      <img src={owner.avatar_url} alt={owner.display_name ?? "User"} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xl font-bold" style={{ color: "var(--accent)" }}>
-                        {(owner.display_name ?? "?").charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap mb-1.5">
-                      <span className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-                        {owner.display_name ?? "Anonymous"}
-                      </span>
-                      {owner.identity_verified === true && <VerifiedBadge size="xs" />}
-                      {owner.identity_verified === false && <UnverifiedBadge size="xs" />}
-                      <StarRating rating={owner.rating} count={owner.review_count ?? 0} />
-                    </div>
-                    {(owner.city || owner.country) && (
-                      <p className="font-mono text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
-                        {[owner.city, owner.country].filter(Boolean).join(", ")}
-                      </p>
-                    )}
-                    {owner.bio && (
-                      <p className="text-[13px] leading-relaxed line-clamp-2" style={{ color: "var(--text-muted)" }}>{owner.bio}</p>
-                    )}
-                  </div>
-                  <span
-                    className="font-mono text-[11px] tracking-widest shrink-0 self-center transition-colors"
-                    style={{ color: "var(--text-faint)" }}
-                  >
-                    {t('listings.view_profile')}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          )}
-        </motion.div>
-
-        {/* ── Sidebar ── */}
-        <motion.aside
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className="w-full lg:w-[280px] shrink-0"
-        >
-          <div
-            className="sticky top-24 rounded-sm p-6"
-            style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
-          >
-            {/* Price */}
-            <div className="mb-5">
-              <p className="font-mono text-[9px] tracking-[0.2em] mb-2 uppercase" style={{ color: "var(--text-muted)" }}>
-                {listing.kind === "request" ? t('listings.offered_reward') : t('listings.price_label')}
-              </p>
-              <p
-                className="text-3xl font-bold"
-                style={{ color: "var(--accent)", letterSpacing: "-0.02em" }}
-              >
-                {priceDisplay}
-              </p>
-              {listing.currency && listing.price && (
-                <p className="font-mono text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>{listing.currency}</p>
-              )}
-            </div>
-
-            {/* Status */}
-            <div
-              className="flex items-center gap-2 mb-5 py-3"
-              style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
+            <Link
+              to="/profile/$userId"
+              params={{ userId: owner.id }}
+              style={{ textDecoration: "none", color: "inherit", display: "block", marginTop: 24 }}
             >
-              <motion.div
-                className="w-2 h-2 rounded-full"
-                style={{
-                  background: listing.status === "open" ? "var(--success)" : "var(--text-muted)",
-                  boxShadow: listing.status === "open" ? "0 0 8px rgba(34,197,94,0.5)" : "none",
-                }}
-                animate={listing.status === "open" ? { opacity: [1, 0.4, 1] } : {}}
-                transition={{ duration: 1.6, repeat: Infinity }}
-              />
-              <span className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                {listing.status.toUpperCase()}
-              </span>
-            </div>
-
-            {/* Actions */}
-            {isOwn ? (
-              <div className="space-y-3">
-                <p className="text-center font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                  {t('listings.your_listing')}
-                </p>
-                {listing.status === "open" && (
-                  <button
-                    onClick={() => setConfirmClose(true)}
-                    className="w-full font-mono text-[11px] tracking-widest rounded-sm py-3 transition-colors"
-                    style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = "rgba(234,179,8,0.4)"
-                      e.currentTarget.style.color = "#fde047"
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = "var(--border)"
-                      e.currentTarget.style.color = "var(--text-muted)"
-                    }}
-                  >
-                    {t('listings.confirm_close')}
-                  </button>
-                )}
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="w-full font-mono text-[11px] tracking-widest rounded-sm py-3 transition-colors"
-                  style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"
-                    e.currentTarget.style.color = "var(--destructive)"
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.color = "var(--text-muted)"
+              <h3 className="field-caption">
+                {listing.kind === "carry" ? t("listings.carrier_profile") : t("listings.sender_profile")}
+              </h3>
+              <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    flexShrink: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    border: "var(--bw) solid var(--line)",
+                    overflow: "hidden",
                   }}
                 >
-                  {t('listings.delete_listing')}
-                </button>
-              </div>
-            ) : listing.status === "open" ? (
-              <ContactButton listing={listing} />
-            ) : (
-              <button
-                disabled
-                className="w-full font-mono text-[11px] tracking-widest rounded-sm py-3 cursor-not-allowed"
-                style={{ border: "1px solid var(--border)", color: "var(--text-muted)", opacity: 0.5 }}
-              >
-                {t('listings.listing_closed')}
-              </button>
-            )}
+                  {owner.avatar_url ? (
+                    <img src={owner.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <span className="font-display" style={{ fontSize: "1.4rem" }}>
+                      {(owner.display_name ?? "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span className="copy" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontWeight: 600 }}>
+                    {owner.display_name ?? "Anonymous"}
+                    {owner.identity_verified === true && <VerifiedBadge size="xs" />}
+                    {owner.identity_verified === false && <UnverifiedBadge size="xs" />}
+                    <StarRating rating={owner.rating} count={owner.review_count ?? 0} />
+                  </span>
+                  {(owner.city || owner.country) && (
+                    <span className="font-label field-dim" style={{ display: "block", marginTop: 4 }}>
+                      {[owner.city, owner.country].filter(Boolean).join(", ")}
+                    </span>
+                  )}
+                  {owner.bio && (
+                    <span className="copy ink-dim" style={{ display: "block", marginTop: 4 }}>
+                      {owner.bio}
+                    </span>
+                  )}
+                </span>
+                <span className="font-label field-dim" style={{ marginLeft: "auto", flexShrink: 0 }}>
+                  {t("listings.view_profile")}
+                </span>
+              </span>
+            </Link>
+          )}
+        </div>
 
-            {actionError && (
-              <p className="font-mono text-[11px] text-center mt-3" style={{ color: "var(--destructive)" }}>
-                {actionError}
+        <div className="manifest-field">
+          <h2 className="field-caption">
+            {listing.kind === "need" ? t("listings.offered_reward") : t("listings.price_label")}
+          </h2>
+          <p
+            className="font-display tabular"
+            style={{ fontSize: "var(--t-h1)", margin: 0, lineHeight: 1 }}
+          >
+            {priceDisplay}
+          </p>
+          {listing.currency && listing.price && (
+            <p className="font-label field-dim" style={{ marginTop: 8 }}>{listing.currency}</p>
+          )}
+
+          <div className="field-rule" aria-hidden="true" style={{ marginTop: 20, marginBottom: 20 }} />
+
+          {isOwn ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <p className="font-label field-dim" style={{ margin: 0, textAlign: "center" }}>
+                {t("listings.your_listing")}
               </p>
-            )}
+              {listing.status === "open" && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClose(true)}
+                  className="btn btn--ghost"
+                  style={{ width: "100%" }}
+                >
+                  {t("listings.confirm_close")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="btn btn--ghost"
+                style={{ width: "100%" }}
+              >
+                {t("listings.delete_listing")}
+              </button>
+            </div>
+          ) : listing.status === "open" ? (
+            <ContactButton listing={listing} />
+          ) : (
+            <button type="button" disabled className="btn btn--ghost" style={{ width: "100%", opacity: 0.5 }}>
+              {t("listings.listing_closed")}
+            </button>
+          )}
 
-            <p className="text-center font-mono text-[10px] mt-4 tracking-wider" style={{ color: "var(--text-faint)" }}>
-              {t('listings.secured_by_peregri')}
+          {actionError && (
+            <p className="copy" style={{ color: "var(--destructive)", textAlign: "center", marginTop: 12 }}>
+              {actionError}
             </p>
-          </div>
-        </motion.aside>
+          )}
+        </div>
       </div>
 
-      {/* Confirm modals */}
-      <AnimatePresence>
-        {confirmClose && (
-          <ConfirmModal
-            title={t('listings.close_this_listing')}
-            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t('listings.close_listing_confirm_detail')}`}
-            confirmLabel={t('listings.confirm_close')}
-            busy={closeMutation.isPending}
-            onConfirm={() => closeMutation.mutate()}
-            onCancel={() => setConfirmClose(false)}
-          />
-        )}
-        {confirmDelete && (
-          <ConfirmModal
-            title={t('listings.delete_this_listing')}
-            message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t('listings.delete_listing_confirm_detail')}`}
-            confirmLabel={t('listings.confirm_deleting')}
-            danger
-            busy={deleteMutation.isPending}
-            onConfirm={() => deleteMutation.mutate()}
-            onCancel={() => setConfirmDelete(false)}
-          />
-        )}
-      </AnimatePresence>
+      {confirmClose && (
+        <ConfirmModal
+          title={t("listings.close_this_listing")}
+          message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t("listings.close_listing_confirm_detail")}`}
+          confirmLabel={t("listings.confirm_close")}
+          busy={closeMutation.isPending}
+          onConfirm={() => closeMutation.mutate()}
+          onCancel={() => setConfirmClose(false)}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title={t("listings.delete_this_listing")}
+          message={`"${listing.title || `${listing.origin_city} → ${listing.dest_city}`}" ${t("listings.delete_listing_confirm_detail")}`}
+          confirmLabel={t("listings.confirm_deleting")}
+          danger
+          busy={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   )
 }

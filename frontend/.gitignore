@@ -1,0 +1,8 @@
+
+# Full-resolution photo originals. scripts/optimize-images.py turns these into
+# the committed derivatives in public/images; the multi-megabyte sources stay
+# out of the repository.
+assets/photos/
+
+# tsc -b incremental cache. Regenerated on every build; not source.
+tsconfig.tsbuildinfo

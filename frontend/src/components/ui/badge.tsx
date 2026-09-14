@@ -11,9 +11,8 @@ const badgeVariants = cva(
         open: "border-border bg-surface-raised text-text-muted",
         matched: "border-accent-dim/40 bg-accent-dim/15 text-accent",
         completed: "border-success/30 bg-success/10 text-success",
-        trip: "border-border bg-surface-raised text-text-muted",
-        request: "border-border bg-surface-raised text-text-muted",
-        delivery: "border-border bg-surface-raised text-text-muted",
+        carry: "border-border bg-surface-raised text-text-muted",
+        need: "border-border bg-surface-raised text-text-muted",
       },
     },
     defaultVariants: {

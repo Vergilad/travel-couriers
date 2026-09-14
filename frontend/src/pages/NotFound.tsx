@@ -8,7 +8,7 @@ export function NotFoundPage() {
 
   return (
     <div
-      className="min-h-screen pt-16 flex flex-col items-center justify-center text-center px-6"
+      className="min-h-dvh pt-16 flex flex-col items-center justify-center text-center px-6"
       style={{ background: "var(--bg)" }}
     >
       <div

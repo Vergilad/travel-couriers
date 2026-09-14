@@ -163,7 +163,6 @@ export function CityAutocomplete({
   }
 
   const isInvalid = strict && touched && !confirmed
-  const py = compact ? "py-2" : "py-3"
 
   // Derive border color based on state
   const borderColor = isInvalid
@@ -202,12 +201,15 @@ export function CityAutocomplete({
           aria-label={label ?? placeholder}
           autoComplete="off"
           spellCheck={false}
-          className={`w-full font-mono ${py} pl-8 pr-8 text-[12px] transition-all duration-150 rounded-sm outline-none`}
+          className={`w-full transition-all duration-150 rounded-sm outline-none`}
           style={{
             background: "var(--surface)",
             border: `1px solid ${borderColor}`,
             color: "var(--text)",
             caretColor: "var(--accent)",
+            fontFamily: "var(--font-sans)",
+            fontSize: "1.06rem",
+            padding: "14px 34px 14px 36px",
           }}
         />
         {loading && (

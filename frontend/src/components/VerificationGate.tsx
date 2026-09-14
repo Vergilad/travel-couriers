@@ -1,11 +1,17 @@
 /**
- * VerificationGate — modal shown when a user tries to confirm a match
- * before completing identity verification.
+ * VerificationGate - manual review form (ID photo + selfie forwarded to the
+ * admin via Telegram bot). Same submit contract as before; only the surface
+ * changed: route inputs, seg-free buttons, full EN+RU wiring (the old form
+ * hardcoded English and cut one sentence in half).
  *
- * Single path: manual review (ID photo + selfie forwarded to admin via Telegram bot).
+ * Two framings, one form: `bare` renders inline for the /verify page,
+ * the default wraps in a modal overlay for the inbox confirm flow.
  */
 import * as React from "react"
-import { supabase } from "@/lib/supabase"
+import { authedFetch } from "@/lib/api"
+import { compressDocument } from "@/lib/images"
+import { useTranslation } from "@/i18n/I18nContext"
+import { useColorMode } from "@/hooks/use-color-mode"
 
 type Step = "manual_form" | "manual_submitted" | "other_only"
 
@@ -15,115 +21,53 @@ interface VerificationGateProps {
   otherNeedVerify: boolean
   onClose: () => void
   onVerified: () => void
+  /** Inline (page) instead of modal overlay (inbox). */
+  bare?: boolean
 }
 
-const mono: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace" }
-const monoSm: React.CSSProperties = { ...mono, fontSize: 11, letterSpacing: "0.15em" }
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[11px] tracking-[0.15em] uppercase" style={{ ...mono, color: "var(--text-muted)" }}>
-      {children}
-    </p>
-  )
-}
-
-function PrimaryBtn({
-  children,
-  onClick,
-  disabled,
-  type = "button",
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  disabled?: boolean
-  type?: "button" | "submit"
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className="px-5 py-2.5 rounded-full text-[11px] font-bold tracking-widest transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      style={{
-        ...monoSm,
-        background: disabled ? "var(--surface-raised)" : "var(--accent)",
-        color: disabled ? "var(--text-muted)" : "#ffffff",
-      }}
-      onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = "var(--accent-dim)" }}
-      onMouseLeave={e => { if (!disabled) e.currentTarget.style.background = "var(--accent)" }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function GhostBtn({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-4 py-2 rounded-full text-[11px] tracking-widest transition-colors"
-      style={{ ...monoSm, color: "var(--text-muted)", border: "1px solid var(--border)" }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = "var(--accent)"
-        e.currentTarget.style.color = "var(--accent)"
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = "var(--border)"
-        e.currentTarget.style.color = "var(--text-muted)"
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function FileInput({
+function FilePicker({
   label,
-  accept,
   file,
   onChange,
 }: {
   label: string
-  accept: string
   file: File | null
   onChange: (f: File) => void
 }) {
+  const { t } = useTranslation()
   const ref = React.useRef<HTMLInputElement>(null)
   return (
     <div>
-      <p className="text-[11px] mb-1.5" style={{ ...monoSm, color: "var(--text-muted)" }}>{label}</p>
+      <p className="font-label field-dim" style={{ margin: "0 0 6px" }}>{label}</p>
       <button
         type="button"
         onClick={() => ref.current?.click()}
-        className="w-full px-4 py-3 rounded-sm text-left text-[13px] transition-colors"
-        style={{
-          background: "var(--surface-raised)",
-          border: `1px solid ${file ? "var(--accent)" : "var(--border)"}`,
-          color: file ? "var(--text)" : "var(--text-faint)",
-        }}
+        className="route-input field-row"
+        style={{ textAlign: "left", cursor: "pointer", color: file ? "var(--text)" : "var(--text-muted)" }}
       >
-        {file ? `✓ ${file.name}` : "Click to choose file"}
+        {file ? `✓ ${file.name}` : t("verification.click_choose_file")}
       </button>
       <input
         ref={ref}
         type="file"
-        accept={accept}
-        className="hidden"
-        onChange={e => e.target.files?.[0] && onChange(e.target.files[0])}
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => e.target.files?.[0] && onChange(e.target.files[0])}
       />
     </div>
   )
 }
 
 export function VerificationGate({
-  token,
+  token: _token,
   youNeedVerify,
   otherNeedVerify,
   onClose,
-  onVerified,
+  onVerified: _onVerified,
+  bare = false,
 }: VerificationGateProps) {
+  const { t } = useTranslation()
+  const { mode } = useColorMode()
   const [step, setStep] = React.useState<Step>(youNeedVerify ? "manual_form" : "other_only")
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -138,170 +82,177 @@ export function VerificationGate({
     setBusy(true)
     setError(null)
     try {
-      const { data: { session } } = await supabase!.auth.getSession()
       const form = new FormData()
       form.append("full_name", fullName.trim())
-      form.append("id_photo", idPhoto)
-      form.append("selfie_photo", selfiePhoto)
-
-      const res = await fetch("/api/verification/start-manual", {
+      // Compacted like avatars (roomier: a human reads fine print off
+      // these). JPEG output, so fixed .jpg names for the backend check.
+      form.append("id_photo", await compressDocument(idPhoto), "id.jpg")
+      form.append("selfie_photo", await compressDocument(selfiePhoto), "selfie.jpg")
+      // authedFetch: refreshes the 15-minute token when needed, and leaves
+      // the multipart boundary alone (see session.ts).
+      const res = await authedFetch("/api/verification/start-manual", {
         method: "POST",
-        headers: { Authorization: `Bearer ${session?.access_token}` },
         body: form,
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(typeof d.detail === "string" ? d.detail : "Submission failed")
+        throw new Error(typeof d.detail === "string" ? d.detail : t("verification.submit_failed"))
       }
       setStep("manual_submitted")
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t("verification.submit_failed"))
     } finally {
       setBusy(false)
     }
   }
 
+  const body = (
+    <>
+      {step === "other_only" && (
+        <>
+          <p className="copy" style={{ margin: 0, maxWidth: "52ch" }}>
+            {t("verification.other_not_verified")}
+          </p>
+          <p className="copy ink-dim" style={{ marginTop: 10 }}>
+            {t("verification.ask_them_verify")}
+          </p>
+          <div style={{ marginTop: 16 }}>
+            <button type="button" onClick={onClose} className="btn btn--plain press">
+              {t("verification.close")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {step === "manual_form" && (
+        <form onSubmit={submitManual} style={{ display: "grid", gap: 16 }}>
+          <div>
+            <h3 className="font-display" style={{ fontSize: "var(--t-h3)", margin: 0 }}>
+              {t("verification.one_last_step")}
+            </h3>
+            <p className="copy ink-dim" style={{ marginTop: 10, maxWidth: "58ch" }}>
+              {t("verification.protect_message")}
+            </p>
+            <ul className="copy" style={{ margin: "12px 0 0", paddingLeft: 18, display: "grid", gap: 6, maxWidth: "58ch" }}>
+              <li>{t("verification.encrypted_photos")}</li>
+              <li>{t("verification.human_review")}</li>
+              <li>{t("verification.no_storage")}</li>
+              <li>{t("verification.no_sharing")}</li>
+            </ul>
+            {otherNeedVerify && (
+              <p className="copy ink-dim" style={{ marginTop: 10 }}>
+                {t("verification.recommend_other_verify")}
+              </p>
+            )}
+          </div>
+
+          <label style={{ display: "grid", gap: 6, minWidth: 0 }}>
+            <span className="font-label field-dim">{t("verification.full_name_label")}</span>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              placeholder={t("verification.full_name_placeholder")}
+              autoComplete="name"
+              className="route-input"
+            />
+          </label>
+
+          <FilePicker label={t("verification.id_document_label")} file={idPhoto} onChange={setIdPhoto} />
+          <FilePicker label={t("verification.selfie_label")} file={selfiePhoto} onChange={setSelfiePhoto} />
+
+          {error && (
+            <p role="alert" className="copy" style={{ margin: 0, color: "var(--destructive)" }}>
+              {error}
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="submit"
+              disabled={busy || !fullName.trim() || !idPhoto || !selfiePhoto}
+              className="btn btn--primary press"
+              style={{ flex: 1, minWidth: 180 }}
+            >
+              {busy ? t("verification.submitting") : t("verification.submit_for_review")}
+            </button>
+            <button type="button" onClick={onClose} className="btn btn--plain press">
+              {t("verification.cancel")}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {step === "manual_submitted" && (
+        <>
+          <p className="font-label" style={{ margin: 0, color: "var(--success)" }}>
+            {t("verification.documents_submitted")}
+          </p>
+          <p className="copy ink-dim" style={{ marginTop: 10, maxWidth: "58ch" }}>
+            {t("verification.documents_sent")}
+          </p>
+          <div style={{ marginTop: 16 }}>
+            <button type="button" onClick={onClose} className="btn btn--primary press">
+              {t("verification.close")}
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  )
+
+  if (bare) return <>{body}</>
+
+  // A Viactor island: the inbox still wears old chrome, so the modal brings
+  // its own theme scope instead of inheriting unstyled class names.
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(9,9,11,0.85)", backdropFilter: "blur(6px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      role="dialog"
+      aria-modal="true"
+      data-theme="viactor"
+      data-mode={mode}
+      aria-label={t("verification.identity_verification")}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 60,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        background: "rgba(9,9,11,0.85)",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="w-full max-w-md rounded-sm overflow-hidden"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "calc(100dvh - 32px)",
+          overflowY: "auto",
+          background: "var(--sheet)",
+          border: "var(--bw) solid var(--line)",
+          boxShadow: "var(--shadow)",
+          padding: "var(--tile-pad)",
+          color: "var(--text)",
+        }}
       >
-        {/* Header */}
-        <div
-          className="px-6 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-4 rounded-sm" style={{ background: "var(--accent)" }} />
-            <Label>Identity Verification</Label>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+          <h2 className="field-caption" style={{ margin: 0 }}>
+            {t("verification.identity_verification")}
+          </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-[18px] leading-none transition-colors"
-            style={{ color: "var(--text-faint)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}
+            aria-label={t("verification.close")}
+            className="font-label"
+            style={{ cursor: "pointer", background: "none", border: 0, padding: 4, color: "var(--text-muted)" }}
           >
-            ×
+            ✕
           </button>
         </div>
-
-        {/* Body */}
-        <div className="px-6 py-5 space-y-5">
-
-          {/* Other party only */}
-          {step === "other_only" && (
-            <>
-              <p className="text-[14px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                The other party hasn't verified their identity yet. Both participants must be verified before confirming a match.
-              </p>
-              <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>
-                Please ask them to complete identity verification and try again.
-              </p>
-              <div className="flex justify-end pt-1">
-                <GhostBtn onClick={onClose}>CLOSE</GhostBtn>
-              </div>
-            </>
-          )}
-
-          {/* Manual form */}
-          {step === "manual_form" && (
-            <form onSubmit={submitManual} className="space-y-4">
-              <div>
-                <p className="text-[15px] font-medium mb-1" style={{ color: "var(--text)" }}>
-                  One last step before confirming
-                </p>
-                <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  To protect everyone on Peregri, we strongly recommend verifying your identity. Here's exactly what happens with your documents:
-                </p>
-                <ul className="text-[12px] leading-relaxed space-y-1.5 mt-3" style={{ color: "var(--text-faint)" }}>
-                  <li>~ Photos are sent over an encrypted connection directly to our team</li>
-                  <li>~ A real person reviews them — no automated processing</li>
-                  <li>~ Documents are not stored in a database. No risk of data breaches.</li>
-                  <li>~ We never share, use, or distribute your personal information. With the sole exception of cases required by law.</li>
-                </ul>
-                {otherNeedVerify && (
-                  <p className="text-[12px] mt-3" style={{ color: "var(--text-faint)" }}>
-                    We also recommend asking the other party to verify their identity. That is a good way to determine if they are not 
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[11px] tracking-[0.15em]" style={{ ...monoSm, color: "var(--text-muted)" }}>
-                  FULL NAME (as on your ID)
-                </p>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  required
-                  placeholder="e.g. Igor Gofman"
-                  className="w-full px-4 py-2.5 rounded-sm text-[14px] focus:outline-none transition-colors"
-                  style={{
-                    background: "var(--surface-raised)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text)",
-                    caretColor: "var(--accent)",
-                  }}
-                  onFocus={e => (e.currentTarget.style.borderColor = "var(--accent)")}
-                  onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
-                />
-              </div>
-
-              <FileInput
-                label="ID DOCUMENT (passport, national ID, driver's licence)"
-                accept="image/*"
-                file={idPhoto}
-                onChange={setIdPhoto}
-              />
-              <FileInput
-                label="SELFIE HOLDING YOUR ID"
-                accept="image/*"
-                file={selfiePhoto}
-                onChange={setSelfiePhoto}
-              />
-
-              {error && (
-                <p className="text-[12px]" style={{ color: "var(--destructive)" }}>{error}</p>
-              )}
-
-              <div className="flex items-center gap-3 pt-1">
-                <PrimaryBtn
-                  type="submit"
-                  disabled={busy || !fullName.trim() || !idPhoto || !selfiePhoto}
-                >
-                  {busy ? "SUBMITTING…" : "SUBMIT FOR REVIEW"}
-                </PrimaryBtn>
-                <GhostBtn onClick={onClose}>CANCEL</GhostBtn>
-              </div>
-            </form>
-          )}
-
-          {/* Submitted */}
-          {step === "manual_submitted" && (
-            <>
-              <div className="flex items-center gap-3">
-                <span className="text-[20px]">✓</span>
-                <p className="text-[14px] font-medium" style={{ color: "var(--success)" }}>
-                  Documents submitted
-                </p>
-              </div>
-              <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                Your documents have been sent for review. You'll be able to confirm the match once approved — this usually takes a few hours. You can close this and come back later.
-              </p>
-              <div className="flex justify-end pt-1">
-                <PrimaryBtn onClick={onClose}>CLOSE</PrimaryBtn>
-              </div>
-            </>
-          )}
-
-        </div>
+        {body}
       </div>
     </div>
   )

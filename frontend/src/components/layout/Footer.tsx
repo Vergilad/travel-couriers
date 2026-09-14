@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { motion } from "framer-motion"
-import { Waypoints } from "lucide-react"
+import { IconRouteSquare2 } from "@tabler/icons-react"
 
 const links = [
   { to: "/browse" as const, label: "Browse" },
@@ -24,7 +24,7 @@ export function Footer() {
       <div className="mx-auto max-w-[1200px]">
         {/* Brand */}
         <div className="flex items-center gap-2.5 mb-6">
-          <Waypoints className="w-4 h-4" style={{ color: "var(--accent)" }} />
+          <IconRouteSquare2 size={16} stroke={2} style={{ color: "var(--accent)" }} />
           <span
             className="text-[13px] font-bold tracking-[0.12em]"
             style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}

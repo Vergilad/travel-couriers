@@ -1,5 +1,14 @@
+/**
+ * Profile as a Viactor dossier: one manifest, four fields. Identity block on
+ * top (avatar, name, verification stamp, home base, track record, bio),
+ * then active listings, history and reviews as ledger rows. Same queries and
+ * mutations as before; only the reading surface changed.
+ *
+ * Rating input is a seg control (1-5), the sheet's own vocabulary for "pick
+ * one". The pentagon graph and motion reveals are gone: a dossier is read,
+ * not watched.
+ */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { motion, AnimatePresence } from "framer-motion"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { useAuth } from "@/lib/auth"
@@ -27,16 +36,6 @@ interface ProfileListing {
   created_at: string
 }
 
-interface HistoryDeal {
-  id: string
-  kind: string
-  origin_city: string
-  dest_city: string
-  depart_date: string | null
-  completed_at: string
-  partner: { display_name: string | null; avatar_url: string | null }
-}
-
 interface Review {
   id: string
   reviewer_id: string
@@ -59,225 +58,58 @@ interface EligibleDeal {
   completed_at: string | null
 }
 
-const KIND_COLORS: Record<string, { bg: string; text: string }> = {
-  trip:     { bg: "rgba(147,197,253,0.1)",  text: "#93c5fd" },
-  request:  { bg: "rgba(134,239,172,0.1)",  text: "#86efac" },
-  delivery: { bg: "rgba(216,180,254,0.1)",  text: "#d8b4fe" },
-}
-
-function kindStyle(kind: string) {
-  return KIND_COLORS[kind?.toLowerCase()] ?? { bg: "rgba(255,255,255,0.05)", text: "var(--text-muted)" }
-}
-
 const RATING_LABELS = ["", "POOR", "BELOW AVG", "ALRIGHT", "GOOD", "EXCELLENT"]
 
-function pentaVerts(cx: number, cy: number, r: number) {
-  return Array.from({ length: 5 }, (_, i) => {
-    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5
-    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }
-  })
-}
+// ── Small pieces ────────────────────────────────────────────────────────────
 
-function edgeLen(a: { x: number; y: number }, b: { x: number; y: number }) {
-  return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2)
-}
-
-const PENTA_EDGES: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]
-
-function isEdgeActive(f: number, t: number, active: number) {
-  return active > Math.max(f, t)
-}
-
-function GraphRating({
-  value,
-  onChange,
-  size = "lg",
-}: {
-  value: number
-  onChange?: (v: number) => void
-  size?: "sm" | "lg"
-}) {
+function KindChip({ kind }: { kind: string }) {
   const { t } = useTranslation()
-  const [hovered, setHovered] = useState(0)
-  const active = hovered || value
-  const interactive = Boolean(onChange)
-
-  const dim = size === "lg" ? 200 : 46
-  const r   = size === "lg" ? 76  : 16
-  const cx  = dim / 2
-  const cy  = dim / 2
-  const nodeR  = size === "lg" ? 10  : 3
-  const strokeW = size === "lg" ? 2   : 1
-  const hitR = size === "lg" ? 22 : 0
-
-  const verts = pentaVerts(cx, cy, r)
-  const labelR = r + (size === "lg" ? 22 : 0)
-  const labelVerts = pentaVerts(cx, cy, labelR)
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: size === "lg" ? 10 : 4 }}>
-      <svg
-        width={dim}
-        height={dim}
-        style={{ overflow: "visible" }}
-        onMouseLeave={interactive ? () => setHovered(0) : undefined}
-      >
-        {PENTA_EDGES.map(([f, t], i) => (
-          <line
-            key={`bg-${i}`}
-            x1={verts[f].x} y1={verts[f].y}
-            x2={verts[t].x} y2={verts[t].y}
-            stroke="var(--border)"
-            strokeWidth={strokeW}
-          />
-        ))}
-
-        {PENTA_EDGES.map(([f, t], i) => {
-          const len = edgeLen(verts[f], verts[t])
-          const active_ = isEdgeActive(f, t, active)
-          return (
-            <motion.line
-              key={`fg-${i}`}
-              x1={verts[f].x} y1={verts[f].y}
-              x2={verts[t].x} y2={verts[t].y}
-              stroke="var(--accent)"
-              strokeWidth={strokeW + (size === "lg" ? 1 : 0)}
-              style={{ strokeDasharray: len }}
-              animate={{ strokeDashoffset: active_ ? 0 : len, opacity: active_ ? 1 : 0 }}
-              initial={false}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-            />
-          )
-        })}
-
-        {verts.map((v, i) => (
-          <motion.circle
-            key={`glow-${i}`}
-            cx={v.x} cy={v.y}
-            fill="var(--accent)"
-            animate={{ r: i < active ? nodeR * 3.2 : 0, opacity: i < active ? 0.15 : 0 }}
-            initial={false}
-            transition={{ duration: 0.2 }}
-          />
-        ))}
-
-        {verts.map((v, i) => {
-          const vActive = i < active
-          return (
-            <motion.circle
-              key={`node-${i}`}
-              cx={v.x} cy={v.y}
-              fill={vActive ? "var(--accent)" : "var(--surface-raised)"}
-              stroke={vActive ? "var(--accent)" : "var(--border)"}
-              strokeWidth={strokeW}
-              animate={{ r: vActive ? nodeR * 1.35 : nodeR }}
-              initial={false}
-              transition={{ type: "spring", stiffness: 420, damping: 22 }}
-              style={{ cursor: interactive ? "pointer" : "default" }}
-              onMouseEnter={interactive ? () => setHovered(i + 1) : undefined}
-              onClick={interactive && onChange ? () => onChange(i + 1) : undefined}
-            />
-          )
-        })}
-
-        {interactive && size === "lg" && verts.map((v, i) => (
-          <circle
-            key={`hit-${i}`}
-            cx={v.x} cy={v.y} r={hitR}
-            fill="transparent"
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => setHovered(i + 1)}
-            onClick={() => onChange?.(i + 1)}
-          />
-        ))}
-
-        {size === "lg" && labelVerts.map((v, i) => (
-          <text
-            key={`lbl-${i}`}
-            x={v.x} y={v.y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 10,
-              letterSpacing: "0.05em",
-              fill: i < active ? "var(--accent)" : "var(--text-faint)",
-              userSelect: "none",
-              transition: "fill 0.2s",
-            }}
-          >
-            {i + 1}
-          </text>
-        ))}
-      </svg>
-
-      {size === "lg" && (
-        <div style={{ height: 20, display: "flex", alignItems: "center" }}>
-          <AnimatePresence mode="wait">
-            {active > 0 ? (
-              <motion.span
-                key={active}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                transition={{ duration: 0.14 }}
-                style={{
-                  display: "block",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: "0.2em",
-                  color: "var(--accent)",
-                }}
-              >
-                {RATING_LABELS[active]}
-              </motion.span>
-            ) : (
-              <motion.span
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.14 }}
-                style={{
-                  display: "block",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: "0.2em",
-                  color: "var(--text-faint)",
-                }}
-              >
-                {interactive ? t('profile.hover_to_rate') : ""}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
-  )
+  const k = kind?.toLowerCase()
+  if (k === "carry" || k === "need") {
+    return (
+      <span className="stencil-chip" data-side={k}>
+        {t(`kinds.${k}`)}
+      </span>
+    )
+  }
+  return <span className="stencil-chip">{kind?.toUpperCase()}</span>
 }
 
-function Skeleton({ className = "" }: { className?: string }) {
+function Face({ name, url, size = 28 }: { name: string; url?: string | null; size?: number }) {
   return (
-    <div className={`animate-pulse rounded-sm ${className}`} style={{ background: "var(--surface-raised)" }} />
-  )
-}
-
-function ReviewerAvatar({ name, url }: { name: string; url?: string | null }) {
-  return (
-    <div
-      className="w-7 h-7 rounded-sm overflow-hidden flex items-center justify-center shrink-0"
-      style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        background: "var(--face)",
+        border: "var(--bw) solid var(--line)",
+        borderRadius: "var(--radius-base)",
+        fontFamily: "var(--font-mono)",
+        fontWeight: 700,
+        fontSize: Math.max(11, Math.round(size * 0.4)),
+        color: "var(--face-ink)",
+      }}
     >
       {url ? (
-        <img src={url} alt={name} className="w-full h-full object-cover" />
+        <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       ) : (
-        <span className="text-[11px] font-bold" style={{ color: "var(--accent)", fontFamily: "'DM Sans', sans-serif" }}>
-          {name.charAt(0).toUpperCase()}
-        </span>
+        name.charAt(0).toUpperCase()
       )}
-    </div>
+    </span>
   )
 }
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" }).toUpperCase()
+}
+
+// ── Rate panel (seg 1-5 + note, same mutation as before) ────────────────────
 
 const MAX_REVIEW_COMMENT = 500
 
@@ -296,7 +128,6 @@ function RatePanel({
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [focused, setFocused] = useState(false)
   const qc = useQueryClient()
 
   const mutation = useMutation({
@@ -325,94 +156,84 @@ function RatePanel({
   })
 
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      className="overflow-hidden"
-    >
-      <div
-        className="mt-4 p-5 rounded-sm"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[11px] tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}>
-            {t('profile.rate_user_label')} {partnerName.toUpperCase()}
-          </h3>
+    <div style={{ marginTop: 18, border: "var(--bw) solid var(--line)", borderRadius: "var(--radius-base)", padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <h3 className="font-label" style={{ margin: 0 }}>
+          {t("profile.rate_user_label")} {partnerName.toUpperCase()}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="font-label"
+          style={{ cursor: "pointer", background: "none", border: 0, padding: 4, color: "var(--text-muted)" }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {deal.origin_city && deal.dest_city && (
+        <p className="font-label field-dim" style={{ margin: "10px 0 0" }}>
+          {deal.kind?.toUpperCase()} · {deal.origin_city} → {deal.dest_city}
+        </p>
+      )}
+
+      <div className="seg" role="group" aria-label={t("profile.rate_user_label")} style={{ marginTop: 14 }}>
+        {[1, 2, 3, 4, 5].map((v) => (
           <button
-            onClick={onClose}
-            className="text-xs transition-colors"
-            style={{ color: "var(--text-faint)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--text-muted)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}
+            key={v}
+            type="button"
+            className="seg-btn"
+            aria-pressed={rating === v}
+            data-active={rating === v || undefined}
+            onClick={() => setRating(v)}
           >
-            ✕
+            {v}
           </button>
-        </div>
+        ))}
+      </div>
+      <p className="font-label field-dim" style={{ margin: "10px 0 0", minHeight: 16 }}>
+        {rating > 0 ? RATING_LABELS[rating] : t("profile.hover_to_rate")}
+      </p>
 
-        {deal.origin_city && deal.dest_city && (
-          <p className="text-[10px] tracking-wider mb-5" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-            {deal.kind?.toUpperCase()} · {deal.origin_city} → {deal.dest_city}
-          </p>
-        )}
-
-        <div className="flex justify-center mb-5">
-          <GraphRating value={rating} onChange={setRating} size="lg" />
-        </div>
-
+      <label style={{ display: "grid", gap: 6, marginTop: 12 }}>
+        <span className="font-label field-dim">{t("profile.share_experience")}</span>
         <textarea
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder={t('profile.share_experience')}
+          onChange={(e) => setComment(e.target.value.slice(0, MAX_REVIEW_COMMENT))}
           rows={3}
           maxLength={MAX_REVIEW_COMMENT}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          className="w-full rounded-sm px-4 py-2.5 text-[13px] resize-none focus:outline-none"
-          style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            background: "var(--surface-raised)",
-            border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
-            color: "var(--text)",
-            caretColor: "var(--accent)",
-          }}
+          className="route-input"
+          style={{ resize: "none", lineHeight: 1.6 }}
         />
-        <div className="flex items-center justify-between mt-1.5 mb-4">
-          <span className="text-[9px] tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-            {comment.length}/{MAX_REVIEW_COMMENT}
-          </span>
-          {error && (
-            <span className="text-[10px]" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}>
-              {error.toUpperCase()}
-            </span>
-          )}
-        </div>
+      </label>
+      <p className="font-label field-dim tabular" style={{ margin: "8px 0 0" }}>
+        {comment.length}/{MAX_REVIEW_COMMENT}
+      </p>
+      {error && (
+        <p role="alert" className="copy" style={{ margin: "8px 0 0", color: "var(--destructive)" }}>
+          {error}
+        </p>
+      )}
 
-        <div className="flex gap-2">
-          <button
-            onClick={() => { if (rating === 0) { setError(t('profile.select_rating_first')); return }; setError(null); mutation.mutate() }}
-            disabled={mutation.isPending || rating === 0}
-            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ fontFamily: "'JetBrains Mono', monospace", background: "var(--accent)", color: "#ffffff" }}
-            onMouseEnter={e => { if (!mutation.isPending && rating > 0) e.currentTarget.style.background = "var(--accent-dim)" }}
-            onMouseLeave={e => { e.currentTarget.style.background = "var(--accent)" }}
-          >
-            {mutation.isPending ? "…" : t('profile.submit_review')}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm"
-            style={{ fontFamily: "'JetBrains Mono', monospace", border: "1px solid var(--border)", color: "var(--text-muted)" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text)" }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" }}
-          >
-            {t('profile.cancel_btn')}
-          </button>
-        </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => { if (rating === 0) { setError(t("profile.select_rating_first")); return } setError(null); mutation.mutate() }}
+          disabled={mutation.isPending || rating === 0}
+          className="btn btn--primary press"
+          style={{ flex: 1, minWidth: 160 }}
+        >
+          {mutation.isPending ? "…" : t("profile.submit_review")}
+        </button>
+        <button type="button" onClick={onClose} className="btn btn--plain press">
+          {t("profile.cancel_btn")}
+        </button>
       </div>
-    </motion.div>
+    </div>
   )
 }
+
+// ── Report panel (same mutation as before) ──────────────────────────────────
 
 const REPORT_REASONS = [
   "Fraud or scam",
@@ -440,8 +261,6 @@ function ReportPanel({
   const [reason, setReason] = useState("")
   const [details, setDetails] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [focused, setFocused] = useState(false)
-  const [reasonFocused, setReasonFocused] = useState(false)
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -460,112 +279,74 @@ function ReportPanel({
   })
 
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      className="overflow-hidden"
-    >
-      <div className="mt-4 p-5 rounded-sm" style={{ background: "var(--surface)", border: "1px solid rgba(239,68,68,0.2)" }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-[11px] tracking-[0.2em]" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}>
-            {t('profile.report_panel_title')} {targetName.toUpperCase()}
-          </h3>
-          <button onClick={onClose} className="text-xs" style={{ color: "var(--text-faint)" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--text-muted)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--text-faint)")}>
-            ✕
-          </button>
-        </div>
+    <div style={{ marginTop: 18, border: "var(--bw) solid var(--destructive)", borderRadius: "var(--radius-base)", padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <h3 className="font-label" style={{ margin: 0, color: "var(--destructive)" }}>
+          {t("profile.report_panel_title")} {targetName.toUpperCase()}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="font-label"
+          style={{ cursor: "pointer", background: "none", border: 0, padding: 4, color: "var(--text-muted)" }}
+        >
+          ✕
+        </button>
+      </div>
 
-        <p className="text-[11px] leading-relaxed mb-4" style={{ color: "var(--text-muted)" }}>
-          Reports are reviewed by the Peregri team. We do not mediate financial disputes or
-          guarantee refunds — please only transact with people you trust.
-        </p>
+      <p className="copy ink-dim" style={{ marginTop: 10, maxWidth: "62ch" }}>
+        Reports are reviewed by the Peregri team. We do not mediate financial disputes or
+        guarantee refunds. Please only transact with people you trust.
+      </p>
 
-        <div className="mb-3">
-          <label className="block text-[9px] tracking-widest mb-2" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-            {t('profile.reason')}
-          </label>
-          <select
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            onFocus={() => setReasonFocused(true)}
-            onBlur={() => setReasonFocused(false)}
-            className="w-full rounded-sm px-3 py-2.5 text-[12px] focus:outline-none appearance-none"
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              background: "var(--surface-raised)",
-              border: `1px solid ${reasonFocused ? "var(--accent)" : "var(--border)"}`,
-              color: reason ? "var(--text)" : "var(--text-faint)",
-              caretColor: "var(--accent)",
-            }}
-          >
-            <option value="" disabled>{t('profile.select_reason')}</option>
-            {REPORT_REASONS.map(r => (
-              <option key={r} value={r} style={{ background: "var(--surface-raised)", color: "var(--text)" }}>{r}</option>
+      <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span className="font-label field-dim">{t("profile.reason")}</span>
+          <select value={reason} onChange={(e) => setReason(e.target.value)} className="route-input">
+            <option value="" disabled>{t("profile.select_reason")}</option>
+            {REPORT_REASONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
             ))}
           </select>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-[9px] tracking-widest mb-2" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-            {t('profile.details_optional')}
-          </label>
+        </label>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span className="font-label field-dim">{t("profile.details_optional")}</span>
           <textarea
             value={details}
-            onChange={e => setDetails(e.target.value)}
-            placeholder={t('profile.describe_what_happened')}
+            onChange={(e) => setDetails(e.target.value.slice(0, MAX_REPORT_DETAILS))}
+            placeholder={t("profile.describe_what_happened")}
             rows={3}
             maxLength={MAX_REPORT_DETAILS}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            className="w-full rounded-sm px-4 py-2.5 text-[12px] resize-none focus:outline-none"
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              background: "var(--surface-raised)",
-              border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
-              color: "var(--text)",
-              caretColor: "var(--accent)",
-            }}
+            className="route-input"
+            style={{ resize: "none", lineHeight: 1.6 }}
           />
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-[9px] tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {details.length}/{MAX_REPORT_DETAILS}
-            </span>
-            {error && (
-              <span className="text-[10px]" style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--destructive)" }}>
-                {error.toUpperCase()}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => { if (!reason) { setError(t('profile.select_reason_first')); return }; setError(null); mutation.mutate() }}
-            disabled={mutation.isPending || !reason}
-            className="flex-1 px-4 py-2.5 text-[11px] font-bold tracking-widest rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ fontFamily: "'JetBrains Mono', monospace", background: "var(--destructive)", color: "#ffffff" }}
-            onMouseEnter={e => { if (!mutation.isPending && reason) e.currentTarget.style.opacity = "0.85" }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = "1" }}
-          >
-            {mutation.isPending ? "…" : t('profile.submit_report')}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-[11px] tracking-widest rounded-sm"
-            style={{ fontFamily: "'JetBrains Mono', monospace", border: "1px solid var(--border)", color: "var(--text-muted)" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text)" }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-muted)" }}
-          >
-            {t('profile.cancel_btn')}
-          </button>
-        </div>
+        </label>
       </div>
-    </motion.div>
+      {error && (
+        <p role="alert" className="copy" style={{ margin: "8px 0 0", color: "var(--destructive)" }}>
+          {error}
+        </p>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => { if (!reason) { setError(t("profile.select_reason_first")); return } setError(null); mutation.mutate() }}
+          disabled={mutation.isPending || !reason}
+          className="btn btn--plain press"
+          style={{ flex: 1, minWidth: 160, borderColor: "var(--destructive)", color: "var(--destructive)" }}
+        >
+          {mutation.isPending ? "…" : t("profile.submit_report")}
+        </button>
+        <button type="button" onClick={onClose} className="btn btn--plain press">
+          {t("profile.cancel_btn")}
+        </button>
+      </div>
+    </div>
   )
 }
+
+// ── Page ────────────────────────────────────────────────────────────────────
 
 export function ProfilePage({ userId }: { userId: string }) {
   const { t } = useTranslation()
@@ -614,375 +395,238 @@ export function ProfilePage({ userId }: { userId: string }) {
     enabled: !!profile,
   })
 
-  const { data: history } = useQuery({
-    queryKey: ["profile-history", userId],
-    queryFn: async () => {
-      const res = await fetch(`/api/profiles/${userId}/history`)
-      if (!res.ok) return []
-      return res.json() as Promise<HistoryDeal[]>
-    },
-    enabled: !!profile,
-  })
-
   const avgRating =
     reviews && reviews.length > 0
       ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
       : null
 
-  const initial = ((profile?.display_name ?? "P").charAt(0)).toUpperCase()
-
-  const memberSince = profile
-    ? new Date(profile.created_at).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
-    : ""
+  const name = profile?.display_name ?? t("profile.traveler_default")
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <section className="relative pt-24 pb-12 px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto">
-        <div className="absolute top-0 left-0 right-0 h-64 pointer-events-none"
-          style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(37,99,235,0.07) 0%, transparent 70%)" }} />
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="relative flex flex-col md:flex-row items-start md:items-end gap-8 md:gap-12"
-        >
-          <div className="relative shrink-0">
-            {profileLoading ? (
-              <Skeleton className="w-32 h-32 md:w-40 md:h-40 rounded-sm" />
-            ) : profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.display_name ?? ""}
-                className="w-32 h-32 md:w-40 md:h-40 rounded-sm object-cover"
-                style={{ border: "1px solid var(--border)" }} />
-            ) : (
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-sm flex items-center justify-center"
-                style={{ background: "var(--surface-raised)", border: "1px solid var(--border)" }}>
-                <span className="text-6xl md:text-7xl font-bold leading-none"
-                  style={{ color: "var(--accent)", fontFamily: "'DM Sans', sans-serif" }}>{initial}</span>
-              </div>
-            )}
-            <div className="absolute bottom-2 right-2 w-3.5 h-3.5 rounded-sm flex items-center justify-center"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-              <div className="w-2 h-2 rounded-sm" style={{ background: "var(--success)", opacity: 0.8 }} />
-            </div>
+    <div className="manifest">
+      {/* ── Identity field ── */}
+      <section className="manifest-field">
+        <h2 className="field-caption">{t("profile.title")}</h2>
+        {profileLoading || !profile ? (
+          <div aria-hidden="true">
+            <div className="skel" style={{ height: 96, width: 96, marginBottom: 16 }} />
+            <div className="skel" style={{ height: 32, maxWidth: 280, marginBottom: 12 }} />
+            <div className="skel" style={{ height: 14, maxWidth: 200 }} />
           </div>
-
-          <div className="flex-1 pb-1">
-            {profileLoading ? (
-              <>
-                <Skeleton className="h-10 w-48 mb-3" />
-                <Skeleton className="h-3 w-32 mb-4" />
-              </>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
-                  <h1 className="text-4xl md:text-5xl font-bold leading-tight"
-                    style={{ color: "var(--text)", fontFamily: "'DM Sans', sans-serif" }}>
-                    {profile?.display_name ?? t('profile.traveler_default')}
-                  </h1>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {isOwnProfile ? (
-                      <Link to="/settings">
-                        <motion.button
-                          className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
-                          style={{ fontFamily: "'JetBrains Mono', monospace", border: "1px solid var(--border)", color: "var(--accent)" }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.background = "rgba(37,99,235,0.06)" }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "transparent" }}>
-                          {t('profile.edit_profile_btn')}
-                        </motion.button>
-                      </Link>
-                    ) : (
-                      <>
-                        {eligibleDeal && (
-                          <motion.button
-                            onClick={() => { setRateOpen(v => !v); setReportOpen(false) }}
-                            className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
-                            style={{ fontFamily: "'JetBrains Mono', monospace", border: "1px solid rgba(37,99,235,0.4)", background: rateOpen ? "rgba(37,99,235,0.1)" : "rgba(37,99,235,0.05)", color: "var(--accent)" }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(37,99,235,0.12)" }}
-                            onMouseLeave={e => { e.currentTarget.style.background = rateOpen ? "rgba(37,99,235,0.1)" : "rgba(37,99,235,0.05)" }}>
-                            {t('profile.rate_user_label')} {profile?.display_name?.toUpperCase() ?? t('profile.traveler_default').toUpperCase()}
-                          </motion.button>
-                        )}
-                        {user && (
-                          <motion.button
-                            onClick={() => { setReportOpen(v => !v); setRateOpen(false) }}
-                            className="px-5 py-2 text-[10px] rounded-sm tracking-[0.15em]"
-                            style={{ fontFamily: "'JetBrains Mono', monospace", border: `1px solid ${reportOpen ? "rgba(239,68,68,0.4)" : "var(--border)"}`, background: reportOpen ? "rgba(239,68,68,0.06)" : "transparent", color: reportOpen ? "var(--destructive)" : "var(--text-faint)" }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; e.currentTarget.style.color = "var(--destructive)" }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = reportOpen ? "rgba(239,68,68,0.4)" : "var(--border)"; e.currentTarget.style.color = reportOpen ? "var(--destructive)" : "var(--text-faint)" }}>
-                            {t('profile.report')}
-                          </motion.button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mb-3 mt-1">
-                  {profile?.identity_verified ? <VerifiedBadge /> : <UnverifiedBadge />}
-                  {isOwnProfile && !profile?.identity_verified && (
-                    <Link to="/verify">
-                      <button className="text-[10px] tracking-widest transition-colors"
-                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
-                        {t('profile.verify_now')}
-                      </button>
-                    </Link>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tracking-widest mb-3"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-                  {(profile?.city || profile?.country) && (
-                    <><span>{[profile.city, profile.country].filter(Boolean).join(", ")}</span>
-                      <span style={{ color: "var(--text-faint)" }}>·</span></>
-                  )}
-                  <span>{t('profile.member_since')} {memberSince.toUpperCase()}</span>
-                </div>
-
-                {avgRating !== null && (
-                  <div className="flex items-center gap-3 mb-3">
-                    <GraphRating value={Math.round(avgRating)} size="sm" />
-                    <span className="text-[10px] tracking-wider"
-                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-                      {avgRating.toFixed(1)} · {reviews!.length} {t('profile.reviews')}
-                    </span>
-                  </div>
+        ) : (
+          <>
+            <div
+              style={{
+                display: "flex",
+                gap: 20,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  width: 96,
+                  height: 96,
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  background: "var(--face)",
+                  border: "var(--bw) solid var(--line)",
+                  borderRadius: "var(--radius-base)",
+                  boxShadow: "var(--shadow)",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 700,
+                  fontSize: 36,
+                  color: "var(--face-ink)",
+                }}
+              >
+                {profile.avatar_url ? (
+                  <img src={profile.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                ) : (
+                  name.charAt(0).toUpperCase()
                 )}
-
-                {profile?.bio && (
-                  <p className="text-sm leading-relaxed max-w-[50ch] mt-4" style={{ color: "var(--text-muted)" }}>
-                    {profile.bio}
+              </span>
+              <div style={{ minWidth: 0, flex: "1 1 240px" }}>
+                <h1 className="font-display" style={{ fontSize: "var(--t-h2)", margin: 0 }}>
+                  {name}
+                </h1>
+                <div style={{ marginTop: 10 }}>
+                  {profile.identity_verified ? <VerifiedBadge size="md" /> : <UnverifiedBadge size="md" />}
+                </div>
+                {(profile.city || profile.country) && (
+                  <p className="font-label field-dim" style={{ margin: "10px 0 0" }}>
+                    {[profile.city, profile.country].filter(Boolean).join(", ")}
                   </p>
                 )}
-
-                <AnimatePresence initial={false}>
-                  {rateOpen && eligibleDeal && (
-                    <RatePanel
-                      partnerName={profile?.display_name ?? "User"}
-                      deal={eligibleDeal}
-                      onClose={() => setRateOpen(false)}
-                      onSubmitted={() => setRateOpen(false)} />
-                  )}
-                  {reportOpen && !isOwnProfile && user && (
-                    <ReportPanel
-                      targetUserId={userId}
-                      targetName={profile?.display_name ?? "this user"}
-                      onClose={() => setReportOpen(false)}
-                      onSubmitted={() => setReportOpen(false)} />
-                  )}
-                </AnimatePresence>
-              </>
-            )}
-          </div>
-        </motion.div>
-      </section>
-
-      <div className="h-px mx-6 md:mx-12 xl:mx-20 max-w-[1100px] md:mx-auto" style={{ background: "var(--border)" }} />
-
-      <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto py-12">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
-            <h2 className="text-[10px] tracking-[0.22em]"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-              {t('profile.active_listings_section')}
-            </h2>
-            {listings && listings.length > 0 && (
-              <span className="text-[10px] tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                {listings.length}
-              </span>
-            )}
-          </div>
-
-          {!listings ? (
-            <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-          ) : listings.length === 0 ? (
-            <p className="text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {t('profile.no_active_listings')}
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {listings.slice(0, 10).map((l, i) => {
-                const ks = kindStyle(l.kind)
-                return (
-                  <motion.div key={l.id} initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
-                    transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                    className="flex items-center justify-between px-4 py-3.5 rounded-sm"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
-                    <div className="flex items-center gap-5">
-                      <span className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
-                        style={{ fontFamily: "'JetBrains Mono', monospace", background: ks.bg, color: ks.text }}>
-                        {l.kind?.toUpperCase()}
-                      </span>
-                      <span className="text-sm" style={{ color: "var(--text)" }}>
-                        {l.origin_city}<span className="mx-2" style={{ color: "var(--text-faint)" }}>→</span>{l.dest_city}
-                      </span>
-                    </div>
-                    <span className="text-[9px] tracking-[0.15em]"
-                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--success)" }}>
-                      {t('listings.open')}
-                    </span>
-                  </motion.div>
-                )
-              })}
+                {avgRating !== null && (
+                  <p className="font-label" style={{ margin: "10px 0 0" }}>
+                    <span className="tabular">{avgRating.toFixed(1)}/5</span>
+                    <span className="field-dim"> · {reviews!.length} {t("profile.reviews")}</span>
+                  </p>
+                )}
+              </div>
             </div>
-          )}
-        </motion.div>
-      </section>
 
-      <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto py-12">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
-            <h2 className="text-[10px] tracking-[0.22em]"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-              {t('profile.history')}
-            </h2>
-            {history && history.length > 0 && (
-              <span className="text-[10px] tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                {history.length}
-              </span>
+            {profile.bio && (
+              <p className="copy" style={{ marginTop: 16, maxWidth: "62ch" }}>
+                {profile.bio}
+              </p>
             )}
-          </div>
 
-          {!history ? (
-            <div className="space-y-2">{[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
-          ) : history.length === 0 ? (
-            <p className="text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {t('profile.no_history')}
-            </p>
-          ) : (
-            <div className="space-y-1.5">
-              {history.map((deal, i) => {
-                const partnerName = deal.partner?.display_name ?? "Anonymous"
-                const ks = kindStyle(deal.kind)
-                return (
-                  <motion.div key={deal.id} initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
-                    transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
-                    className="flex items-center justify-between px-4 py-3.5 rounded-sm"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--text-faint)")}
-                    onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
-                    <div className="flex items-center gap-5 min-w-0">
-                      <span className="text-[9px] tracking-widest px-1.5 py-0.5 rounded-sm w-16 shrink-0 text-center"
-                        style={{ fontFamily: "'JetBrains Mono', monospace", background: ks.bg, color: ks.text }}>
-                        {deal.kind?.toUpperCase()}
-                      </span>
-                      <span className="text-sm truncate" style={{ color: "var(--text)" }}>
-                        {deal.origin_city}<span className="mx-2" style={{ color: "var(--text-faint)" }}>→</span>{deal.dest_city}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        <ReviewerAvatar name={partnerName} url={deal.partner?.avatar_url} />
-                        <span className="text-[11px]"
-                          style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-                          {partnerName}
-                        </span>
-                      </div>
-                      <span className="text-[9px] tracking-widest"
-                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                        {new Date(deal.completed_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" }).toUpperCase()}
-                      </span>
-                    </div>
-                  </motion.div>
-                )
-              })}
+            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+              {isOwnProfile ? (
+                <>
+                  <Link to="/settings" className="btn btn--plain press">
+                    {t("profile.edit_profile_btn")}
+                  </Link>
+                  {!profile.identity_verified && (
+                    <Link to="/verify" className="btn btn--teal press">
+                      {t("profile.verify_now")}
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <>
+                  {eligibleDeal && (
+                    <button
+                      type="button"
+                      onClick={() => { setRateOpen((v) => !v); setReportOpen(false) }}
+                      aria-pressed={rateOpen}
+                      className="btn btn--primary press"
+                    >
+                      {t("profile.rate_user_label")}
+                    </button>
+                  )}
+                  {user && (
+                    <button
+                      type="button"
+                      onClick={() => { setReportOpen((v) => !v); setRateOpen(false) }}
+                      aria-pressed={reportOpen}
+                      className="btn btn--plain press"
+                    >
+                      {t("profile.report")}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
-          )}
-        </motion.div>
+
+            {rateOpen && eligibleDeal && (
+              <RatePanel
+                partnerName={profile.display_name ?? "User"}
+                deal={eligibleDeal}
+                onClose={() => setRateOpen(false)}
+                onSubmitted={() => setRateOpen(false)}
+              />
+            )}
+            {reportOpen && !isOwnProfile && user && (
+              <ReportPanel
+                targetUserId={userId}
+                targetName={profile.display_name ?? "this user"}
+                onClose={() => setReportOpen(false)}
+                onSubmitted={() => setReportOpen(false)}
+              />
+            )}
+          </>
+        )}
       </section>
 
-      <section className="px-6 md:px-12 xl:px-20 max-w-[1100px] mx-auto pb-24">
-        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-1 h-4 rounded-sm" style={{ background: "rgba(37,99,235,0.4)" }} />
-            <h2 className="text-[10px] tracking-[0.22em]"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-              {t('profile.reviews')}
-            </h2>
-            {reviews && reviews.length > 0 && (
-              <span className="text-[10px] tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                {reviews.length}
-              </span>
-            )}
+      {/* ── Active listings field ── */}
+      <section className="manifest-field">
+        <h2 className="field-caption">
+          {t("profile.active_listings_section")}
+          {listings && listings.length > 0 && <span className="tabular"> · {listings.length}</span>}
+        </h2>
+        {!listings ? (
+          <div aria-hidden="true">
+            {[0, 1].map((i) => (
+              <div key={i} className="skel" style={{ height: 60, marginBottom: i < 1 ? 12 : 0 }} />
+            ))}
           </div>
+        ) : listings.length === 0 ? (
+          <p className="copy ink-dim" style={{ margin: 0 }}>
+            {t("profile.no_active_listings")}
+          </p>
+        ) : (
+          <nav aria-label={t("profile.active_listings_section")} style={{ display: "grid", gap: "var(--bw)", background: "var(--line)" }}>
+            {listings.slice(0, 10).map((l) => (
+              <Link key={l.id} to="/listings/$id" params={{ id: l.id }} className="dossier-row field-row">
+                <KindChip kind={l.kind} />
+                <span className="font-display" style={{ fontSize: "1rem", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {l.origin_city} → {l.dest_city}
+                </span>
+                <span className="font-label" style={{ color: "var(--success)", whiteSpace: "nowrap" }}>
+                  {t("listings.open")}
+                </span>
+              </Link>
+            ))}
+          </nav>
+        )}
+      </section>
 
-          {!reviews ? (
-            <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
-          ) : reviews.length === 0 ? (
-            <p className="text-[11px] tracking-wider"
-              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-              {t('profile.no_reviews_yet')}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {reviews.map((review, i) => {
-                const reviewerName = review.reviewer?.display_name ?? "Traveler"
-                return (
-                  <motion.div key={review.id} initial={{ opacity: 0, y: 10 }}
-                    whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-                    transition={{ duration: 0.35, delay: i * 0.05, ease: "easeOut" }}
-                    className="p-5 rounded-sm"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
+      {/* ── Reviews field ── */}
+      <section className="manifest-field">
+        <h2 className="field-caption">
+          {t("profile.reviews")}
+          {reviews && reviews.length > 0 && <span className="tabular"> · {reviews.length}</span>}
+        </h2>
+        {!reviews ? (
+          <div aria-hidden="true">
+            <div className="skel" style={{ height: 84 }} />
+          </div>
+        ) : reviews.length === 0 ? (
+          <p className="copy ink-dim" style={{ margin: 0 }}>
+            {t("profile.no_reviews_yet")}
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: 16 }}>
+            {reviews.map((review) => {
+              const reviewerName = review.reviewer?.display_name ?? "Traveler"
+              return (
+                <article key={review.id} style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      {review.reviewer?.id ? (
+                        <Link to="/profile/$userId" params={{ userId: review.reviewer.id }} style={{ display: "inline-flex" }}>
+                          <Face name={reviewerName} url={review.reviewer?.avatar_url} />
+                        </Link>
+                      ) : (
+                        <Face name={reviewerName} url={review.reviewer?.avatar_url} />
+                      )}
+                      <span style={{ minWidth: 0 }}>
                         {review.reviewer?.id ? (
-                          <Link to="/profile/$userId" params={{ userId: review.reviewer.id }}>
-                            <ReviewerAvatar name={reviewerName} url={review.reviewer?.avatar_url} />
+                          <Link
+                            to="/profile/$userId"
+                            params={{ userId: review.reviewer.id }}
+                            className="font-label"
+                            style={{ color: "var(--text)", textDecoration: "none" }}
+                          >
+                            {reviewerName}
                           </Link>
                         ) : (
-                          <ReviewerAvatar name={reviewerName} url={review.reviewer?.avatar_url} />
+                          <span className="font-label">{reviewerName}</span>
                         )}
-                        <div className="flex flex-col gap-2">
-                          {review.reviewer?.id ? (
-                            <Link to="/profile/$userId" params={{ userId: review.reviewer.id }}
-                              className="text-[11px]"
-                              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}
-                              onMouseEnter={e => (e.currentTarget.style.color = "var(--text)")}
-                              onMouseLeave={e => (e.currentTarget.style.color = "var(--text-muted)")}>
-                              {reviewerName}
-                            </Link>
-                          ) : (
-                            <span className="text-[11px]"
-                              style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-muted)" }}>
-                              {reviewerName}
-                            </span>
-                          )}
-                          <GraphRating value={review.rating} size="sm" />
-                        </div>
-                      </div>
-                      <span className="text-[9px] tracking-widest"
-                        style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-faint)" }}>
-                        {new Date(review.created_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" }).toUpperCase()}
+                        <span className="font-label tabular" style={{ display: "block", marginTop: 2 }}>
+                          {review.rating}/5
+                        </span>
                       </span>
-                    </div>
-                    {review.comment && (
-                      <p className="text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>{review.comment}</p>
-                    )}
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-        </motion.div>
+                    </span>
+                    <span className="font-label field-dim tabular" style={{ whiteSpace: "nowrap" }}>
+                      {shortDate(review.created_at)}
+                    </span>
+                  </div>
+                  {review.comment && (
+                    <p className="copy" style={{ margin: "10px 0 0", maxWidth: "62ch" }}>
+                      {review.comment}
+                    </p>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        )}
       </section>
     </div>
   )

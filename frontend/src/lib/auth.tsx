@@ -1,22 +1,22 @@
 import * as React from 'react'
-import type { User, Session } from '@supabase/supabase-js'
-import { supabase } from './supabase'
-import { DB, getEmailUsername } from './db_constants'
+import { authedFetch, loadSession, clearSession, type SessionTokens } from './session'
 
 export interface AuthUser {
   id: string
   email: string
   displayName: string
   avatarUrl?: string
+  isAdmin: boolean
 }
 
 interface AuthContextValue {
   user: AuthUser | null
-  session: Session | null
+  session: SessionTokens | null
   loading: boolean
   unreadCount: number
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  refreshSession: () => Promise<void>
 }
 
 const AuthContext = React.createContext<AuthContextValue>({
@@ -26,136 +26,114 @@ const AuthContext = React.createContext<AuthContextValue>({
   unreadCount: 0,
   signOut: async () => {},
   refreshProfile: async () => {},
+  refreshSession: async () => {},
 })
 
-function toAuthUser(user: User, profile?: Record<string, unknown> | null): AuthUser {
+function emailUsername(email: string): string {
+  const at = email.indexOf('@')
+  return at > 0 ? email.slice(0, at) : email
+}
+
+function toAuthUser(id: string, email: string, profile?: Record<string, unknown> | null, isAdmin = false): AuthUser {
   return {
-    id: user.id,
-    email: user.email ?? '',
+    id,
+    email,
     displayName:
-      (profile?.[DB.FIELDS.PROFILES.DISPLAY_NAME] as string) ??
-      user.user_metadata?.full_name ??
-      getEmailUsername(user.email ?? '') ??
+      (profile?.display_name as string) ??
+      emailUsername(email) ??
       'Traveler',
-    avatarUrl: (profile?.[DB.FIELDS.PROFILES.AVATAR_URL] as string) ?? undefined,
+    avatarUrl: (profile?.avatar_url as string) ?? undefined,
+    isAdmin,
   }
 }
 
+// Unread badge polls the thread list (each thread carries unread_count).
+// Replaces the Supabase Realtime subscription removed with the backend move.
+const UNREAD_POLL_MS = 15_000
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = React.useState<Session | null>(null)
+  const [session, setSession] = React.useState<SessionTokens | null>(() => loadSession())
   const [user, setUser] = React.useState<AuthUser | null>(null)
-  const [loading, setLoading] = React.useState(!!supabase)
+  const [loading, setLoading] = React.useState(true)
   const [unreadCount, setUnreadCount] = React.useState(0)
 
-  // Keep a ref of current userId for use in realtime callbacks (avoids stale closures)
-  const userIdRef = React.useRef<string | null>(null)
-
-  async function loadProfile(supabaseUser: User) {
-    if (!supabase) return
-    const { data: profile } = await supabase
-      .from(DB.TABLES.PROFILES)
-      .select(`${DB.FIELDS.PROFILES.DISPLAY_NAME}, ${DB.FIELDS.PROFILES.AVATAR_URL}`)
-      .eq('id', supabaseUser.id)
-      .single()
-    setUser(toAuthUser(supabaseUser, profile))
-  }
-
-  const loadUnread = React.useCallback(async (userId: string) => {
-    if (!supabase) return
-
-    const { data: participations } = await supabase
-      .from(DB.TABLES.THREAD_PARTICIPANTS)
-      .select(DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID)
-      .eq(DB.FIELDS.THREAD_PARTICIPANTS.USER_ID, userId)
-
-    const threadIds = (participations ?? []).map(
-      (p: Record<string, string>) =>
-        p[DB.FIELDS.THREAD_PARTICIPANTS.THREAD_ID]
-    )
-
-    if (threadIds.length === 0) {
-        setUnreadCount(0)
-        return
-    }
-
-    const { count } = await supabase
-      .from(DB.TABLES.MESSAGES)
-      .select('id', { count: 'exact', head: true })
-      .is(DB.FIELDS.MESSAGES.READ_AT, null)
-      .neq(DB.FIELDS.MESSAGES.SENDER_ID, userId)
-      .in(DB.FIELDS.MESSAGES.THREAD_ID, threadIds)
-
-    setUnreadCount(count ?? 0)
+  const loadProfile = React.useCallback(async () => {
+    const res = await authedFetch('/api/profiles/me')
+    if (!res.ok) return
+    const profile = await res.json()
+    const me = await authedFetch('/api/auth/me')
+    if (!me.ok) return
+    const { id, email, is_admin } = await me.json()
+    setUser(toAuthUser(id, email, profile, !!is_admin))
   }, [])
 
-  async function handleAuthStateChange(newSession: Session | null) {
-    setSession(newSession)
-    if (newSession?.user) {
-      userIdRef.current = newSession.user.id
-      await Promise.all([loadProfile(newSession.user), loadUnread(newSession.user.id)])
-    } else {
-      userIdRef.current = null
+  const loadUnread = React.useCallback(async () => {
+    try {
+      const res = await authedFetch('/api/threads')
+      if (!res.ok) return
+      const threads = await res.json()
+      setUnreadCount(
+        (threads as Array<{ unread_count?: number }>).reduce(
+          (sum, t) => sum + (t.unread_count ?? 0),
+          0
+        )
+      )
+    } catch {
+      // Badge is best-effort; the inbox itself shows per-thread counts.
+    }
+  }, [])
+
+  const reload = React.useCallback(async () => {
+    const me = await authedFetch('/api/auth/me').catch(() => null)
+    if (!me) return // unreachable: keep the session, retry on next mount
+    if (me.status === 401) {
+      // Truly signed out (refresh dead): let go.
+      clearSession()
+      setSession(null)
       setUser(null)
       setUnreadCount(0)
+      return
     }
-  }
+    if (!me.ok) return // other errors: keep the session
+    setSession(loadSession())
+    await Promise.all([loadProfile(), loadUnread()])
+  }, [loadProfile, loadUnread])
 
   const refreshProfile = React.useCallback(async () => {
-    if (!supabase) return
-    const { data: { session: current } } = await supabase.auth.getSession()
-    if (current?.user) await loadProfile(current.user)
-  }, [])
+    await loadProfile()
+  }, [loadProfile])
 
-  // Auth state
+  // Restore session on mount (authedFetch refreshes the token if needed).
   React.useEffect(() => {
-    if (!supabase) return
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleAuthStateChange(session).finally(() => setLoading(false))
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => { handleAuthStateChange(session) }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  // Realtime: refresh unread counter whenever a message is inserted.
-  React.useEffect(() => {
-    if (!supabase) return
-
-    const channel = supabase
-      .channel('global:new-messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
-        async () => {
-          const uid = userIdRef.current
-          if (!uid) return
-
-          await loadUnread(uid)
-        }
-      )
-      .subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
+    if (!loadSession()) {
+      setLoading(false)
+      return
     }
-  }, [])
+    reload().finally(() => setLoading(false))
+  }, [reload])
+
+  // Poll the unread badge while signed in.
+  React.useEffect(() => {
+    if (!user) return
+    const id = setInterval(loadUnread, UNREAD_POLL_MS)
+    return () => clearInterval(id)
+  }, [user, loadUnread])
 
   const signOut = async () => {
-    if (supabase) await supabase.auth.signOut()
+    const current = loadSession()
+    if (current) {
+      await authedFetch('/api/auth/signout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: current.refresh_token }),
+      }).catch(() => {})
+    }
+    clearSession()
     window.location.href = '/'
   }
 
   const value = React.useMemo(
-    () => ({ user, session, loading, unreadCount, signOut, refreshProfile }),
-    [user, session, loading, unreadCount, refreshProfile]
+    () => ({ user, session, loading, unreadCount, signOut, refreshProfile, refreshSession: reload }),
+    [user, session, loading, unreadCount, refreshProfile, reload]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

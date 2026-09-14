@@ -1,0 +1,276 @@
+/* ============================================================
+   VIACTOR DESIGN SYSTEM
+
+   Concept: "the parcel label". The page is a sheet of transit
+   paperwork. Tiles are fields on the form, separated by hard ink
+   rules with zero radius, and a third of them are solid teal or
+   orange rather than white. Martian Mono is the machine-printed
+   data voice; Geologica at SHRP 100 puts sharp points on the
+   letterform terminals, so the type and the borders are one idea.
+
+   The token contract follows neobrutalism.dev (which is shadcn with
+   different styling), so shadcn components can be dropped in later
+   without introducing a second design system:
+     --radius-base, --bw, --shadow, --border, --main, --main-foreground
+
+   Scoped to [data-theme="viactor"] so the not-yet-migrated app keeps
+   its old dark tokens. Promote to :root once every page has moved.
+   ============================================================ */
+
+[data-theme="viactor"] {
+  color-scheme: light;
+
+  /* ---- Palette.
+     Every pair below is measured. Light mode puts white on the colour
+     fills; dark mode puts ink on them, because a bright fill cannot
+     carry white text at AA. That flip is why --on-fill exists. ---- */
+  --ground:        #F1F2F0;  /* the sheet the tiles sit on */
+  --sheet:         #FCFCFA;  /* default tile fill. Paper, not #FFF: a page
+                                whose lightest value is pure white has no
+                                headroom left for highlights. */
+  --line:          #14181A;  /* every rule, border and hard shadow */
+  --text:          #14181A;  /* 17.4:1 on sheet */
+  --text-muted:    #586064;  /* 6.3:1 on sheet, 5.7:1 on ground */
+  --teal:          #0D6B85;  /* route / destination. --on-fill on it 5.9:1 */
+  --orange:        #B53A16;  /* action / stamp. --on-fill on it 5.7:1 */
+  --orange-bright: #D6491F;  /* graphics only, never behind text */
+  --on-fill:       #FAFBFB;  /* ink for --teal and --orange fills. Off-white
+                                 for the same reason --sheet is: nothing on
+                                 the page is allowed to hit pure #FFF. */
+
+  /* A face is a face in any light: avatar fallback tiles keep these fixed
+     values in both modes, so a profile picture never changes colour with
+     the theme. Photos are constant by nature; the letter tile matches. */
+  --face:          #FCFCFA;
+  --face-ink:      #14181A;
+  --success:       #2E7D52;
+  --destructive:   #C0392B;
+
+  /* The split-flap board is a physical object with its own three colours:
+     the panel face, the printing on it, and the machine visible through the
+     hinge gap. A departures board is dark in both page modes, so these are
+     not aliases of the page palette. */
+  --flap-face: #14181A;  /* ink on ink: the board is the darkest thing here */
+  --flap-ink:  #F7F8F7;  /* 16.6:1 on the face */
+  --flap-gap:  #0A0D0E;  /* the hinge, seen edge-on */
+
+  /* ---- Shape. One rule for the whole page: nothing is rounded. ---- */
+  --radius-base: 0px;
+  --radius: 0px;            /* shadcn alias */
+  --bw: 2px;                /* border width, and the width of every rule */
+  --shadow-x: 5px;
+  --shadow-y: 5px;
+  --shadow: var(--shadow-x) var(--shadow-y) 0 0 var(--line);
+
+  /* ---- Type ---- */
+  --font-sans:    "Onest", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geologica", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-display);
+  --font-mono:    "Martian Mono", ui-monospace, monospace;
+  --font-weight-base: 400;
+  --font-weight-heading: 700;
+
+  /* Four steps, and the page uses all four. Before this the sheet ran the hero
+     at 64px and then every other heading at 23px, which is two steps: one
+     shout and one flat middle. --t-mega is the far end of the range, for a
+     single figure in a field that is otherwise empty, and --t-cap is the near
+     end, for a field's name. A form names its fields in small print and puts
+     the value in large print; doing the same here is what stops each field
+     reading as an article with a title. */
+  --t-mega:    clamp(4rem, 10vw, 8.5rem);
+  --t-display: clamp(2.5rem, 6vw + 0.5rem, 4.75rem);
+  /* The hero headline is the one place on the sheet that gets to be loud, and
+     it carries the split-flap board at 0.72em of its own size, so it is a step
+     above --t-h1 rather than sharing it. */
+  --t-hero:    clamp(2.2rem, 4.6vw + 0.5rem, 4.25rem);
+  --t-h1:      clamp(2rem, 4vw + 0.5rem, 3.25rem);
+  --t-h2:      clamp(1.5rem, 2.4vw + 0.5rem, 2.25rem);
+  --t-h3:      clamp(1.15rem, 1.2vw + 0.6rem, 1.5rem);
+  --t-body-lg: clamp(1.12rem, 0.5vw + 0.95rem, 1.3rem);
+  --t-body:    clamp(1rem, 0.35vw + 0.92rem, 1.125rem);
+  --t-label:   clamp(0.7rem, 0.15vw + 0.66rem, 0.78rem);
+
+  /* The one opacity allowed for text on a colour fill. Measured: white at
+     0.85 is 4.9:1 on --teal and 4.7:1 on --orange, and the dark-mode ink
+     equivalent clears 5:1 on both. Anything dimmer fails AA, which is what
+     the 0.72 and 0.78 values scattered through the markup were doing. */
+  --ink-dim: 0.85;
+
+  /* The focus ring's colour is a property of what it lands on, not of the
+     control. Tones override it; see --field-hi for the same mechanism. */
+  --focus-ring: var(--line);
+
+  /* ---- Motion. Corporate base everywhere; the premium curve is
+     reserved for the split-flap board, the page's one signature. ---- */
+  --dur-quick:    180ms;
+  --dur-standard: 320ms;
+  --dur-slow:     600ms;
+  --ease-corporate: cubic-bezier(0.2, 0, 0, 1);
+  --ease-premium:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Layout ---- */
+  --tile-pad: clamp(1.15rem, 1.8vw, 1.75rem);
+
+  /* ---- shadcn and legacy-app token remap, so Tailwind utilities and
+     any shadcn component nested in this scope follow the theme ---- */
+  --bg: var(--ground);
+  --surface: var(--sheet);
+  --surface-raised: var(--sheet);
+  --border: var(--line);
+  --accent: var(--teal);
+  --accent-dim: var(--teal);
+  --text-faint: var(--text-muted);
+  --background: var(--ground);
+  --foreground: var(--text);
+  --card: var(--sheet);
+  --card-foreground: var(--text);
+  --popover: var(--sheet);
+  --popover-foreground: var(--text);
+  --primary: var(--orange);
+  --primary-foreground: var(--on-fill);
+  --main: var(--orange);
+  --main-foreground: var(--on-fill);
+  --secondary: var(--ground);
+  --secondary-background: var(--ground);
+  --secondary-foreground: var(--text);
+  --muted: var(--ground);
+  --muted-foreground: var(--text-muted);
+  --accent-foreground: var(--on-fill);
+  --destructive-foreground: #FFFFFF;
+  --input: var(--sheet);
+  --ring: var(--line);
+
+  background-color: var(--ground);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-base);
+}
+
+/* Dark mode. The same sheet, inverted: rules go light, the colour
+   fills brighten and carry ink text instead of white. */
+[data-theme="viactor"][data-mode="dark"] {
+  color-scheme: dark;
+
+  --ground:        #0F1315;
+  --sheet:         #191E20;
+  --line:          #606D72;  /* 3.2:1 against the tiles, so rules stay visible */
+  --text:          #EDF0F0;  /* 14.7:1 on sheet */
+  --text-muted:    #9AA4A8;  /* 6.6:1 on sheet */
+  /* Taken down from #34B4D2 / #F2683A. At full brightness a saturated cyan
+     and a saturated orange covering whole fields on a near-black ground is
+     the palette of a crypto dashboard, and this product is two people handing
+     each other a box. Value is what was cut, not hue: desaturating instead
+     walks them towards baby blue and salmon.
+     Measured against --on-fill: 5.9:1 and 6.7:1 solid, 5.3:1 and 5.5:1 for a
+     dimmed label, which is why --ink-dim rises to 0.9 below. */
+  --teal:          #2E9EB8;
+  --orange:        #E56B42;
+  --orange-bright: #E56B42;
+  --on-fill:       #0F1315;
+  --success:       #5FCB92;
+  --destructive:   #FF7A6B;
+
+  /* Same fixed face as light mode: faces never follow the theme. */
+  --face:          #FCFCFA;
+  --face-ink:      #14181A;
+
+  /* Dark-mode ink is a near-black on a mid-bright fill, so it loses contrast
+     faster per point of alpha than light mode's white does. 0.85 measures
+     4.4:1 on the new orange; 0.9 measures 5.5:1 and still reads as secondary. */
+  --ink-dim: 0.9;
+
+  /* The face lifts off the dark sheet so the board still reads as an object;
+     the hinge stays the darkest value on it. */
+  --flap-face: #2C3438;  /* 11.3:1 under --flap-ink */
+  --flap-gap:  #12171A;
+}
+
+/* Anchor links in the marketing nav travel a long way down a tall page, and
+   landing without a transition loses the reader's place. Guarded, because a
+   forced smooth scroll is exactly the kind of motion vestibular users disable. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has([data-theme="viactor"]) { scroll-behavior: smooth; }
+}
+
+@layer utilities {
+  /* Display type. SHRP 100 is Geologica's Sharpness axis at maximum:
+     sharp points on the stroke terminals, matching the square tiles. */
+  [data-theme="viactor"] .font-display {
+    font-family: var(--font-display);
+    font-variation-settings: "SHRP" 100;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  /* The wordmark is the same family, not a second one. A serif wordmark
+     dropped into a sans page was one of the tells we removed. */
+  [data-theme="viactor"] .font-wordmark {
+    font-family: var(--font-display);
+    font-variation-settings: "SHRP" 100;
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    text-transform: lowercase;
+    line-height: 1;
+  }
+  /* Machine-printed data: routes, weights, prices, field labels. */
+  [data-theme="viactor"] .font-label {
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    font-weight: 500;
+    font-variation-settings: "wdth" 90;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  [data-theme="viactor"] .tabular { font-variant-numeric: tabular-nums; }
+
+  /* A field's name, in the same small print a printed form uses. This is the
+     heading level for every field except the hero: it inherits .font-label's
+     mono caps and then pulls itself away from the field's content, so what you
+     read first in a tile is the content and not the label. Dimmed, because a
+     caption that competes with its own value is a caption in the wrong size. */
+  [data-theme="viactor"] .field-caption {
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    font-weight: 500;
+    font-variation-settings: "wdth" 90;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1.3;
+    margin: 0 0 18px;
+    opacity: var(--ink-dim);
+  }
+
+  /* Secondary text printed on a teal or orange field. Derived from the field's
+     own foreground colour, so it follows the light/dark flip without a second
+     token, and pinned to the one measured opacity. */
+  [data-theme="viactor"] .ink-dim { opacity: var(--ink-dim); }
+
+  /* Body copy. `pretty` asks the browser to avoid short last lines and bad
+     rags, which matters most in Russian, where the words are longer. */
+  [data-theme="viactor"] .copy {
+    font-size: var(--t-body);
+    line-height: 1.55;
+    letter-spacing: -0.006em;
+    text-wrap: pretty;
+    margin: 0;
+  }
+  @media (max-width: 639px) {
+    /* Narrow measure needs more air between lines to stay scannable. */
+    [data-theme="viactor"] .copy { line-height: 1.65; }
+  }
+
+  /* Airmail candy-stripe. A real postal artifact rather than decoration
+     for its own sake, so it appears exactly twice on the page: the top
+     edge of the sheet and the top edge of the closing tile. */
+  [data-theme="viactor"] .airmail {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--teal) 0 12px,
+      var(--sheet) 12px 24px,
+      var(--orange-bright) 24px 36px,
+      var(--sheet) 36px 48px
+    );
+  }
+}

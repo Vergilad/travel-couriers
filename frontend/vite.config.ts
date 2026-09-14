@@ -17,6 +17,13 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // Avatars are served by the backend's public /files mount. Without
+      // this the dev server 404s every avatar image (dev only; in prod the
+      // host routes /files to the backend).
+      '/files': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

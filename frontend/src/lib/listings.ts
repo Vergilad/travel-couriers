@@ -23,11 +23,9 @@ export function formatPrice(price: number | string | null | undefined, currency:
 
 export function kindLabel(kind: ListingKind): string {
   switch (kind) {
-    case "trip":
-      return "Trip"
-    case "request":
-      return "Request"
-    case "delivery":
-      return "Delivery"
+    case "carry":
+      return "Carry"
+    case "need":
+      return "Need"
   }
 }

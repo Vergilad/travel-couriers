@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Turn the photographers' full-resolution originals into web derivatives.
+
+The originals are 2-5 MB each, which is more bytes than the rest of the page
+put together. This script is the only thing that writes ``public/images``: it
+reads a source file from ``assets/photos`` and emits, per photo, an AVIF, a
+WebP and a JPEG at two widths, so ``<picture>`` can hand every browser the
+smallest file it understands.
+
+Run it after adding or replacing a photo, then commit the output:
+
+    python scripts/optimize-images.py
+    git add public/images
+
+It is Python rather than Node because Pillow is already on the machine and a
+native ``sharp`` install is a heavy dependency for a step that runs a handful
+of times a year.
+"""
+
+from __future__ import annotations
+
+import shutil
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent.parent
+SOURCES = ROOT / "assets" / "photos"
+OUT = ROOT / "public" / "images"
+
+# Two widths cover every tile. The widest a photo field ever gets is half of
+# the 1440px sheet, so 1600 is already a 2x image there; 800 serves the phone
+# layout, where a photo spans the full single column.
+WIDTHS = (800, 1600)
+
+# Quality picked by eye on the crumpled-paper and fabric detail in these
+# particular photos, which is where compression shows first.
+QUALITY = {"avif": 55, "webp": 72, "jpeg": 78}
+
+
+@dataclass(frozen=True)
+class Photo:
+    """One photograph: where it came from, and what we call it on the page."""
+
+    slug: str
+    source: str
+    credit: str
+    # Optional (left, top, right, bottom) as fractions of the original, applied
+    # before the resize. This is the crop that CSS cannot do: `object-position`
+    # only slides a `cover` image along its *long* axis, so when a frame and an
+    # original share roughly the same aspect ratio, no CSS value can cut off
+    # the dead part of the picture. Cropping here also means the dead part is
+    # never encoded or downloaded.
+    crop: tuple[float, float, float, float] | None = None
+
+
+# Kept deliberately short. Every photo on the page is a pair of hands doing
+# the thing the product does, or a traveller on the way to do it; none of
+# them is a person smiling at a camera.
+PHOTOS = (
+    Photo(
+        slug="handover",
+        source="deski-jayantoro-0slSvn3OhFU-unsplash.jpg",
+        credit="Deski Jayantoro on Unsplash",
+    ),
+    Photo(
+        slug="spare-space",
+        source="pexels-shvets-production-8933565.jpg",
+        credit="Anna Shvets on Pexels",
+    ),
+    Photo(
+        slug="in-transit",
+        source="pexels-fuat-ertus-521355943-25109772.jpg",
+        credit="Fuat Ertus on Pexels",
+        # Portrait original in a tall 1x2 field: no crop, the window,
+        # the bag and the traveller all tell the story together.
+    ),
+)
+
+
+def derive(photo: Photo) -> list[tuple[str, int]]:
+    """Write every format/width pair for one photo. Returns (path, bytes)."""
+    src = SOURCES / photo.source
+    if not src.exists():
+        raise SystemExit(f"missing source photo: {src}")
+
+    original = Image.open(src).convert("RGB")
+    if photo.crop is not None:
+        left, top, right, bottom = photo.crop
+        original = original.crop(
+            (
+                round(left * original.width),
+                round(top * original.height),
+                round(right * original.width),
+                round(bottom * original.height),
+            )
+        )
+
+    written: list[tuple[str, int]] = []
+
+    for width in WIDTHS:
+        if width >= original.width:
+            resized = original
+        else:
+            height = round(original.height * width / original.width)
+            resized = original.resize((width, height), Image.LANCZOS)
+
+        for fmt, ext in (("AVIF", "avif"), ("WEBP", "webp"), ("JPEG", "jpg")):
+            out = OUT / f"{photo.slug}-{width}.{ext}"
+            kwargs = {"quality": QUALITY[fmt.lower()]}
+            if fmt == "JPEG":
+                kwargs.update(progressive=True, optimize=True, subsampling=1)
+            resized.save(out, fmt, **kwargs)
+            written.append((out.name, out.stat().st_size))
+
+    return written
+
+
+def main() -> int:
+    if not SOURCES.exists():
+        raise SystemExit(
+            f"no source photos at {SOURCES}. Put the full-resolution downloads "
+            "there; they are gitignored on purpose."
+        )
+
+    # The output directory is generated, so rebuild it rather than letting
+    # renamed or retired photos linger and ship as dead weight.
+    if OUT.exists():
+        shutil.rmtree(OUT)
+    OUT.mkdir(parents=True)
+
+    total = 0
+    for photo in PHOTOS:
+        for name, size in derive(photo):
+            total += size
+            print(f"{name:>28}  {size / 1024:7.1f} KiB")
+
+    credits = "\n".join(
+        f"- `{p.slug}-*`: {p.credit} ({p.source})" for p in PHOTOS
+    )
+    (OUT / "CREDITS.md").write_text(
+        "# Photo credits\n\n"
+        "Generated by `scripts/optimize-images.py`. Do not edit by hand.\n\n"
+        f"{credits}\n",
+        encoding="utf-8",
+    )
+
+    print(f"\n{len(PHOTOS)} photos, {total / 1024:.0f} KiB of derivatives")
+    print("A visitor downloads one format at one width per photo.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

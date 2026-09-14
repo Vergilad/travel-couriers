@@ -1,0 +1,672 @@
+/* ============================================================
+   VIACTOR LAYOUT AND CONTROLS
+   Companion to viactor.css: the form-sheet grid, the two feedback
+   languages, and the marketing chrome.
+   ============================================================ */
+
+@layer components {
+  /* ------------------------------------------------------------
+     The form sheet.
+
+     The grid's own background is the rule colour and the gap is the
+     rule width, so every separator is pixel-identical and there is no
+     double-border arithmetic to get wrong. Tiles only paint a fill.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .sheet-grid {
+    display: grid;
+    gap: var(--bw);
+    padding: var(--bw);
+    background: var(--line);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* Rows size to their contents, and the floor lives on the tile instead.
+       A uniform row floor made every row the same height, which is how ten
+       fields ended up with nine of them inside a 148k-216k px2 band: the grid
+       was overruling the composition. With the floor on the tile, a field that
+       needs to be a thin band can be one. */
+    grid-auto-rows: auto;
+    box-shadow: var(--shadow);
+  }
+  [data-theme="viactor"] .sheet-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* No height floor. Every field has content and a photo field has an
+       aspect ratio, so a floor can only ever overrule the composition: with it
+       set to 220px the last three fields all came out at exactly 220px, which
+       is the same defect as the uniform row it replaced. A field is as tall as
+       what is printed on it, and a row is as tall as its tallest field. */
+    overflow: hidden;
+    background: var(--sheet);
+    color: var(--text);
+    scroll-margin-top: 92px;
+    /* A tile's own width, not the viewport's, is what decides how many columns
+       its contents can take: the sheet is four columns wide on a laptop and
+       two on a tablet, so the same tile is wider at 820px than at 1080px. Lists
+       inside tiles query this instead of guessing from a viewport breakpoint. */
+    container-type: inline-size;
+  }
+  /* The ink layer: everything printed on the field, and the only thing that
+     animates. It carries the padding so the fill itself always reaches the
+     rules, and so a tile is a complete tile before any JavaScript runs. */
+  [data-theme="viactor"] .sheet-ink {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: var(--tile-pad);
+  }
+  /* Photo tiles bleed to their edges. */
+  [data-theme="viactor"] .sheet-tile--flush > .sheet-ink { padding: 0; }
+
+
+
+  /* A rule drawn inside a field, in the same ink and the same 2px as the grid
+     itself, separating what a field says from what it asks you to do. The
+     negative margins cancel the ink layer's padding so it reaches the rules on
+     both sides, exactly like a printed form.
+
+     `margin-top: auto` is the working part: a tile that is taller than its
+     content -- which the hero is, because the stack beside it is taller --
+     collects its slack above this rule instead of in an unexplained gap. */
+  [data-theme="viactor"] .field-rule {
+    margin: auto calc(var(--tile-pad) * -1) 0;
+    height: var(--bw);
+    background: var(--line);
+    flex: none;
+  }
+
+  /* ------------------------------------------------------------
+     A photo field is a window, not a block of content: the image is
+     absolutely positioned, so it can never push its own row taller. The
+     aspect-ratio below is a floor for the case where the grid has no height
+     to hand out, which is a photo alone in its row or the one-column phone
+     layout. Two-row photo fields declare no ratio, because their height is
+     whatever the field beside them came to.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .photo-frame {
+    position: relative;
+    display: block;
+    flex: 1;
+    min-height: 0;
+    aspect-ratio: 12 / 5;
+    overflow: hidden;
+  }
+  /* Descendant, not child: the img is wrapped in a <picture> that declares the
+     AVIF and WebP sources. */
+  [data-theme="viactor"] .photo-frame img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: auto; }
+  /* The panoramic band. One field on the page is a strip rather than a block,
+     and a photograph is the honest thing to put in it: a wide crop reads as a
+     deliberate band, whereas a wide crop of text reads as a mistake. */
+  [data-theme="viactor"] .photo-frame--band { aspect-ratio: 6 / 1; }
+
+  /* Spans. Desktop 4 columns, tablet 2, phone 1. Every multi-column
+     tile declares its own collapse here rather than trusting defaults. */
+  [data-theme="viactor"] .span-2 { grid-column: span 2; }
+  [data-theme="viactor"] .span-3 { grid-column: span 3; }
+  [data-theme="viactor"] .span-4 { grid-column: span 4; }
+  [data-theme="viactor"] .rows-2 { grid-row: span 2; }
+
+  @media (max-width: 1023px) {
+    [data-theme="viactor"] .sheet-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    [data-theme="viactor"] .span-3,
+    [data-theme="viactor"] .span-4 { grid-column: span 2; }
+    /* Full-width now, so 12:5 would be a sliver. */
+    [data-theme="viactor"] .photo-frame { aspect-ratio: 2 / 1; }
+    [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: auto; }
+    [data-theme="viactor"] .photo-frame--band { aspect-ratio: 3 / 1; }
+  }
+  @media (max-width: 639px) {
+    [data-theme="viactor"] .sheet-grid {
+      grid-template-columns: minmax(0, 1fr);
+      grid-auto-rows: auto;
+    }
+    [data-theme="viactor"] .span-2,
+    [data-theme="viactor"] .span-3,
+    [data-theme="viactor"] .span-4 { grid-column: span 1; }
+    [data-theme="viactor"] .rows-2 { grid-row: span 1; }
+    /* Rows are `auto` here, so every photo sets its own height, the
+       two-row fields included. */
+    [data-theme="viactor"] .photo-frame,
+    [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: 4 / 3; }
+    [data-theme="viactor"] .photo-frame--band { aspect-ratio: 2 / 1; }
+  }
+
+  /* ------------------------------------------------------------
+     Two feedback languages, with one rule for choosing between them:
+     objects that float press into their own shadow; fields inside the
+     sheet have nowhere to move, so they highlight instead.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .press {
+    box-shadow: var(--shadow);
+    transition:
+      transform var(--dur-quick) var(--ease-corporate),
+      box-shadow var(--dur-quick) var(--ease-corporate);
+  }
+  [data-theme="viactor"] .press:hover {
+    transform: translate(var(--shadow-x), var(--shadow-y));
+    box-shadow: none;
+  }
+  [data-theme="viactor"] .press:active {
+    transform: translate(var(--shadow-x), var(--shadow-y));
+    box-shadow: none;
+    filter: brightness(0.94);
+  }
+
+  [data-theme="viactor"] .field-row {
+    transition: background-color var(--dur-quick) var(--ease-corporate);
+  }
+  /* --field-hi is set by the tile's tone, so a row lights up in whatever
+     colour is legible on the field it belongs to. */
+  [data-theme="viactor"] .field-row:hover,
+  [data-theme="viactor"] .field-row:focus-visible {
+    background: var(--field-hi, var(--teal));
+    color: var(--field-hi-fg, var(--on-fill));
+  }
+  [data-theme="viactor"] .field-row:hover .field-dim,
+  [data-theme="viactor"] .field-row:focus-visible .field-dim {
+    color: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-theme="viactor"] .press,
+    [data-theme="viactor"] .field-row { transition: none; }
+    [data-theme="viactor"] .press:hover { transform: none; }
+  }
+
+  /* ------------------------------------------------------------
+     Controls
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius-base);
+    padding: 14px 24px;
+    font-family: var(--font-sans);
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.1;
+    white-space: nowrap;   /* CTA labels never wrap */
+    text-decoration: none;
+    cursor: pointer;
+  }
+  [data-theme="viactor"] .btn--primary {
+    background: var(--orange);
+    color: var(--on-fill);
+  }
+  /* The need side, in blue: side colours stay identical on buttons and
+     chips (orange carry, blue need). Teal on --on-fill measures 5.9:1
+     solid in both modes, same as the primary pair. */
+  [data-theme="viactor"] .btn--teal {
+    background: var(--teal);
+    color: var(--on-fill);
+  }
+  [data-theme="viactor"] .btn--plain {
+    background: var(--sheet);
+    color: var(--text);
+  }
+  /* For the second action on a colour fill, where a filled accent button
+     would be orange on orange. The border follows the text colour so the
+     button belongs to the tile it sits on. */
+  [data-theme="viactor"] .btn--ghost {
+    background: transparent;
+    color: inherit;
+    border-color: currentColor;
+  }
+
+  /* A teal ring was invisible on the teal and orange fields: 1.0:1 and 1.04:1.
+     --focus-ring is the ink colour by default and flips to the field's
+     foreground on a colour fill, which measures 5.9:1 and 6.1:1. */
+  [data-theme="viactor"] :where(a, button, input, summary):focus-visible {
+    outline: var(--bw) solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* Route field: label above, hard border, never placeholder-as-label. */
+  [data-theme="viactor"] .route-input {
+    width: 100%;
+    min-width: 0;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius-base);
+    background: var(--sheet);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 1.06rem;
+    padding: 14px 14px;
+    outline: none;
+  }
+  [data-theme="viactor"] .route-input::placeholder { color: var(--text-muted); }
+
+  /* Lists inside a tile break on item count, not on available space: three
+     safety mechanics want three across or a stack, never two and a widow.
+     560px keeps them from squeezing to a five-line paragraph each. */
+  [data-theme="viactor"] .trust-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @container (min-width: 560px) {
+    [data-theme="viactor"] .trust-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  /* ------------------------------------------------------------
+     The two paths, and where they meet.
+
+     This is the only field on the page that divides by side, and it divides
+     because the product genuinely does: one person is sending, the other is
+     flying, and the two do different things right up until the handover. Every
+     other field is written for both at once, so tagging them by side would be
+     partitioning a page that is not partitioned.
+
+     The shape is the argument. Two columns separated by the sheet's own rule,
+     then a rule across both and one shared list underneath. A visitor reads
+     their own column, then watches it join the other one.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .path-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+  }
+  /* 520px is the narrowest the two columns stay readable side by side. Below
+     it they stack, and the vertical rule would then be pointing at nothing. */
+  @container (min-width: 520px) {
+    [data-theme="viactor"] .path-split {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+    }
+    [data-theme="viactor"] .path-split > * + * {
+      border-left: var(--bw) solid currentColor;
+      padding-left: clamp(1.25rem, 2.5vw, 2.5rem);
+    }
+    [data-theme="viactor"] .path-split > :first-child {
+      padding-right: clamp(1.25rem, 2.5vw, 2.5rem);
+    }
+  }
+  /* The join. Full bleed to the field's edges, like .field-rule, so the rule
+     above it reads as part of the sheet rather than as a box around the text. */
+  [data-theme="viactor"] .path-join {
+    margin: 28px calc(var(--tile-pad) * -1) 0;
+    padding: 26px var(--tile-pad) 0;
+    border-top: var(--bw) solid currentColor;
+  }
+  /* One column, always. Two columns here put one shared step under the sending
+     path and the other under the flying path, which reads as two more private
+     steps at exactly the moment the field is saying the opposite. */
+  [data-theme="viactor"] .path-join-rows {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-width: 62ch;
+  }
+  [data-theme="viactor"] .path-steps {
+    display: grid;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Six corridors as a two-column block of chips, not six stacked rows with a
+     hairline under each. A list of routes one-per-line with a rule between
+     every pair is a spec sheet, and a spec sheet is the flattest thing a page
+     can contain. Two columns halve the vertical run and let the field breathe. */
+  [data-theme="viactor"] .route-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--bw);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* A single tall column when the field is a narrow one, which is what it is
+     at four columns wide: 300px cannot hold two city names side by side. */
+  @container (max-width: 380px) {
+    [data-theme="viactor"] .route-chips {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  [data-theme="viactor"] .route-chip {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    color: inherit;
+    text-decoration: none;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+
+  /* A ticked box. The safety field states three things the product already
+     does, and on a sheet of paperwork the way you say "this one is done" is a
+     box with a mark in it, not a floating pictogram. Built from the same 2px
+     ink rule as every other edge on the page, so it is the sheet's own
+     vocabulary rather than an icon set visiting from elsewhere. */
+  [data-theme="viactor"] .tickbox {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius-base);
+    color: var(--teal);
+  }
+
+  /* The closing field: the ask and the two actions side by side, falling back
+     to a stack when they no longer fit on one line. No media query needed --
+     `flex-wrap` is the breakpoint, and a wrapped row is left-aligned, which is
+     how every other field on the sheet is set. */
+  [data-theme="viactor"] .closing-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px 40px;
+    margin-top: 14px;   /* clears the airmail edge */
+  }
+
+  /* ------------------------------------------------------------
+     Marketing chrome
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .nav-desktop { display: flex; }
+  [data-theme="viactor"] .nav-toggle { display: none; }
+
+  /* An anchor in the nav says which field you are standing in. The rule under
+     the current one is the same 2px ink rule the whole sheet is drawn with,
+     so the nav marks position in the page's own language. */
+  [data-theme="viactor"] .nav-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;   /* a nav item that wraps is two nav items */
+    padding-bottom: 2px;
+    border-bottom: var(--bw) solid transparent;
+    transition: color var(--dur-quick) var(--ease-corporate);
+  }
+  [data-theme="viactor"] .nav-link:hover { color: var(--text); }
+  [data-theme="viactor"] .nav-link[aria-current] {
+    color: var(--text);
+    border-bottom-color: var(--line);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-theme="viactor"] .nav-link { transition: none; }
+  }
+  /* Collapse to a menu button well above the point where English alone would
+     need it. "Смотреть поездки / Как это работает / Безопасность" plus the
+     locale switch, the mode toggle and two account actions is ~950px of nav;
+     at 900px Cyrillic wrapped every label onto two lines. The breakpoint is
+     set by the longest locale, not the shortest. */
+  @media (max-width: 1079px) {
+    [data-theme="viactor"] .nav-desktop { display: none; }
+    [data-theme="viactor"] .nav-toggle { display: inline-flex; }
+  }
+  [data-theme="viactor"] .nav-panel {
+    display: grid;
+    gap: var(--bw);
+    background: var(--line);
+    border-top: var(--bw) solid var(--line);
+  }
+  [data-theme="viactor"] .nav-panel > * {
+    background: var(--sheet);
+    padding: 16px 20px;
+    text-decoration: none;
+    color: var(--text);
+  }
+
+  [data-theme="viactor"] .footer-grid {
+    display: grid;
+    gap: var(--bw);
+    padding: var(--bw);
+    background: var(--line);
+    grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
+  }
+  [data-theme="viactor"] .footer-grid > * {
+    background: var(--ground);
+    padding: clamp(1.15rem, 1.8vw, 1.75rem);
+  }
+  @media (max-width: 899px) {
+    [data-theme="viactor"] .footer-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 519px) {
+    [data-theme="viactor"] .footer-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ------------------------------------------------------------
+     The manifest: browse results as ledger rows, not cards.
+     Same construction as the sheet (grid background is the rule
+     colour, gap is the rule width), one column instead of four.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .manifest {
+    display: grid;
+    gap: var(--bw);
+    padding: var(--bw);
+    background: var(--line);
+    box-shadow: var(--shadow);
+  }
+  [data-theme="viactor"] .manifest-field {
+    background: var(--sheet);
+    color: var(--text);
+    padding: var(--tile-pad);
+    min-width: 0;
+    scroll-margin-top: 92px;
+  }
+  [data-theme="viactor"] .manifest-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    gap: 8px 28px;
+    align-items: center;
+    background: var(--sheet);
+    color: var(--text);
+    text-decoration: none;
+    padding: 16px var(--tile-pad);
+  }
+  @media (max-width: 767px) {
+    /* Single column under 768px, declared here, not assumed. */
+    [data-theme="viactor"] .manifest-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+  }
+
+  /* Dossier row: chip, route, stamp. Three columns on desktop, stacked
+     under 768px like .manifest-row. Used by profile listings + history. */
+  [data-theme="viactor"] .dossier-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px 20px;
+    align-items: center;
+    background: var(--sheet);
+    color: var(--text);
+    text-decoration: none;
+    padding: 14px var(--tile-pad);
+  }
+  @media (max-width: 767px) {
+    [data-theme="viactor"] .dossier-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+  }
+
+  /* Inbox split: ledger beside the open letter. Single column on phones
+     (the route decides which pane shows), 5/7 split from 1024px up. */
+  [data-theme="viactor"] .inbox-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--bw);
+    background: var(--line);
+  }
+  [data-theme="viactor"] .inbox-split > * {
+    min-height: 0;
+  }
+  [data-theme="viactor"] .inbox-pane-hide { display: none; }
+  @media (min-width: 1024px) {
+    [data-theme="viactor"] .inbox-split {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    }
+    [data-theme="viactor"] .inbox-pane-hide { display: block; }
+  }
+
+  /* Segmented control: one stamped option among plain ones. The joined
+     2px borders read as a single form control, not three buttons. */
+  [data-theme="viactor"] .seg { display: flex; flex-wrap: wrap; }
+  [data-theme="viactor"] .seg > * + * { margin-left: calc(var(--bw) * -1); }
+  [data-theme="viactor"] .seg-btn {
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    min-height: 44px;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius-base);
+    background: var(--sheet);
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  [data-theme="viactor"] .seg-btn[data-active] {
+    /* Inverted stamp: readable in both modes (ink on paper, paper on
+       ink). --line + --on-fill only clears AA in light mode. */
+    background: var(--text);
+    color: var(--sheet);
+  }
+
+  /* Stencil chip: the small mono tag for kind and buy marks. Ink stamp
+     on sheet; sheet stamp on colour fills via currentColor border. */
+  [data-theme="viactor"] .stencil-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius-base);
+    background: var(--sheet);
+    color: var(--text);
+  }
+  [data-theme="viactor"] .stencil-chip[data-side="carry"] {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: var(--on-fill);
+  }
+  [data-theme="viactor"] .stencil-chip[data-side="need"] {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: var(--on-fill);
+  }
+
+  /* Skeleton rows match the ledger shape. Static under reduced motion. */
+  [data-theme="viactor"] .skel {
+    background: var(--ground);
+    border: var(--bw) solid var(--line);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="viactor"] .skel { animation: skel-pulse 1.4s ease-in-out infinite; }
+    @keyframes skel-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+  }
+
+  /* Shape lock: old-dashboard components render square inside this theme. */
+  [data-theme="viactor"] .rounded-sm { border-radius: 0; }
+
+  /* Detail split: meta field beside sidebar field, stacked under 768px. */
+  [data-theme="viactor"] .detail-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--bw);
+    background: var(--line);
+  }
+  @media (max-width: 767px) {
+    [data-theme="viactor"] .detail-split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* Ticket perforation: the tear line between the form and its stub.
+     Same 2px ink as every other rule, dashed so it reads as tearable.
+     Bleeds to the field edges like .field-rule. Square notches at both
+     ends keep the all-sharp shape lock. */
+  [data-theme="viactor"] .perforation {
+    position: relative;
+    margin: 0 calc(var(--tile-pad) * -1);
+    border-top: var(--bw) dashed var(--line);
+    height: 0;
+    flex: none;
+  }
+  [data-theme="viactor"] .perforation::before,
+  [data-theme="viactor"] .perforation::after {
+    content: "";
+    position: absolute;
+    top: -9px;
+    width: 14px;
+    height: 14px;
+    background: var(--ground);
+    border: var(--bw) solid var(--line);
+  }
+  [data-theme="viactor"] .perforation::before { left: -9px; }
+  [data-theme="viactor"] .perforation::after { right: -9px; }
+
+  /* Ticket stamp: the one signature motion on this page. Orange ink,
+     rotated, double rule. Appears on success for ~600ms, then redirect.
+     Static under reduced motion (JS skips the delay too). */
+  [data-theme="viactor"] .stamp {
+    display: inline-block;
+    padding: 8px 18px;
+    border: 3px double var(--orange);
+    color: var(--orange);
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transform: rotate(-8deg);
+    background: color-mix(in srgb, var(--sheet) 88%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="viactor"] .stamp {
+      animation: stamp-in var(--dur-quick) var(--ease-corporate);
+    }
+    @keyframes stamp-in {
+      from { opacity: 0; transform: rotate(-8deg) scale(1.4); }
+      to { opacity: 1; transform: rotate(-8deg) scale(1); }
+    }
+  }
+
+  /* Narrow ticket: single column always, centered. Explicit mobile
+     collapse below 768px (full bleed, no side air). */
+  [data-theme="viactor"] .ticket {
+    max-width: 560px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  @media (max-width: 767px) {
+    [data-theme="viactor"] .ticket {
+      max-width: none;
+    }
+  }
+}

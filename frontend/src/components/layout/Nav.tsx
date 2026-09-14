@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useLocation } from "@tanstack/react-router"
-import { Menu, X, Waypoints } from "lucide-react"
+import { IconMenu2, IconRouteSquare2, IconX } from "@tabler/icons-react"
 import {
   animate,
   motion,
@@ -19,7 +19,7 @@ const springConfig = { type: "spring" as const, stiffness: 400, damping: 30 }
 
 // ─── Logomark ─────────────────────────────────────────────────────────────────
 function Logomark({ className = "w-5 h-5" }: { className?: string }) {
-  return <Waypoints className={className} />
+  return <IconRouteSquare2 className={className} stroke={2} />
 }
 
 // ─── Slide-in user drawer ─────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ function UserDrawer({
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text)"; (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)" }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent" }}
               >
-                <X className="size-4" />
+                <IconX size={16} stroke={2} />
               </button>
             </div>
 
@@ -290,7 +290,7 @@ export function Nav() {
             aria-label={mobileOpen ? t('common.close_menu') : t('common.open_menu')}
             onClick={() => setMobileOpen((o) => !o)}
           >
-            {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            {mobileOpen ? <IconX size={20} stroke={2} /> : <IconMenu2 size={20} stroke={2} />}
           </button>
         </nav>
       </motion.header>

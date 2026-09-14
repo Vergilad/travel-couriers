@@ -1,8 +1,16 @@
+/**
+ * Browse as a manifest: one sheet of transit paperwork, not a dashboard of
+ * floating cards. The search block is a field, every result is a ledger row
+ * separated by the sheet's own rules. No card boxes, no glow hovers: rows
+ * highlight in the field language on hover and press like everything else.
+ *
+ * Search state is identical to before (route + side + anchor date +
+ * flexibility chips); only the reading surface changed.
+ */
 import * as React from "react"
 import { Link } from "@tanstack/react-router"
-import { motion, AnimatePresence } from "framer-motion"
-import { useQuery } from "@tanstack/react-query"
-import { SlidersHorizontal, X } from "lucide-react"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { IconX } from "@tabler/icons-react"
 import type { Listing, ListingKind } from "@/types/listing"
 import { formatPrice, formatListingDate } from "@/lib/listings"
 import { CityAutocomplete } from "@/components/CityAutocomplete"
@@ -10,259 +18,113 @@ import { useTranslation } from "@/i18n/I18nContext"
 
 // ── Kind badge ────────────────────────────────────────────────────────────────
 
-const KIND_META: Record<string, { label: string; color: string }> = {
-  trip:     { label: "TRIP",     color: "rgba(37,99,235,0.15) border-[rgba(37,99,235,0.35)] text-[#93c5fd]" },
-  request:  { label: "REQUEST",  color: "rgba(34,197,94,0.12) border-[rgba(34,197,94,0.30)] text-[#86efac]" },
-  delivery: { label: "DELIVERY", color: "rgba(168,85,247,0.12) border-[rgba(168,85,247,0.30)] text-[#d8b4fe]" },
-}
-
 function KindBadge({ kind }: { kind: ListingKind }) {
-  const meta = KIND_META[kind] ?? { label: kind.toUpperCase(), color: "rgba(255,255,255,0.05) border-[var(--border)] text-[var(--text-muted)]" }
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] tracking-widest border font-mono`}
-      style={{ background: meta.color.split(" ")[0] }}
-    >
-      <span style={{ color: meta.color.split(" ")[2].replace("text-[","").replace("]","") }}>
-        {meta.label}
-      </span>
-    </span>
-  )
-}
-
-function KindBadgeClean({ kind }: { kind: ListingKind }) {
-  const labels: Record<string, string> = { trip: "TRIP", request: "REQUEST", delivery: "DELIVERY" }
-  const styles: Record<string, React.CSSProperties> = {
-    trip:     { background: "rgba(37,99,235,0.12)",  border: "1px solid rgba(37,99,235,0.30)",  color: "#93c5fd" },
-    request:  { background: "rgba(34,197,94,0.10)",  border: "1px solid rgba(34,197,94,0.28)",  color: "#86efac" },
-    delivery: { background: "rgba(168,85,247,0.10)", border: "1px solid rgba(168,85,247,0.28)", color: "#d8b4fe" },
-  }
-  return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] tracking-widest font-mono"
-      style={styles[kind] ?? { background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
-    >
-      {labels[kind] ?? kind.toUpperCase()}
-    </span>
-  )
-}
-
-// ── Listing card ──────────────────────────────────────────────────────────────
-
-function ListingCard({ listing }: { listing: Listing }) {
   const { t } = useTranslation()
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      whileHover={{ y: -2 }}
-    >
-      <Link to="/listings/$id" params={{ id: listing.id }}>
-        <div
-          className="group relative cursor-pointer transition-all duration-200"
-          style={{
-            background: "var(--surface-raised)",
-            border: "1px solid var(--border)",
-            borderRadius: "2px",
-            padding: "18px 20px",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(37,99,235,0.35)"
-            ;(e.currentTarget as HTMLDivElement).style.boxShadow = "0 0 20px rgba(37,99,235,0.06)"
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)"
-            ;(e.currentTarget as HTMLDivElement).style.boxShadow = "none"
-          }}
-        >
-          {/* Header row */}
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex-1 min-w-0">
-              <div className="mb-2">
-                <KindBadgeClean kind={listing.kind} />
-              </div>
-              <h3
-                className="text-[14px] font-medium leading-snug line-clamp-1 transition-colors"
-                style={{ color: "var(--text)" }}
-              >
-                {listing.title || `${listing.origin_city} → ${listing.dest_city}`}
-              </h3>
-            </div>
-            <div className="text-right shrink-0">
-              {listing.price ? (
-                <p className="font-mono font-semibold text-[14px]" style={{ color: "var(--accent)" }}>
-                  {formatPrice(listing.price, listing.currency)}
-                </p>
-              ) : (
-                <p className="font-mono text-[10px] tracking-widest" style={{ color: "var(--text-faint)" }}>
-                  {t('listings.negotiate')}
-                </p>
-              )}
-              {listing.capacity_kg && (
-                <p className="font-mono text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  {listing.capacity_kg}kg
-                </p>
-              )}
-            </div>
-          </div>
+    <span className="stencil-chip" data-side={kind}>
+      {t(`kinds.${kind}`)}
+    </span>
+  )
+}
 
-          {/* Route row */}
-          <div className="flex items-center gap-2 mb-3 font-mono text-[12px]">
-            <span style={{ color: "var(--text)" }}>{listing.origin_city}</span>
-            {listing.origin_country && (
-              <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{listing.origin_country}</span>
-            )}
-            <span className="mx-0.5" style={{ color: "var(--accent)" }}>→</span>
-            <span style={{ color: "var(--text)" }}>{listing.dest_city}</span>
-            {listing.dest_country && (
-              <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{listing.dest_country}</span>
-            )}
-          </div>
+// ── Ledger row ────────────────────────────────────────────────────────────────
 
-          {/* Footer row */}
-          <div
-            className="flex items-center justify-between font-mono text-[11px] pt-3"
-            style={{ borderTop: "1px solid var(--border)", color: "var(--text-muted)" }}
+function ListingRow({ listing }: { listing: Listing }) {
+  const { t } = useTranslation()
+  return (
+    <Link to="/listings/$id" params={{ id: listing.id }} className="manifest-row field-row">
+      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <KindBadge kind={listing.kind} />
+        {listing.kind === "need" && listing.needs_purchase && (
+          <span className="stencil-chip" data-side="buy">
+            {t("listings.buy_badge")}
+          </span>
+        )}
+      </span>
+
+      <span style={{ minWidth: 0 }}>
+        <span className="font-display" style={{ fontSize: "1.05rem", display: "block" }}>
+          {listing.title || `${listing.origin_city} → ${listing.dest_city}`}
+        </span>
+        <span className="font-label field-dim" style={{ display: "block", marginTop: 4 }}>
+          {listing.origin_city} &rarr; {listing.dest_city}
+        </span>
+        {listing.description && (
+          <span
+            className="copy"
+            style={{
+              display: "block",
+              marginTop: 6,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
-            <div className="flex items-center gap-3">
-              {listing.depart_date ? (
-                <span>
-                  {formatListingDate(listing.depart_date)}
-                  {(listing as any).date_flexibility && (listing as any).date_flexibility !== "exact" && (
-                    <span className="ml-1 opacity-50">
-                      {(listing as any).date_flexibility === "week" ? "±1w" : "±1mo"}
-                    </span>
-                  )}
+            {listing.description}
+          </span>
+        )}
+      </span>
+
+      <span className="font-label field-dim" style={{ whiteSpace: "nowrap" }}>
+        {listing.depart_date ? (
+          <>
+            {formatListingDate(listing.depart_date)}
+            {(listing as unknown as { date_flexibility?: string }).date_flexibility &&
+              (listing as unknown as { date_flexibility?: string }).date_flexibility !== "exact" && (
+                <span style={{ marginLeft: 6, opacity: 0.7 }}>
+                  {(listing as unknown as { date_flexibility?: string }).date_flexibility === "week"
+                    ? "±1w"
+                    : "±1mo"}
                 </span>
-              ) : (
-                <span className="opacity-40 tracking-widest">{t('listings.flexible')}</span>
               )}
-            </div>
-            {(listing as any).owner_display_name && (
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px]"
-                  style={{
-                    background: "rgba(37,99,235,0.12)",
-                    border: "1px solid rgba(37,99,235,0.25)",
-                    color: "var(--accent)",
-                  }}
-                >
-                  {(listing as any).owner_display_name.charAt(0).toUpperCase()}
-                </div>
-                <span>{(listing as any).owner_display_name}</span>
-              </div>
-            )}
-          </div>
+          </>
+        ) : (
+          t("listings.flexible")
+        )}
+      </span>
 
-          {listing.description && (
-            <p
-              className="mt-3 text-[12px] line-clamp-1 leading-relaxed"
-              style={{ color: "var(--text-muted)" }}
-            >
-              {listing.description}
-            </p>
-          )}
-
-          {/* Bottom edge accent on hover */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-px scale-x-0 group-hover:scale-x-100 transition-transform duration-300"
-            style={{ background: "linear-gradient(to right, transparent, var(--accent), transparent)" }}
-          />
-        </div>
-      </Link>
-    </motion.div>
-  )
-}
-
-// ── Filter inputs ─────────────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "2px",
-  padding: "7px 10px",
-  fontSize: "12px",
-  fontFamily: "'JetBrains Mono', monospace",
-  color: "var(--text)",
-  outline: "none",
-  transition: "border-color 0.15s",
-}
-
-function FilterInput({
-  label, children,
-}: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label
-        className="block font-mono text-[10px] tracking-[0.16em] mb-1.5 uppercase"
-        style={{ color: "var(--text-muted)" }}
+      <span
+        className="font-label"
+        style={{ whiteSpace: "nowrap", fontSize: "0.95rem", color: "var(--text)" }}
       >
-        {label}
-      </label>
-      {children}
-    </div>
-  )
-}
+        {listing.price
+          ? formatPrice(listing.price, listing.currency)
+          : t("listings.negotiate")}
+      </span>
 
-function NumInput({ label, value, onChange, placeholder, min, max }: {
-  label: string; value: string; onChange: (v: string) => void
-  placeholder?: string; min?: number; max?: number
-}) {
-  return (
-    <FilterInput label={label}>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        style={inputStyle}
-        onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
-        onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-      />
-    </FilterInput>
-  )
-}
-
-function DateInput({ label, value, onChange }: {
-  label: string; value: string; onChange: (v: string) => void
-}) {
-  return (
-    <FilterInput label={label}>
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ ...inputStyle, colorScheme: "dark" }}
-        onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
-        onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-      />
-    </FilterInput>
+      {(listing as unknown as { owner_display_name?: string | null }).owner_display_name && (
+        <span className="font-label field-dim" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span className="tickbox" aria-hidden="true" style={{ width: 20, height: 20, fontSize: 11 }}>
+            {(listing as unknown as { owner_display_name: string }).owner_display_name
+              .charAt(0)
+              .toUpperCase()}
+          </span>
+          {(listing as unknown as { owner_display_name: string }).owner_display_name}
+        </span>
+      )}
+    </Link>
   )
 }
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
-const KINDS = ["all", "trip", "request", "delivery"] as const
+const KINDS = ["all", "carry", "need"] as const
 
 async function fetchListings(params: {
   kind: string; originCity: string; destCity: string;
-  priceMin: string; priceMax: string; departFrom: string; departTo: string;
+  aroundDate: string;
 }): Promise<Listing[]> {
   const q = new URLSearchParams({ status: "open", limit: "40" })
   if (params.kind && params.kind !== "all") q.set("kind", params.kind)
   if (params.originCity) q.set("origin_city", params.originCity)
   if (params.destCity) q.set("dest_city", params.destCity)
-  if (params.priceMin) q.set("price_min", params.priceMin)
-  if (params.priceMax) q.set("price_max", params.priceMax)
-  if (params.departFrom) q.set("depart_from", params.departFrom)
-  if (params.departTo) q.set("depart_to", params.departTo)
+  // One anchor date. Listings match through their own flexibility window,
+  // so a 6 April listing with a +-week flag matches a 3 April search
+  // with no extra control.
+  if (params.aroundDate) {
+    q.set("depart_from", params.aroundDate)
+    q.set("depart_to", params.aroundDate)
+  }
   const res = await fetch(`/api/listings?${q}`)
   if (!res.ok) throw new Error("Failed to fetch listings")
   const data = await res.json()
@@ -291,342 +153,194 @@ export function Browse() {
   const [destCity, setDestCity]         = React.useState(initDest)
   const [originValue, setOriginValue]   = React.useState(initOrigin)
   const [destValue, setDestValue]       = React.useState(initDest)
-  const [priceMin, setPriceMin]         = React.useState("")
-  const [priceMax, setPriceMax]         = React.useState("")
-  const [departFrom, setDepartFrom]     = React.useState("")
-  const [departTo, setDepartTo]         = React.useState("")
-  const [filtersOpen, setFiltersOpen]   = React.useState(false)
+  const [aroundDate, setAroundDate]     = React.useState("")
 
   const dOrigin   = useDebounced(originCity, 400)
   const dDest     = useDebounced(destCity, 400)
-  const dPriceMin = useDebounced(priceMin, 500)
-  const dPriceMax = useDebounced(priceMax, 500)
 
   const { data: listings, isLoading, isError } = useQuery({
-    queryKey: ["listings", kind, dOrigin, dDest, dPriceMin, dPriceMax, departFrom, departTo],
+    queryKey: ["listings", kind, dOrigin, dDest, aroundDate],
     queryFn: () => fetchListings({
       kind, originCity: dOrigin, destCity: dDest,
-      priceMin: dPriceMin, priceMax: dPriceMax,
-      departFrom, departTo,
+      aroundDate,
     }),
+    // Keep the old rows on screen while the next filter resolves.
+    // Without this every tap flashes skeletons for a frame.
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   })
 
-  const hasFilters = originCity || destCity || priceMin || priceMax || departFrom || departTo || kind !== "all"
-  const hasDateOrPrice = priceMin || priceMax || departFrom || departTo
+  const hasFilters = originCity || destCity || aroundDate || kind !== "all"
 
   function clearFilters() {
     setKind("all")
     setOriginCity(""); setOriginValue("")
     setDestCity("");   setDestValue("")
-    setPriceMin(""); setPriceMax("")
-    setDepartFrom(""); setDepartTo("")
+    setAroundDate("")
   }
 
   return (
-    <div className="min-h-screen pt-16" style={{ background: "var(--bg)" }}>
-
-      {/* ── Sticky toolbar ── */}
-      <div
-        className="sticky top-16 z-30 backdrop-blur-sm"
-        style={{ borderBottom: "1px solid var(--border)", background: "rgba(9,9,11,0.92)" }}
-      >
-        <div className="max-w-[1200px] mx-auto px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-
-            {/* Title */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <motion.div
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ background: "var(--accent)" }}
-                  animate={{ opacity: [1, 0.3, 1] }}
-                  transition={{ duration: 1.6, repeat: Infinity }}
-                />
-                <span
-                  className="font-mono text-[10px] tracking-[0.2em]"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {t('common.active_routes')}
-                </span>
-              </div>
-              <h1
-                className="text-xl font-bold tracking-tight"
-                style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
-              >
-                {t('navigation.browse')}
-              </h1>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2 shrink-0">
-              <Link to="/trips/new">
-                <button
-                  className="font-mono text-[10px] tracking-widest transition-colors px-4 py-2 rounded-sm"
-                  style={{
-                    background: "var(--accent)",
-                    color: "#fff",
-                    border: "1px solid var(--accent)",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-dim)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
-                >
-                  {t('listings.post_trip')}
-                </button>
-              </Link>
-              <Link to="/requests/new">
-                <button
-                  className="font-mono text-[10px] tracking-widest transition-colors px-4 py-2 rounded-sm"
-                  style={{
-                    background: "transparent",
-                    color: "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(37,99,235,0.4)"
-                    e.currentTarget.style.color = "var(--text)"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.color = "var(--text-muted)"
-                  }}
-                >
-                  {t('listings.post_request')}
-                </button>
-              </Link>
-              <Link to="/deliveries/new">
-                <button
-                  className="font-mono text-[10px] tracking-widest transition-colors px-4 py-2 rounded-sm"
-                  style={{
-                    background: "transparent",
-                    color: "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(168,85,247,0.4)"
-                    e.currentTarget.style.color = "#d8b4fe"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "var(--border)"
-                    e.currentTarget.style.color = "var(--text-muted)"
-                  }}
-                >
-                  {t('listings.post_delivery')}
-                </button>
-              </Link>
-            </div>
+    <div className="manifest">
+      {/* ── Search field ── */}
+      <section className="manifest-field">
+        <div className="closing-row" style={{ marginTop: 0 }}>
+          <h1 className="font-display" style={{ fontSize: "var(--t-h2)", margin: 0 }}>
+            {t("navigation.browse")}
+          </h1>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <Link to="/carry/new" className="btn btn--primary press">
+              {t("listings.post_carry")}
+            </Link>
+            <Link to="/need/new" className="btn btn--teal press">
+              {t("listings.post_need")}
+            </Link>
           </div>
         </div>
-      </div>
 
-      {/* ── Filters ── */}
-      <div className="max-w-[1200px] mx-auto px-6 pt-6 pb-0">
+        <div className="field-rule" aria-hidden="true" style={{ marginTop: 20, marginBottom: 20 }} />
+
+        <h2 className="field-caption">{t("listings.route_search")}</h2>
         <div
-          className="mb-6"
           style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "2px",
-            padding: "16px 20px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 14,
           }}
         >
-          {/* Kind tabs + filter toggle */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-1.5 flex-wrap">
-              {KINDS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setKind(k)}
-                  className="font-mono text-[10px] tracking-[0.1em] px-3 py-1.5 rounded-sm transition-all"
-                  style={
-                    kind === k
-                      ? { background: "var(--accent)", color: "#fff", border: "1px solid var(--accent)" }
-                      : { background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)" }
-                  }
-                  onMouseEnter={(e) => {
-                    if (kind !== k) {
-                      e.currentTarget.style.borderColor = "rgba(37,99,235,0.4)"
-                      e.currentTarget.style.color = "var(--text)"
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (kind !== k) {
-                      e.currentTarget.style.borderColor = "var(--border)"
-                      e.currentTarget.style.color = "var(--text-muted)"
-                    }
-                  }}
-                >
-                  {k === "all" ? t('listings.all') : t(`kinds.${k}`)}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setFiltersOpen(o => !o)}
-              className="flex items-center gap-2 font-mono text-[10px] tracking-widest px-3 py-1.5 rounded-sm transition-all"
-              style={{
-                background: "transparent",
-                color: filtersOpen || hasDateOrPrice ? "var(--accent)" : "var(--text-muted)",
-                border: `1px solid ${filtersOpen || hasDateOrPrice ? "rgba(37,99,235,0.4)" : "var(--border)"}`,
-              }}
-            >
-              <SlidersHorizontal size={11} />
-              {t('listings.filters')}
-              {hasDateOrPrice && (
-                <span
-                  className="w-1.5 h-1.5 rounded-full ml-0.5"
-                  style={{ background: "var(--accent)" }}
-                />
-              )}
-            </button>
-          </div>
-
-          {/* City search */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-1">
-            <CityAutocomplete
-              label={t('listings.from_city')}
-              value={originValue}
-              placeholder={t('listings.from_placeholder')}
-              compact
-              onSelect={(city) => { setOriginCity(city); setOriginValue(city) }}
-              onChange={(raw) => { setOriginValue(raw); setOriginCity(raw) }}
-              onClear={() => { setOriginCity(""); setOriginValue("") }}
-            />
-            <CityAutocomplete
-              label={t('listings.to_city')}
-              value={destValue}
-              placeholder={t('listings.to_placeholder')}
-              compact
-              onSelect={(city) => { setDestCity(city); setDestValue(city) }}
-              onChange={(raw) => { setDestValue(raw); setDestCity(raw) }}
-              onClear={() => { setDestCity(""); setDestValue("") }}
-            />
-          </div>
-
-          {/* Expanded filters */}
-          <AnimatePresence>
-            {filtersOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.18 }}
-                className="overflow-hidden"
-              >
-                <div
-                  className="pt-4 mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4"
-                  style={{ borderTop: "1px solid var(--border)" }}
-                >
-                  <NumInput label={t('listings.min_price')} value={priceMin} onChange={setPriceMin} placeholder="0"     min={0} max={10000} />
-                  <NumInput label={t('listings.max_price')} value={priceMax} onChange={setPriceMax} placeholder="9999"  min={0} max={10000} />
-                  <DateInput label={t('listings.depart_after')}  value={departFrom} onChange={setDepartFrom} />
-                  <DateInput label={t('listings.depart_before')} value={departTo}   onChange={setDepartTo} />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <CityAutocomplete
+            label={t("listings.from_city")}
+            value={originValue}
+            placeholder={t("listings.from_placeholder")}
+            compact
+            onSelect={(city) => { setOriginCity(city); setOriginValue(city) }}
+            onChange={(raw) => { setOriginValue(raw); setOriginCity(raw) }}
+            onClear={() => { setOriginCity(""); setOriginValue("") }}
+          />
+          <CityAutocomplete
+            label={t("listings.to_city")}
+            value={destValue}
+            placeholder={t("listings.to_placeholder")}
+            compact
+            onSelect={(city) => { setDestCity(city); setDestValue(city) }}
+            onChange={(raw) => { setDestValue(raw); setDestCity(raw) }}
+            onClear={() => { setDestCity(""); setDestValue("") }}
+          />
         </div>
-      </div>
 
-      {/* ── Results ── */}
-      <div className="max-w-[1200px] mx-auto px-6 pb-16">
-
-        {/* Loading */}
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <motion.div
-              className="w-5 h-5 rounded-full"
-              style={{ border: "2px solid rgba(37,99,235,0.15)", borderTopColor: "var(--accent)" }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+        <div style={{ marginTop: 18 }}>
+          <label style={{ display: "grid", gap: 6, minWidth: 0, maxWidth: 420 }}>
+            <span className="font-label field-dim">{t("listings.around_date")}</span>
+            <input
+              type="date"
+              className="route-input"
+              value={aroundDate}
+              onChange={(e) => setAroundDate(e.target.value)}
             />
-            <span
-              className="font-mono text-[11px] tracking-widest"
-              style={{ color: "var(--text-muted)" }}
+          </label>
+        </div>
+
+        <div className="seg" role="group" aria-label={t("listings.kind")} style={{ marginTop: 18 }}>
+          {KINDS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="seg-btn font-label"
+              aria-pressed={kind === k}
+              data-active={kind === k || undefined}
+              onClick={() => setKind(k)}
             >
-              {t('listings.loading_routes')}
+              {k === "all" ? t("listings.all") : t(`kinds.${k}`)}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Result count ── */}
+      <div
+        className="manifest-field"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <p className="font-label field-dim" style={{ margin: 0 }}>
+          {isLoading ? t("listings.loading_routes") : `${listings?.length ?? 0} ${t("listings.results")}`}
+          {(originCity || destCity) && !isLoading && (
+            <span style={{ marginLeft: 10, color: "var(--text)" }}>
+              {originCity && `${originCity.toUpperCase()}`}
+              {originCity && destCity && " → "}
+              {destCity && `${destCity.toUpperCase()}`}
             </span>
-          </div>
-        )}
-
-        {/* Error */}
-        {isError && (
-          <div className="text-center py-24">
-            <p className="font-mono text-[12px] mb-2" style={{ color: "var(--destructive)" }}>
-              {t('listings.failed_to_load')}
-            </p>
-            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-              {t('listings.check_connection')}
-            </p>
-          </div>
-        )}
-
-        {/* Results */}
-        {!isLoading && !isError && listings && (
-          <>
-            {/* Result count + clear */}
-            <div className="flex items-center justify-between mb-5">
-              <p className="font-mono text-[11px] tracking-widest" style={{ color: "var(--text-muted)" }}>
-                {listings.length} {t('listings.results')}
-                {(originCity || destCity) && (
-                  <span className="ml-2" style={{ color: "var(--accent)", opacity: 0.8 }}>
-                    {originCity && `FROM ${originCity.toUpperCase()}`}
-                    {originCity && destCity && " → "}
-                    {destCity && `TO ${destCity.toUpperCase()}`}
-                  </span>
-                )}
-              </p>
-              {hasFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest transition-colors"
-                  style={{ color: "var(--text-muted)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
-                >
-                  <X size={10} />
-                  {t('listings.clear_all')}
-                </button>
-              )}
-            </div>
-
-            {/* Empty state */}
-            {listings.length === 0 ? (
-              <div
-                className="text-center py-24 rounded-sm"
-                style={{ border: "1px dashed var(--border)" }}
-              >
-                <div
-                  className="text-5xl mb-5 font-mono"
-                  style={{ color: "var(--text-faint)" }}
-                >
-                  —
-                </div>
-                <p className="text-[14px] mb-4" style={{ color: "var(--text-muted)" }}>
-                  {t('listings.no_matching')}
-                </p>
-                <button
-                  onClick={clearFilters}
-                  className="font-mono text-[11px] tracking-widest transition-colors"
-                  style={{ color: "var(--accent)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-                  onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-                >
-                  {t('listings.clear_filters')}
-                </button>
-              </div>
-            ) : (
-              <AnimatePresence mode="popLayout">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {listings.map((listing) => (
-                    <ListingCard key={listing.id} listing={listing} />
-                  ))}
-                </div>
-              </AnimatePresence>
-            )}
-          </>
+          )}
+        </p>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="font-label"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: "pointer",
+              background: "none",
+              border: 0,
+              padding: 0,
+              color: "var(--text-muted)",
+            }}
+          >
+            <IconX size={12} stroke={2} aria-hidden="true" />
+            {t("listings.clear_all")}
+          </button>
         )}
       </div>
+
+      {/* ── Rows ── */}
+      {isLoading && (
+        <div className="manifest-field" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skel" style={{ height: 76, marginBottom: i < 2 ? 12 : 0 }} />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="manifest-field">
+          <p className="copy" style={{ color: "var(--destructive)" }}>
+            {t("listings.failed_to_load")}
+          </p>
+          <p className="copy ink-dim" style={{ marginTop: 8 }}>
+            {t("listings.check_connection")}
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !isError && listings && listings.length === 0 && (
+        <div className="manifest-field" style={{ textAlign: "left" }}>
+          <p className="font-display" style={{ fontSize: "var(--t-h3)", margin: 0 }}>
+            {t("listings.no_matching")}
+          </p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="btn btn--ghost"
+            style={{ marginTop: 16 }}
+          >
+            {t("listings.clear_filters")}
+          </button>
+        </div>
+      )}
+
+      {!isLoading && !isError && listings && listings.length > 0 && (
+        <nav aria-label={t("listings.results")} style={{ display: "grid", gap: "var(--bw)", background: "var(--line)" }}>
+          {listings.map((listing) => (
+            <ListingRow key={listing.id} listing={listing} />
+          ))}
+        </nav>
+      )}
     </div>
   )
 }

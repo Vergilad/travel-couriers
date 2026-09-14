@@ -4,10 +4,33 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
-    <title>Travel-Couriers</title>
+    <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Fonts are self-hosted from /public/fonts (see scripts/fetch-fonts.mjs).
+      A stylesheet link to fonts.googleapis.com would block the first render on
+      a third-party round trip and hand visitor IPs to Google.
+
+      Only the two faces that draw above the fold are preloaded: the hero
+      headline (Geologica) and the split-flap destination board (Martian Mono).
+      Body copy swaps in without a preload. Cyrillic slices load on demand,
+      because preloading both scripts would double the cost for every visitor.
+    -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/geologica-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/martian-mono-latin.woff2" crossorigin />
+
+    <title>Viactor: find someone going your way</title>
+    <meta
+      name="description"
+      content="People fly every day with half-empty suitcases. Viactor puts your parcel in that spare space, carried by a person rather than a warehouse."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Viactor: find someone going your way" />
+    <meta
+      property="og:description"
+      content="Send a parcel in the spare space of somebody already travelling your route."
+    />
+    <meta property="og:url" content="https://viactor.net/" />
   </head>
   <body>
     <div id="root"></div>

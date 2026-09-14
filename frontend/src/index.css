@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./styles/fonts.css";
+@import "./styles/viactor.css";
+@import "./styles/viactor-layout.css";
 
 @keyframes boardFloat {
   0%, 100% { transform: translateY(0px); }

@@ -1,0 +1,126 @@
+/*
+ * Split-flap skin.
+ *
+ * Flat on purpose: square panels, no gloss and no gradients, so the board
+ * belongs to the same material system as the rest of the sheet. The only
+ * modelling is the hinge gap across the panel's middle, and it is a *dark*
+ * band rather than a light one: a light line through the letterform reads as a
+ * strike-through, which is the opposite of mechanical.
+ *
+ * Sizing is driven by the inherited font-size, so the board scales with the
+ * headline's clamp() without a second breakpoint system. Panel width is set in
+ * `ch`, the advance width of the board's own font, so a glyph can never be
+ * wider than the panel that clips it, at any font-size or `wdth` setting.
+ *
+ * Every gap here is in `em` and generous rather than hairline. At a hairline
+ * the panels fuse into one dark bar and the board reads as a highlighter
+ * stripe or a redaction; the letters have to be seen sitting in separate cells
+ * for it to read as a mechanism.
+ */
+.flap-board {
+  display: flex; /* its own line under the headline: a board is a strip */
+  gap: 0.13em;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 0.3em;
+  font-family: var(--font-mono);
+  font-variation-settings: "wdth" 87;
+  font-weight: 600;
+  font-size: 0.72em;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  user-select: none;
+}
+
+/* Mirrors the current destination for assistive tech. Not a live region: it
+ * is read when the user reaches the headline, not announced on every flip. */
+.flap-board__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.flap {
+  --flap-h: 1.34em;
+  /* The hinge line, as a share of the panel. Fixed pixels held at ~1px, which
+     disappeared once the headline grew. */
+  --flap-hinge: 0.06em;
+  position: relative;
+  flex: 0 0 auto;
+  width: 1.62ch;
+  height: var(--flap-h);
+  overflow: hidden;
+  background: var(--flap-gap);
+  perspective: 340px;
+}
+
+/* The two panels leave the hinge gap in the middle, through which the panel's
+   dark backing shows. No overlay is involved, so the gap can never land on top
+   of the glyph.
+
+   The inset highlight is the only modelling on the panel: one hairline of light
+   on the top edge of each half, which is what a physical flap's chamfer does
+   under room light. It is an inset shadow rather than a gradient, so the face
+   stays flat. */
+.flap__half,
+.flap__leaf {
+  position: absolute;
+  inset-inline: 0;
+  height: calc(50% - var(--flap-hinge) / 2);
+  overflow: hidden;
+  background: var(--flap-face);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  backface-visibility: hidden;
+}
+
+.flap__half--top,
+.flap__leaf--front {
+  top: 0;
+  transform-origin: center bottom;
+}
+
+.flap__half--bottom,
+.flap__leaf--back {
+  bottom: 0;
+  transform-origin: center top;
+}
+
+/* Each layer clips one slice of a glyph box that is exactly as tall as the
+ * whole panel, so the character lines up across the hinge instead of being
+ * drawn twice at half size. Top layers anchor the box to their top edge,
+ * bottom layers to their bottom edge; because the box is a full panel tall in
+ * both cases, both slices centre the glyph on the same line. */
+.flap__glyph {
+  position: absolute;
+  inset-inline: 0;
+  height: var(--flap-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--flap-ink);
+}
+
+.flap__half--top .flap__glyph,
+.flap__leaf--front .flap__glyph { top: 0; }
+
+.flap__half--bottom .flap__glyph,
+.flap__leaf--back .flap__glyph { bottom: 0; }
+
+.flap__leaf {
+  z-index: 3;
+  visibility: hidden;
+  will-change: transform;
+}
+
+.flap__leaf--back { transform: rotateX(90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .flap__leaf { display: none; }
+}

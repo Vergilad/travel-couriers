@@ -68,7 +68,7 @@ export function PlaceholderPage({ title }: PlaceholderPageProps) {
 
   return (
     <main
-      className="min-h-screen flex flex-col items-center justify-center px-6 pt-20 pb-24 relative overflow-hidden"
+      className="min-h-dvh flex flex-col items-center justify-center px-6 pt-20 pb-24 relative overflow-hidden"
       style={{ background: "var(--bg)" }}
     >
       <div
