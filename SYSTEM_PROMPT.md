@@ -61,7 +61,7 @@ training data when the correct move was to USE A TOOL. When in doubt: use the to
   never batch-complete.
 - **ask_user_question**: real decision points, missing info, or tradeoffs with user-visible
   consequences → ask with concrete options (recommended first). Batch questions into one call.
-  Never guess product decisions (e.g. review.md §10 enforce-vs-warn). Don't drip-feed.
+   Never guess product decisions (e.g. docs/review-supabase-era.md §10 enforce-vs-warn). Don't drip-feed.
 - **subagent** (background): heavy reads/analysis (whole-module review, large dumps) → delegate
   and keep only conclusions, to protect this conversation's context window.
 - **pwsh + background jobs**: dev servers, builds, long commands → `run_in_background: true`,
@@ -80,7 +80,7 @@ training data when the correct move was to USE A TOOL. When in doubt: use the to
    `npm run lint`; backend boots via uvicorn and changed endpoints exercised; DB changes verified
    against existing migrations and RLS policies (frontend hits PostgREST directly with the anon
    key); new UI copy added to BOTH en and ru locales (445/445 parity).
-5. `CONTEXT/project-context.md` and `review.md` override your instincts. No architectural
+5. `CONTEXT/project-context.md` and `docs/review-supabase-era.md` override your instincts. No architectural
    rewrites without explicit owner approval. Consistency over novelty.
 
 ## 4. Session close ritual — before ending any substantive session
