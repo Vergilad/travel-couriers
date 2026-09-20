@@ -3,10 +3,9 @@
  * below 900px. The wordmark is Geologica at maximum Sharpness, the same family
  * as every heading, so there is no second typeface on the page.
  *
- * The anchors mark the section you are currently in. "Routes" used to be one
- * of them and is not any more: that field sits in the first screen of the
- * sheet, so a link to it never did anything. Browse is a real page and earns
- * the slot instead.
+ * Links go to the marketing pages (Browse, How it works, Safety) as routes.
+ * They used to be in-page anchors with a scroll-spy; once How it works and
+ * Safety moved onto their own routes the anchors had nothing to point at.
  */
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -14,13 +13,18 @@ import { IconMenu2, IconMoon, IconSun, IconX } from "@tabler/icons-react";
 
 import { useTranslation } from "@/i18n/I18nContext";
 import { useLanguage } from "@/i18n/useLanguage";
-import { useActiveSection } from "@/hooks/use-active-section";
 import { useAuth } from "@/lib/auth";
 import { AccountMenu } from "@/components/landing/viactor/AccountMenu";
 import type { ColorMode } from "@/hooks/use-color-mode";
 
-/** Ids of the fields the anchors point at, in page order. */
-const SECTION_IDS = ["how", "trust"] as const;
+/**
+ * How it works and Safety are their own pages now, so the nav links are
+ * routes rather than in-page anchors, and there is nothing to scroll-spy.
+ */
+const NAV_LINKS = [
+  { to: "/how", labelKey: "marketing.nav.how" },
+  { to: "/safety", labelKey: "marketing.nav.trust" },
+] as const;
 
 function LangToggle() {
   const { currentLanguage, changeLanguage } = useLanguage();
@@ -61,13 +65,6 @@ export function ViactorNav({
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
-  const activeSection = useActiveSection(SECTION_IDS);
-
-  const links = SECTION_IDS.map((id) => ({
-    id,
-    label: t(`marketing.nav.${id}`),
-    href: `#${id}`,
-  }));
 
   const ModeIcon = mode === "dark" ? IconSun : IconMoon;
 
@@ -110,15 +107,16 @@ export function ViactorNav({
           >
             {t("marketing.nav.browse")}
           </Link>
-          {links.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
+          {NAV_LINKS.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
               className="font-label nav-link"
-              aria-current={activeSection === link.id ? "true" : undefined}
+              style={{ color: "var(--text-muted)" }}
+              activeOptions={{ exact: false }}
             >
-              {link.label}
-            </a>
+              {t(link.labelKey)}
+            </Link>
           ))}
           <LangToggle />
           <button
@@ -190,16 +188,15 @@ export function ViactorNav({
           <Link to="/browse" className="font-label" onClick={() => setOpen(false)}>
             {t("marketing.nav.browse")}
           </Link>
-          {links.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
+          {NAV_LINKS.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
               className="font-label"
-              aria-current={activeSection === link.id ? "true" : undefined}
               onClick={() => setOpen(false)}
             >
-              {link.label}
-            </a>
+              {t(link.labelKey)}
+            </Link>
           ))}
           <div
             style={{

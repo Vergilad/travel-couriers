@@ -10,6 +10,8 @@ import {
 import { Layout } from "@/components/layout/Layout"
 import { AuthPage } from "@/pages/Auth"
 import { LandingPage } from "@/pages/Landing"
+import { HowItWorksPage } from "@/pages/HowItWorks"
+import { SafetyPage } from "@/pages/Safety"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
@@ -84,6 +86,18 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: LandingPage,
+})
+
+const howRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/how",
+  component: HowItWorksPage,
+})
+
+const safetyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/safety",
+  component: SafetyPage,
 })
 
 const browseRoute = createRoute({
@@ -179,6 +193,8 @@ const adminRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  howRoute,
+  safetyRoute,
   browseRoute,
   authRoute,
   listingRoute,

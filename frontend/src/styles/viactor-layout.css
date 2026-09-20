@@ -669,4 +669,27 @@
       max-width: none;
     }
   }
+
+  /* ------------------------------------------------------------
+     The sheet, pulled apart.
+
+     The default grid is one continuous sheet: the rule colour shows
+     through a 2px gap, so fields touch and read as one document.
+     The marketing pages asked for the opposite: distinct fields with
+     air between them, each one its own card. This modifier turns the
+     grid's background transparent, widens the gap, and gives every
+     tile its own rule and hard shadow, so a row of tiles reads as
+     separate blocks rather than a merged wall.
+     ------------------------------------------------------------ */
+  [data-theme="viactor"] .sheet-grid--apart {
+    gap: clamp(18px, 2.5vw, 30px);
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  [data-theme="viactor"] .sheet-grid--apart > .sheet-tile {
+    border: var(--bw) solid var(--line);
+    box-shadow: var(--shadow);
+  }
+
 }

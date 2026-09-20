@@ -460,6 +460,34 @@
       "to": "To",
       "search_cta": "Search this route"
     },
+    "teasers": {
+      "how": "Two people, one route. Post a listing, match, meet, confirm. The whole walk-through on one page.",
+      "safety": "ID checks, a held payment and two-way reviews. What is actually built, without the promises.",
+      "more": "Read more"
+    },
+    "about": {
+      "title": "What Viactor is",
+      "body": "Viactor creates no transportation. It matches people who are already flying with people who need something moved. Couriers here are independent users, never employees. The platform handles matching, chat and payment, and takes its fee only when a deal completes."
+    },
+    "status": {
+      "title": "Where the project stands",
+      "body": "The whole loop already works end to end: post a listing, match, talk, hand over, review. The platform runs on its own hardware and answers to no marketplace.",
+      "note": "Pre-launch. No users yet, and no invented numbers."
+    },
+    "how_page": {
+      "intro": "Two kinds of listing, one shared route.",
+      "kinds_title": "The two kinds",
+      "carry_label": "CARRY",
+      "carry_body": "I am going, I have space. You post the trip you booked and choose what fits in your bag.",
+      "need_label": "NEED",
+      "need_body": "Move this for me. You post what needs moving along the route and choose who carries it.",
+      "purchase_body": "Need the item bought at the destination? Mark it as a purchase, and the cost is settled in the chat.",
+      "step1": "Match. Your listing and their listing point at the same route and overlapping dates.",
+      "step2": "Talk it over. Price, what exactly flies, when and where you meet.",
+      "step3": "Both confirm, and the fee is held until the handover is done.",
+      "step4": "Meet, check the item together, confirm. Reviews go both ways.",
+      "cta_title": "Ready to try it?"
+    },
     "routes": {
       "title": "Where we open first",
       "note": "Your route is not here yet? Post it anyway. Listings are what open a corridor."
@@ -487,6 +515,17 @@
       "id": "Profiles are ID-verified before anyone carries anything.",
       "escrow": "The fee is held until both of you confirm the handover.",
       "reviews": "Reviews go both ways."
+    },
+    "safety_page": {
+      "intro": "Three mechanisms, no promises.",
+      "id_title": "ID verification, checked by a human",
+      "id_body": "Verification is optional, and it is not a rubber stamp: a person reviews each request, duplicate documents across accounts are flagged, and the photos are deleted the moment a decision is made. A verified badge means we checked. It is deterrence, not a guarantee.",
+      "escrow_body": "The sender pays, and the money waits. It goes to the courier only after both sides confirm the handover and the receipt. If the deal never happens, there is nothing to release: pre-launch the platform takes nothing and holds nothing.",
+      "reviews_title": "Reviews, both directions",
+      "reviews_body": "After a completed deal, each side reviews the other, anchored to that exact transaction. Reviews attach to the deal snapshot, so a listing closing or an account renaming does not launder a track record.",
+      "decide_title": "You always decide",
+      "decide_body": "Nothing is automatic. You choose who carries your item, what you agree to carry, and where you meet. Talk before you confirm, ask for details, and step away from any deal that feels wrong. A ban is one message away.",
+      "cta_title": "Read the listings, then decide"
     },
     "founders": {
       "title": "It is just the two of us",

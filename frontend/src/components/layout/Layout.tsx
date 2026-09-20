@@ -10,12 +10,12 @@ import { ViactorAppShell } from "@/components/landing/viactor/ViactorAppShell"
 const VIACTOR_PATHS = ["/browse", "/carry/new", "/need/new", "/listings", "/auth", "/profile", "/settings", "/verify", "/admin", "/my-listings", "/matches", "/messages"]
 
 export function Layout() {
-  // The marketing landing page brings its own nav and footer (and its own
-  // light theme), so the app chrome would collide with it.
+  // The marketing pages bring their own nav and footer (and their own
+  // light theme), so the app chrome would collide with them.
   const pathname = useRouterState({
     select: (s) => s.location.pathname,
   })
-  const isMarketing = pathname === "/"
+  const isMarketing = ["/", "/how", "/safety"].includes(pathname)
 
   if (isMarketing) {
     return <Outlet />

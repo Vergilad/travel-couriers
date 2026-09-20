@@ -1,15 +1,25 @@
 /**
  * The Viactor landing page as one sheet of transit paperwork.
  *
- * Grid discipline: ten fields, and the four columns pack exactly with no empty
- * cell anywhere.
+ * Grid discipline: eight fields, and the four columns pack exactly with no
+ * empty cell anywhere.
  *
  *   row 1-2   hero (2x2)      routes (1x2)         in-transit photo (1x2)
- *   row 3     the two paths (4)
- *   row 4     the fee (2)     handover photo (2)
- *   row 5     spare-space band (4, thin)
- *   row 6     safety (2)      founders (2)
+ *   row 3     status (2)      handover photo (2)
+ *   row 4     spare-space band (4, thin)
+ *   row 5     how teaser (2)  safety teaser (2)
+ *   row 6     what viactor is (2)  founders (2)
  *   row 7     closing call (4)
+ *
+ * The full "how it works" walk-through, the safety mechanics and the fee
+ * example moved onto their own pages (/how and /safety): repeating any of
+ * that here would say everything twice. The landing keeps a teaser field
+ * for the two pages, so the sheet stays a first impression rather than a
+ * manual, and the mechanics keep the room they need.
+ *
+ * The grid carries the `--apart` modifier: tiles render as separate cards
+ * with air between them, so the page reads as fields on a desk rather than
+ * one merged wall of paperwork.
  *
  * BOTH SIDES, ONE PAGE. This is a two-sided marketplace and the page is
  * written for both sides at once: whoever is reading, the sentence is about
@@ -17,25 +27,21 @@
  * four in the hero, which meant a traveller landing here read a page about
  * somebody else's parcel.
  *
- * There is exactly one field that divides by side, and it is `PathsTile`,
- * because the product genuinely divides there: one person is sending, the
- * other is flying, and they do different things right up until the handover.
- * Splitting the rest of the page by side would be partitioning something that
- * is not partitioned, and a toggle would hide half the product from whoever
- * did not notice it.
+ * The two teaser fields name the sides (send / fly) in one line each; the
+ * full split lives on /how. Splitting the rest of the page by side would be
+ * partitioning something that is not partitioned, and a toggle would hide
+ * half the product from whoever did not notice it.
  *
  * Field forms are deliberately unequal. A form names its fields in small print
  * and puts the value in large print, so a field's heading is a mono caption
  * (`.field-caption`) and its content is what you read first. One field is a
- * single figure at `--t-mega` in otherwise empty space, one is a thin
- * panoramic band, one is the page's only block of prose. Ten fields at the
+ * thin panoramic band, one is the page's only block of prose. Fields at the
  * same size, the same density and the same composition is what made the sheet
  * read as a wall.
  *
  * Colour carries meaning rather than decoration: teal is "where you are
- * going" (routes, the two paths), orange is "money and action" (the fee, the
- * closing call). Three fields are photographs, so the sheet is never
- * white-on-white.
+ * going" (routes, the how teaser), orange is "action" (the closing call).
+ * Three fields are photographs, so the sheet is never white-on-white.
  *
  * Copy rule: Viactor has not launched. There are no usage numbers, no
  * testimonials and no trust badges on this page. Anything that looks like data
@@ -43,7 +49,7 @@
  * em-dashes, anywhere.
  */
 import { Link } from "@tanstack/react-router";
-import { IconArrowNarrowRight, IconCheck } from "@tabler/icons-react";
+import { IconArrowNarrowRight } from "@tabler/icons-react";
 
 import { useTranslation } from "@/i18n/I18nContext";
 import { SheetGrid, SheetTile, FieldLabel } from "@/components/ui/sheet-grid";
@@ -95,146 +101,121 @@ function RoutesTile() {
 }
 
 /**
- * The one field that divides by side, and the page's centre.
- *
- * Two short paths run side by side, separated by the sheet's own rule, and
- * then a rule crosses both and one shared list runs underneath. You read your
- * own column and watch it join the other one, which is the product in one
- * picture: two people doing different things until the moment they meet.
- *
- * Two steps per side, not four in sequence. The old version was four stacked
- * steps written entirely from the sender's seat, sixty words of it, and a
- * traveller reading it learned what somebody else was going to do.
+ * The teaser for the How it works page, which now carries the full
+ * walk-through. Two paths compressed to one line each, and the arrow to the
+ * page where the mechanics get the room they need.
  */
-function PathsTile() {
+function HowTeaserTile() {
   const { t } = useTranslation();
 
-  const path = (label: string, steps: readonly string[]) => (
-    <div>
-      <p className="field-caption" style={{ marginBottom: 14 }}>
-        {label}
-      </p>
-      {/* Set at heading size, not body size. These four phrases are the
-          product, they sit in the widest field on the sheet, and at body size
-          they left most of that field empty for no reason. */}
-      <ol className="path-steps">
-        {steps.map((step) => (
-          <li
-            key={step}
-            className="font-display"
-            style={{ fontSize: "var(--t-h3)", fontWeight: 500, lineHeight: 1.25 }}
-          >
-            {step}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-
   return (
-    <SheetTile span={4} tone="teal" id="how">
+    <SheetTile span={2} tone="teal" id="how">
       <h2 className="field-caption">{t("marketing.how.title")}</h2>
-
-      <div className="path-split">
-        {path(t("marketing.how.send_label"), [
-          t("marketing.how.send_1"),
-          t("marketing.how.send_2"),
-        ])}
-        {path(t("marketing.how.fly_label"), [
-          t("marketing.how.fly_1"),
-          t("marketing.how.fly_2"),
-        ])}
-      </div>
-
-      <div className="path-join">
-        <p className="field-caption" style={{ marginBottom: 14 }}>
-          {t("marketing.how.join_label")}
-        </p>
-        <ol className="path-join-rows">
-          <li className="copy">{t("marketing.how.join_1")}</li>
-          <li className="copy">{t("marketing.how.join_2")}</li>
-        </ol>
-      </div>
+      <p className="copy" style={{ maxWidth: "44ch" }}>
+        {t("marketing.teasers.how")}
+      </p>
+      <Link
+        to="/how"
+        className="font-label field-row"
+        style={{
+          marginTop: "auto",
+          paddingTop: 18,
+          color: "inherit",
+          textDecoration: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        {t("marketing.teasers.more")}
+        <IconArrowNarrowRight size={17} stroke={2} aria-hidden="true" />
+      </Link>
     </SheetTile>
   );
 }
 
 /**
- * The fee. One figure at the top of the type scale in a field that is
- * otherwise almost empty.
- *
- * This is the page's macro-typography beat, and it is here because the fee is
- * the one number that means something to both sides at once: the sender's cost
- * and the traveller's earnings are the same figure. So the field states the
- * figure and then says, in as few words as possible, that the two of them set
- * it. It does not claim what either side nets, because the platform fee is not
- * set yet and inventing one would be a fake-precise number.
- *
- * Centred vertically: this field shares its row with a photograph taller than
- * one figure and one line, and the slack goes evenly above and below rather
- * than collecting in an unexplained gap at the bottom.
+ * The teaser for the Safety page, which now carries the full mechanics.
+ * Same field form as the how teaser, mirrored tone, so the pair reads as
+ * two related fields rather than two random ones.
  */
-function PriceTile() {
+function SafetyTeaserTile() {
+  const { t } = useTranslation();
+
+  return (
+    <SheetTile span={2} id="trust">
+      <h2 className="field-caption">{t("marketing.trust.title")}</h2>
+      <p className="copy" style={{ maxWidth: "44ch" }}>
+        {t("marketing.teasers.safety")}
+      </p>
+      <Link
+        to="/safety"
+        className="font-label field-row"
+        style={{
+          marginTop: "auto",
+          paddingTop: 18,
+          color: "inherit",
+          textDecoration: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        {t("marketing.teasers.more")}
+        <IconArrowNarrowRight size={17} stroke={2} aria-hidden="true" />
+      </Link>
+    </SheetTile>
+  );
+}
+
+/**
+ * What Viactor is, in four sentences, taken from the project's own context:
+ * the platform creates no transportation, it matches trips that already
+ * exist; couriers are independent users, never employees; the platform
+ * handles matching, chat and payment; the fee lands only on completed deals.
+ * This is the page's one field of facts, and it sits beside the founders
+ * field because the two answer different questions: what this is, who this is.
+ */
+function AboutTile() {
+  const { t } = useTranslation();
+
+  return (
+    <SheetTile span={2}>
+      <h2 className="field-caption">{t("marketing.about.title")}</h2>
+      <p className="copy" style={{ maxWidth: "46ch" }}>
+        {t("marketing.about.body")}
+      </p>
+    </SheetTile>
+  );
+}
+
+
+/**
+ * Where the project stands, stated plainly.
+ *
+ * General information about Viactor itself, taken from the project context:
+ * the full loop works end to end, the platform is self-hosted, and it is
+ * pre-launch. The copy rule demands honesty about the stage, so the field
+ * names the stage instead of inventing numbers. The fee example this field
+ * replaced lives on /how now; saying it here too would say it twice.
+ *
+ * Centred vertically: this field shares its row with a photograph taller
+ * than four lines of copy, and the slack goes evenly above and below.
+ */
+function StatusTile() {
   const { t } = useTranslation();
 
   return (
     <SheetTile span={2} tone="orange" style={{ justifyContent: "center" }}>
       <h2 className="field-caption" style={{ marginBottom: 6 }}>
-        {t("marketing.price.title")}
+        {t("marketing.status.title")}
       </h2>
-      <p
-        className="font-display tabular"
-        style={{
-          fontSize: "var(--t-mega)",
-          margin: 0,
-          lineHeight: 0.82,
-          letterSpacing: "-0.04em",
-        }}
-      >
-        &euro;18
+      <p className="copy" style={{ maxWidth: "44ch" }}>
+        {t("marketing.status.body")}
       </p>
       <FieldLabel className="ink-dim" style={{ color: "inherit", marginTop: 14 }}>
-        {t("marketing.price.route")} &middot; {t("marketing.price.example")}
+        {t("marketing.status.note")}
       </FieldLabel>
-      <p className="copy" style={{ maxWidth: "42ch", marginTop: 14 }}>
-        {t("marketing.price.body")}
-      </p>
-    </SheetTile>
-  );
-}
-
-/**
- * The three safety mechanics that actually exist in the product.
- *
- * Each one is marked with a ticked box rather than a subject icon. A shield, a
- * padlock and a speech bubble would have been this page's only pictograms, and
- * three lone glyphs on a form read as decoration; the box is drawn with the
- * same 2px rule as the sheet itself and says the one thing that matters here,
- * which is that these are shipped, not planned.
- */
-function SafetyTile() {
-  const { t } = useTranslation();
-  const items = ["id", "escrow", "reviews"] as const;
-
-  return (
-    <SheetTile span={2} id="trust">
-      <h2 className="field-caption">{t("marketing.trust.title")}</h2>
-      {/* Three across or a stack; see .trust-grid. */}
-      <ul
-        className="trust-grid"
-        style={{ listStyle: "none", gap: 18, margin: 0, padding: 0 }}
-      >
-        {items.map((key) => (
-          <li key={key}>
-            <span className="tickbox" aria-hidden="true">
-              <IconCheck size={15} stroke={3} />
-            </span>
-            <p className="copy" style={{ marginTop: 10 }}>
-              {t(`marketing.trust.${key}`)}
-            </p>
-          </li>
-        ))}
-      </ul>
     </SheetTile>
   );
 }
@@ -318,7 +299,7 @@ export function LandingSheet() {
   const { t } = useTranslation();
 
   return (
-    <SheetGrid>
+    <SheetGrid className="sheet-grid--apart">
       <HeroTile />
       <RoutesTile />
       <PhotoTile
@@ -332,9 +313,7 @@ export function LandingSheet() {
         priority
       />
 
-      <PathsTile />
-
-      <PriceTile />
+      <StatusTile />
       <PhotoTile
         slug="handover"
         alt={t("marketing.photo.handover_alt")}
@@ -353,7 +332,10 @@ export function LandingSheet() {
         focal="50% 42%"
       />
 
-      <SafetyTile />
+      <HowTeaserTile />
+      <SafetyTeaserTile />
+
+      <AboutTile />
       <FoundersTile />
 
       <ClosingTile />
