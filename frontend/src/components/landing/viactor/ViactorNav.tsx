@@ -21,11 +21,6 @@ import type { ColorMode } from "@/hooks/use-color-mode";
  * How it works and Safety are their own pages now, so the nav links are
  * routes rather than in-page anchors, and there is nothing to scroll-spy.
  */
-const NAV_LINKS = [
-  { to: "/how", labelKey: "marketing.nav.how" },
-  { to: "/safety", labelKey: "marketing.nav.trust" },
-] as const;
-
 function LangToggle() {
   const { currentLanguage, changeLanguage } = useLanguage();
 
@@ -107,17 +102,12 @@ export function ViactorNav({
           >
             {t("marketing.nav.browse")}
           </Link>
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className="font-label nav-link"
-              style={{ color: "var(--text-muted)" }}
-              activeOptions={{ exact: false }}
-            >
-              {t(link.labelKey)}
-            </Link>
-          ))}
+          <a href="/#how-it-works" className="font-label nav-link" style={{ color: "var(--text-muted)" }}>
+            {t("marketing.nav.how")}
+          </a>
+          <a href="/#safety" className="font-label nav-link" style={{ color: "var(--text-muted)" }}>
+            {t("marketing.nav.trust")}
+          </a>
           <LangToggle />
           <button
             type="button"
@@ -188,16 +178,6 @@ export function ViactorNav({
           <Link to="/browse" className="font-label" onClick={() => setOpen(false)}>
             {t("marketing.nav.browse")}
           </Link>
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className="font-label"
-              onClick={() => setOpen(false)}
-            >
-              {t(link.labelKey)}
-            </Link>
-          ))}
           <div
             style={{
               display: "flex",

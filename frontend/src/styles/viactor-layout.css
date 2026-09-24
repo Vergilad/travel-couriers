@@ -606,6 +606,74 @@
     }
   }
 
+  /* Landing guide blocks: anchors stay above the sticky nav and each field
+     keeps its own rhythm without breaking the sheet's visual separation. */
+  [data-theme="viactor"] #how-it-works,
+  [data-theme="viactor"] #safety {
+    scroll-margin-top: 132px;
+  }
+  [data-theme="viactor"] .landing-guide-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+  }
+  [data-theme="viactor"] .landing-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--bw);
+  }
+  [data-theme="viactor"] .landing-guide-kind {
+    min-width: 0;
+    padding: 20px;
+    background: var(--sheet);
+    border: var(--bw) solid var(--line);
+  }
+  [data-theme="viactor"] .landing-guide-kind--wide {
+    grid-column: 1 / -1;
+  }
+  [data-theme="viactor"] .landing-guide-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--bw);
+  }
+  [data-theme="viactor"] .landing-guide-steps span {
+    display: grid;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--t-label);
+    line-height: 1.45;
+  }
+  [data-theme="viactor"] .landing-guide-steps b {
+    color: var(--orange);
+    font-size: 1.2rem;
+  }
+  [data-theme="viactor"] .landing-guide-grid--safety {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  [data-theme="viactor"] .landing-guide-card {
+    min-width: 0;
+    padding: 20px;
+    background: var(--sheet);
+    color: var(--text);
+    border: var(--bw) solid var(--line);
+  }
+  [data-theme="viactor"] .landing-guide-card:nth-child(1),
+  [data-theme="viactor"] .landing-guide-card:nth-child(3) { border-top-color: var(--teal); }
+  [data-theme="viactor"] .landing-guide-card:nth-child(2),
+  [data-theme="viactor"] .landing-guide-card:nth-child(4) { border-top-color: var(--orange); }
+  @media (max-width: 899px) {
+    [data-theme="viactor"] .landing-guide-grid,
+    [data-theme="viactor"] .landing-guide-grid--safety { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    [data-theme="viactor"] .landing-guide-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 519px) {
+    [data-theme="viactor"] .landing-guide-heading { flex-direction: column; }
+    [data-theme="viactor"] .landing-guide-grid,
+    [data-theme="viactor"] .landing-guide-grid--safety,
+    [data-theme="viactor"] .landing-guide-steps { grid-template-columns: 1fr; }
+  }
+
   /* Ticket perforation: the tear line between the form and its stub.
      Same 2px ink as every other rule, dashed so it reads as tearable.
      Bleeds to the field edges like .field-rule. Square notches at both

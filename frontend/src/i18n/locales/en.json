@@ -182,7 +182,31 @@
     "opening": "OPENING…",
     "no_reviews": "No reviews yet",
     "free": "Free",
-    "negotiable": "Negotiable"
+    "negotiable": "Negotiable",
+    "guide_nav_label": "ON THIS PAGE",
+    "guide_nav_overview": "Overview",
+    "guide_nav_how": "How it works",
+    "guide_nav_safety": "Safety",
+    "guide_how_title": "How this listing moves forward",
+    "guide_how_intro": "Four clear steps from a match to a completed handover.",
+    "guide_step_match_title": "Find a match",
+    "guide_step_match_body": "Check the route, dates and profile, then open a conversation if the details fit.",
+    "guide_step_talk_title": "Agree on the details",
+    "guide_step_talk_body": "Confirm what is being carried, the fee and the meeting place in messages.",
+    "guide_step_confirm_title": "Both sides confirm",
+    "guide_step_confirm_body": "No deal starts until both people have reviewed the arrangement and agreed.",
+    "guide_step_meet_title": "Meet and review",
+    "guide_step_meet_body": "Check the item at handover. Once both sides confirm, payment is released and reviews open.",
+    "guide_safety_title": "Before you confirm",
+    "guide_safety_intro": "Simple checks that make a stranger-to-stranger handover more predictable.",
+    "guide_safety_profile_title": "Read the profile",
+    "guide_safety_profile_body": "Check identity status, previous reviews and the location shown on the profile.",
+    "guide_safety_message_title": "Keep details in messages",
+    "guide_safety_message_body": "Agree on the item, timing and meeting point before committing to the deal.",
+    "guide_safety_payment_title": "Use held payment",
+    "guide_safety_payment_body": "The fee is released only after both sides confirm the handover. Pre-launch, Viactor holds no money.",
+    "guide_safety_choice_title": "You stay in control",
+    "guide_safety_choice_body": "Choose the person, ask questions and walk away from anything that feels wrong. A report is one message away."
   },
   "create": {
     "tick_on": "ON",
@@ -507,6 +531,7 @@
     "price": {
       "route": "Berlin / Istanbul, 2 kg",
       "example": "An example, not an average",
+      "amount": "€18",
       "body": "You two agree it between yourselves. No per-kilo tariff, no customs broker, no fuel surcharge.",
       "title": "The fee"
     },
@@ -520,6 +545,8 @@
       "intro": "Three mechanisms, no promises.",
       "id_title": "ID verification, checked by a human",
       "id_body": "Verification is optional, and it is not a rubber stamp: a person reviews each request, duplicate documents across accounts are flagged, and the photos are deleted the moment a decision is made. A verified badge means we checked. It is deterrence, not a guarantee.",
+      "escrow_title": "The money waits for confirmation",
+
       "escrow_body": "The sender pays, and the money waits. It goes to the courier only after both sides confirm the handover and the receipt. If the deal never happens, there is nothing to release: pre-launch the platform takes nothing and holds nothing.",
       "reviews_title": "Reviews, both directions",
       "reviews_body": "After a completed deal, each side reviews the other, anchored to that exact transaction. Reviews attach to the deal snapshot, so a listing closing or an account renaming does not launder a track record.",
@@ -551,6 +578,23 @@
       "contact": "Contact",
       "rights": "All rights reserved."
     }
+  },
+  "errors": {
+    "400_title": "The request needs another look",
+    "400_body": "The link or form contained something we could not process. Check the details and try again.",
+    "401_title": "Please sign in to continue",
+    "401_body": "This page is available after you sign in.",
+    "403_title": "This page is not open to you",
+    "403_body": "Your account does not have access to this page.",
+    "404_title": "This waypoint doesn't exist",
+    "404_body": "The route you're looking for isn't on the network. It may have been moved, or never existed.",
+    "500_title": "Something interrupted the route",
+    "500_body": "The page could not be loaded right now. Please try again in a moment.",
+    "default_title": "The route could not be completed",
+    "default_body": "Something went wrong while loading this page. Please try again.",
+    "try_again": "TRY AGAIN →",
+    "back_home": "← BACK TO HOME",
+    "technical": "Reference"
   },
   "not_found": {
     "gate_unknown": "GATE: UNKNOWN ROUTE",

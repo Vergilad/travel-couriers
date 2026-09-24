@@ -47,15 +47,15 @@ export function ViactorFooter() {
             <p className="font-label" style={{ margin: 0, color: "var(--text-muted)" }}>
               {t("marketing.footer.product")}
             </p>
-            <Link to="/how" style={linkStyle}>
-              {t("marketing.nav.how")}
-            </Link>
             <Link to="/browse" style={linkStyle}>
               {t("marketing.nav.browse")}
             </Link>
-            <Link to="/safety" style={linkStyle}>
+            <a href="/#how-it-works" style={linkStyle}>
+              {t("marketing.nav.how")}
+            </a>
+            <a href="/#safety" style={linkStyle}>
               {t("marketing.nav.trust")}
-            </Link>
+            </a>
           </nav>
 
           <nav style={{ display: "grid", gap: 10, alignContent: "start" }}>

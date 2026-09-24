@@ -5,17 +5,17 @@ import {
   createRouter,
   Outlet,
   useNavigate,
+  type ErrorComponentProps,
+  type NotFoundRouteProps,
 } from "@tanstack/react-router"
 
 import { Layout } from "@/components/layout/Layout"
 import { AuthPage } from "@/pages/Auth"
 import { LandingPage } from "@/pages/Landing"
-import { HowItWorksPage } from "@/pages/HowItWorks"
-import { SafetyPage } from "@/pages/Safety"
 import { ProfilePage } from "@/pages/Profile"
 import { SettingsPage } from "@/pages/Settings"
 import { PlaceholderPage } from "@/pages/PlaceholderPage"
-import { NotFoundPage } from "@/pages/NotFound"
+import { ErrorPage } from "@/pages/ErrorPage"
 import { Inbox } from "@/pages/Inbox"
 import { Browse } from "@/pages/Browse"
 import { MyRoutes } from "@/pages/MyRoutes"
@@ -33,7 +33,12 @@ function FullPageSpinner() {
   )
 }
 
-const rootRoute = createRootRoute({ component: Layout, notFoundComponent: NotFoundPage })
+const routeError = (props: ErrorComponentProps) => (
+  <ErrorPage error={props.error} reset={props.reset} />
+)
+const routeNotFound = (_props: NotFoundRouteProps) => <ErrorPage />
+
+const rootRoute = createRootRoute({ component: Layout, notFoundComponent: routeNotFound, errorComponent: routeError })
 
 function AuthGuard() {
   const { user, loading } = useAuth()
@@ -86,18 +91,6 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: LandingPage,
-})
-
-const howRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/how",
-  component: HowItWorksPage,
-})
-
-const safetyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/safety",
-  component: SafetyPage,
 })
 
 const browseRoute = createRoute({
@@ -193,8 +186,6 @@ const adminRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  howRoute,
-  safetyRoute,
   browseRoute,
   authRoute,
   listingRoute,
@@ -213,7 +204,7 @@ const routeTree = rootRoute.addChildren([
   ]),
 ])
 
-export const router = createRouter({ routeTree, defaultNotFoundComponent: NotFoundPage })
+export const router = createRouter({ routeTree, defaultNotFoundComponent: routeNotFound, defaultErrorComponent: routeError })
 
 declare module "@tanstack/react-router" {
   interface Register {
