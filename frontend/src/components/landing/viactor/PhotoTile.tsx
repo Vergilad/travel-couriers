@@ -1,12 +1,7 @@
 /**
  * A photo field on the sheet.
  *
- * The caption sits in its own strip below the image, cut off by a hard rule,
- * never printed on top of the photograph. Labels overlaid on images are one of
- * the AI tells the taste rules call out, and on a photo they also cost a scrim
- * that flattens whatever made the picture worth using.
- *
- * The photographs are shown untreated. A teal duotone read as "processed
+ * The photograph is shown untreated. A teal duotone read as "processed
  * luxury brand", which is the opposite of what this product is.
  *
  * A photo never sets its own height from the image file. The frame is an
@@ -35,28 +30,19 @@ const srcSet = (slug: string, ext: string) =>
 export function PhotoTile({
   slug,
   alt,
-  caption,
   span = 1,
   rows = 1,
   /** CSS object-position, to keep the subject in frame as the tile reflows. */
   focal = "50% 50%",
-  /**
-   * Renders the field as a wide strip instead of a block. The page needs one
-   * field that is a band, and a photograph is what a band can honestly hold.
-   */
-  band = false,
   /** Above-the-fold photos must not be lazy, or they arrive after the paint. */
   priority = false,
 }: {
   /** Basename written by the image pipeline, e.g. "handover". */
   slug: string;
   alt: string;
-  /** One functional line in the mono voice. Usually a route or a plain fact. */
-  caption?: string;
   span?: TileSpan;
   rows?: 1 | 2;
   focal?: string;
-  band?: boolean;
   priority?: boolean;
 }) {
   // Below 1024px every photo field is the full column width; above it, the
@@ -72,7 +58,7 @@ export function PhotoTile({
 
   return (
     <SheetTile span={span} rows={rows} flush>
-      <span className={band ? "photo-frame photo-frame--band" : "photo-frame"}>
+      <span className="photo-frame">
         <picture>
           <source type="image/avif" srcSet={srcSet(slug, "avif")} sizes={sizes} />
           <source type="image/webp" srcSet={srcSet(slug, "webp")} sizes={sizes} />
@@ -88,22 +74,6 @@ export function PhotoTile({
           />
         </picture>
       </span>
-
-      {caption && (
-        <p
-          className="font-label"
-          style={{
-            margin: 0,
-            flexShrink: 0,
-            padding: "10px var(--tile-pad)",
-            borderTop: "var(--bw) solid var(--line)",
-            background: "var(--sheet)",
-            color: "var(--text-muted)",
-          }}
-        >
-          {caption}
-        </p>
-      )}
     </SheetTile>
   );
 }

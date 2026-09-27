@@ -1,14 +1,14 @@
 /**
  * The Viactor landing page as one sheet of transit paperwork.
  *
- * Grid discipline: eight fields, and the four columns pack exactly with no
+ * Grid discipline: nine fields, and the four columns pack exactly with no
  * empty cell anywhere.
  *
  *   row 1-2   hero (2x2)      routes (1x2)         in-transit photo (1x2)
  *   row 3     status (2)      handover photo (2)
- *   row 4     spare-space band (4, thin)
- *   row 5     how teaser (2)  safety teaser (2)
- *   row 6     what viactor is (2)  founders (2)
+ *   row 4     what viactor is (2)  founders (2)
+ *   row 5     how it works (4)
+ *   row 6     safety (4)
  *   row 7     closing call (4)
  *
  * The full "how it works" walk-through and the safety mechanics stay on this
@@ -26,21 +26,22 @@
  * four in the hero, which meant a traveller landing here read a page about
  * somebody else's parcel.
  *
- * The two teaser fields name the sides (send / fly) in one line each; the
- * full split lives on /how. Splitting the rest of the page by side would be
- * partitioning something that is not partitioned, and a toggle would hide
- * half the product from whoever did not notice it.
+ * The how-it-works field names the sides (send / carry) in one line each.
+ * Splitting the rest of the page by side would be partitioning something that
+ * is not partitioned, and a toggle would hide half the product from whoever
+ * did not notice it.
  *
  * Field forms are deliberately unequal. A form names its fields in small print
  * and puts the value in large print, so a field's heading is a mono caption
- * (`.field-caption`) and its content is what you read first. One field is a
- * thin panoramic band, one is the page's only block of prose. Fields at the
- * same size, the same density and the same composition is what made the sheet
- * read as a wall.
+ * (`.field-caption`) and its content is what you read first. One field is the
+ * page's only block of prose, and the two wide fields underneath are the
+ * walk-throughs. Fields at the same size, the same density and the same
+ * composition is what made the sheet read as a wall.
  *
  * Colour carries meaning rather than decoration: teal is "where you are
- * going" (routes, the how teaser), orange is "action" (the closing call).
- * Three fields are photographs, so the sheet is never white-on-white.
+ * going" (routes), orange is "action" (the closing call, and the one safety
+ * card that is not a mechanism but a rule). Two fields are photographs, so the
+ * sheet is never white-on-white.
  *
  * Copy rule: Viactor has not launched. There are no usage numbers, no
  * testimonials and no trust badges on this page. Anything that looks like data
@@ -51,7 +52,7 @@ import { Link } from "@tanstack/react-router";
 import { IconArrowNarrowRight } from "@tabler/icons-react";
 
 import { useTranslation } from "@/i18n/I18nContext";
-import { SheetGrid, SheetTile, FieldLabel } from "@/components/ui/sheet-grid";
+import { SheetGrid, SheetTile } from "@/components/ui/sheet-grid";
 import { PhotoTile } from "@/components/landing/viactor/PhotoTile";
 import { HeroTile } from "@/components/landing/viactor/HeroTile";
 
@@ -125,10 +126,9 @@ function AboutTile() {
  * Where the project stands, stated plainly.
  *
  * General information about Viactor itself, taken from the project context:
- * the full loop works end to end, the platform is self-hosted, and it is
- * pre-launch. The copy rule demands honesty about the stage, so the field
- * names the stage instead of inventing numbers. The fee example this field
- * replaced lives on /how now; saying it here too would say it twice.
+ * the full loop works end to end and the platform runs on its own server. Two
+ * sentences and no footnote: a pre-launch note pinned under them read as an
+ * apology, and the page says what is built instead.
  *
  * Centred vertically: this field shares its row with a photograph taller
  * than four lines of copy, and the slack goes evenly above and below.
@@ -144,9 +144,6 @@ function StatusTile() {
       <p className="copy" style={{ maxWidth: "44ch" }}>
         {t("marketing.status.body")}
       </p>
-      <FieldLabel className="ink-dim" style={{ color: "inherit", marginTop: 14 }}>
-        {t("marketing.status.note")}
-      </FieldLabel>
     </SheetTile>
   );
 }
@@ -187,13 +184,9 @@ function HowItWorksTile() {
 
   return (
     <SheetTile span={4} id="how-it-works" style={{ gap: 20 }}>
-      <div className="landing-guide-heading">
-        <div>
-          <p className="field-caption" style={{ margin: 0 }}>{t("marketing.nav.how")}</p>
-          <h2 className="font-display" style={{ fontSize: "var(--t-h2)", margin: "8px 0 0" }}>{t("marketing.how.title")}</h2>
-          <p className="copy ink-dim" style={{ margin: "10px 0 0", maxWidth: "56ch" }}>{t("marketing.how_page.intro")}</p>
-        </div>
-        <span className="stencil-chip" data-side="carry">{t("marketing.how_page.carry_label")}</span>
+      <div>
+        <h2 className="font-display" style={{ fontSize: "var(--t-h2)", margin: 0 }}>{t("marketing.how.title")}</h2>
+        <p className="copy ink-dim" style={{ margin: "10px 0 0", maxWidth: "56ch" }}>{t("marketing.how_page.intro")}</p>
       </div>
       <div className="landing-guide-grid">
         <div className="landing-guide-kind">
@@ -233,7 +226,7 @@ function SafetyTile() {
     { title: t("marketing.safety_page.id_title"), body: t("marketing.safety_page.id_body") },
     { title: t("marketing.safety_page.escrow_title"), body: t("marketing.safety_page.escrow_body") },
     { title: t("marketing.safety_page.reviews_title"), body: t("marketing.safety_page.reviews_body") },
-    { title: t("marketing.safety_page.decide_title"), body: t("marketing.safety_page.decide_body") },
+    { title: t("marketing.safety_page.decide_title"), body: t("marketing.safety_page.decide_body"), accent: true },
   ];
 
   return (
@@ -243,11 +236,13 @@ function SafetyTile() {
           <p className="field-caption" style={{ margin: 0 }}>{t("marketing.nav.trust")}</p>
           <h2 className="font-display" style={{ fontSize: "var(--t-h2)", margin: "8px 0 0" }}>{t("marketing.safety_page.intro")}</h2>
         </div>
-        <span className="stencil-chip" data-side="need">{t("marketing.safety_page.decide_title")}</span>
       </div>
       <div className="landing-guide-grid landing-guide-grid--safety">
         {items.map((item, index) => (
-          <article className="landing-guide-card" key={item.title}>
+          <article
+            className={item.accent ? "landing-guide-card landing-guide-card--accent" : "landing-guide-card"}
+            key={item.title}
+          >
             <span className="font-label" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
             <h3 className="font-display" style={{ fontSize: "var(--t-h3)", margin: "12px 0 0" }}>{item.title}</h3>
             <p className="copy" style={{ margin: "10px 0 0" }}>{item.body}</p>
@@ -314,7 +309,6 @@ export function LandingSheet() {
       <PhotoTile
         slug="in-transit"
         alt={t("marketing.photo.in_transit_alt")}
-        caption={t("marketing.photo.in_transit_caption")}
         span={1}
         rows={2}
         // Portrait traveller in a tall field: keep the window and the bag
@@ -326,19 +320,7 @@ export function LandingSheet() {
       <PhotoTile
         slug="handover"
         alt={t("marketing.photo.handover_alt")}
-        caption={t("marketing.photo.handover_caption")}
         span={2}
-      />
-
-      {/* The thin row. Four columns wide and a sixth as tall, so the page has
-          one field that is a band rather than a block. */}
-      <PhotoTile
-        slug="spare-space"
-        alt={t("marketing.photo.spare_space_alt")}
-        caption={t("marketing.photo.spare_space_caption")}
-        span={4}
-        band
-        focal="50% 42%"
       />
 
       <AboutTile />

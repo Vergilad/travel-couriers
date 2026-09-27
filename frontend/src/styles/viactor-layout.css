@@ -103,10 +103,6 @@
     object-fit: cover;
   }
   [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: auto; }
-  /* The panoramic band. One field on the page is a strip rather than a block,
-     and a photograph is the honest thing to put in it: a wide crop reads as a
-     deliberate band, whereas a wide crop of text reads as a mistake. */
-  [data-theme="viactor"] .photo-frame--band { aspect-ratio: 6 / 1; }
 
   /* Spans. Desktop 4 columns, tablet 2, phone 1. Every multi-column
      tile declares its own collapse here rather than trusting defaults. */
@@ -124,7 +120,6 @@
     /* Full-width now, so 12:5 would be a sliver. */
     [data-theme="viactor"] .photo-frame { aspect-ratio: 2 / 1; }
     [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: auto; }
-    [data-theme="viactor"] .photo-frame--band { aspect-ratio: 3 / 1; }
   }
   @media (max-width: 639px) {
     [data-theme="viactor"] .sheet-grid {
@@ -139,7 +134,6 @@
        two-row fields included. */
     [data-theme="viactor"] .photo-frame,
     [data-theme="viactor"] .rows-2 .photo-frame { aspect-ratio: 4 / 3; }
-    [data-theme="viactor"] .photo-frame--band { aspect-ratio: 2 / 1; }
   }
 
   /* ------------------------------------------------------------
@@ -649,7 +643,7 @@
     font-size: 1.2rem;
   }
   [data-theme="viactor"] .landing-guide-grid--safety {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   [data-theme="viactor"] .landing-guide-card {
     min-width: 0;
@@ -660,18 +654,44 @@
   }
   [data-theme="viactor"] .landing-guide-card:nth-child(1),
   [data-theme="viactor"] .landing-guide-card:nth-child(3) { border-top-color: var(--teal); }
-  [data-theme="viactor"] .landing-guide-card:nth-child(2),
-  [data-theme="viactor"] .landing-guide-card:nth-child(4) { border-top-color: var(--orange); }
+  [data-theme="viactor"] .landing-guide-card:nth-child(2) { border-top-color: var(--orange); }
+  /* The last mechanism is not a mechanism, it is the absence of automation, so
+     it is not printed as a fourth peer card. It gets the full width of the row
+     and the accent colour, which reads as a note on the form rather than a
+     fourth field of the same kind. */
+  [data-theme="viactor"] .landing-guide-card--accent {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 22ch) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px 20px;
+    background: var(--orange);
+    color: var(--on-fill);
+    border-color: var(--line);
+  }
+  [data-theme="viactor"] .landing-guide-card--accent h3 { margin: 0 !important; }
+  [data-theme="viactor"] .landing-guide-card--accent p {
+    margin: 0 !important;
+    color: inherit;
+  }
   @media (max-width: 899px) {
     [data-theme="viactor"] .landing-guide-grid,
     [data-theme="viactor"] .landing-guide-grid--safety { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     [data-theme="viactor"] .landing-guide-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    [data-theme="viactor"] .landing-guide-card--accent {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    [data-theme="viactor"] .landing-guide-card--accent p { grid-column: 2; }
   }
   @media (max-width: 519px) {
     [data-theme="viactor"] .landing-guide-heading { flex-direction: column; }
     [data-theme="viactor"] .landing-guide-grid,
     [data-theme="viactor"] .landing-guide-grid--safety,
     [data-theme="viactor"] .landing-guide-steps { grid-template-columns: 1fr; }
+    [data-theme="viactor"] .landing-guide-card--accent {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    [data-theme="viactor"] .landing-guide-card--accent p { grid-column: 1; }
   }
 
   /* Ticket perforation: the tear line between the form and its stub.
